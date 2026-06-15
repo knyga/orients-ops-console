@@ -71,8 +71,11 @@ export function formatTable(summary: DevStatsSummary): string {
   lines.push(`GitHub activity: ${org}   ${period.start} … ${period.end} (UTC)`);
   lines.push(
     `Repos ${totals.repos}   Contributors ${totals.contributors}   ` +
-      `Commits ${totals.commits}   Net ${signed(totals.net)}   ` +
+      `Default-branch commits ${totals.commits}   Net ${signed(totals.net)}   ` +
       `PRs opened ${totals.prsOpened}   PRs merged ${totals.prsMerged}`,
+  );
+  lines.push(
+    "(Commits = commits landed on each repo's default branch; PRs counted by created/merged date.)",
   );
   lines.push("");
   lines.push("Contributors");

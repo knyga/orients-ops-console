@@ -16,7 +16,7 @@ export function RepoActivityTable({ rows }: { rows: RepoRow[] }) {
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <th className="px-3 py-2">Repository</th>
-            <th className="px-3 py-2 text-right">Commits</th>
+            <th className="px-3 py-2 text-right">Default-branch commits</th>
             <th className="px-3 py-2 text-right">+ Added</th>
             <th className="px-3 py-2 text-right">&minus; Deleted</th>
             <th className="px-3 py-2 text-right">PRs opened</th>

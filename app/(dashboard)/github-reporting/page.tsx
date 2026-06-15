@@ -109,7 +109,10 @@ export default function GitHubReportingPage() {
             label="Contributors"
             value={String(summary.totals.contributors)}
           />
-          <SummaryCard label="Commits" value={String(summary.totals.commits)} />
+          <SummaryCard
+            label="Default-branch commits"
+            value={String(summary.totals.commits)}
+          />
           <SummaryCard
             label="PRs merged"
             value={String(summary.totals.prsMerged)}
