@@ -2,17 +2,46 @@
  * CLI: fetch Jira dev-reporting stats for a date window and print them.
  *
  * Usage: npm run jira -- --start 2026-05-01 --end 2026-05-31 [--format table]
+ *        npm run jira -- --start 2026-05-01 --end 2026-05-31 --write
  * Defaults to the current calendar month (UTC) when bounds are omitted.
  *
  * Output mirrors `GET /api/jira`: per-user resolved counts + story points,
  * period totals, and sprint churn — the same shaping the dashboard consumes.
+ * `--write` persists the per-user table as a CSV under reports/jira/ (committed
+ * to build a historical record), in addition to printing to stdout.
  *
  * Runs only under Node with `--conditions=react-server` (see package.json) so
  * the `server-only` import in ../lib/jira resolves to its empty module.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { fetchResolvedIssues } from "../lib/jira";
 import { aggregateByUser, sprintChurn } from "../lib/jiraStats";
-import { formatTable, parseArgs, resolvePeriod, type JiraReport } from "./jiraReport";
+import {
+  formatTable,
+  parseArgs,
+  reportFileName,
+  resolvePeriod,
+  toCsv,
+  type JiraReport,
+  type Period,
+} from "./jiraReport";
+
+/** Absolute path to reports/jira/, resolved relative to the repo (this file). */
+function reportsDir(): string {
+  const here = dirname(fileURLToPath(import.meta.url)); // …/scripts
+  return join(here, "..", "reports", "jira");
+}
+
+/** Write the per-user CSV for `period` and return the path written. */
+function writeCsv(period: Period, report: JiraReport): string {
+  const dir = reportsDir();
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, reportFileName(period));
+  writeFileSync(path, toCsv(report));
+  return path;
+}
 
 /** Today's date (YYYY-MM-DD) in UTC. */
 function todayUtc(): string {
@@ -38,6 +67,13 @@ async function main(): Promise<void> {
     console.log(formatTable(period, report));
   } else {
     console.log(JSON.stringify(report, null, 2));
+  }
+
+  if (args.write) {
+    const path = writeCsv(period, report);
+    process.stderr.write(
+      `jira: wrote ${path} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points)\n`,
+    );
   }
 }
 

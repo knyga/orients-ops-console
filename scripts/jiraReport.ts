@@ -13,6 +13,8 @@ export interface ParsedArgs {
   start?: string;
   end?: string;
   format: OutputFormat;
+  /** When true, persist the report as a CSV under reports/jira/. */
+  write: boolean;
 }
 
 export interface Period {
@@ -29,7 +31,12 @@ export interface JiraReport {
 
 /** Parse `--start`, `--end`, `--format` from raw CLI args. Unknown flags ignored. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { start: undefined, end: undefined, format: "json" };
+  const args: ParsedArgs = {
+    start: undefined,
+    end: undefined,
+    format: "json",
+    write: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -42,6 +49,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     } else if (flag === "--format") {
       args.format = value === "table" ? "table" : "json";
       i += 1;
+    } else if (flag === "--write") {
+      args.write = true;
     }
   }
   return args;
@@ -105,4 +114,39 @@ export function formatTable(period: Period, report: JiraReport): string {
     }
   }
   return lines.join("\n");
+}
+
+/**
+ * Stable filename for a period's CSV report. A window inside one calendar month
+ * collapses to `YYYY-MM.csv` (the common monthly cadence); anything spanning
+ * months keeps both explicit bounds: `YYYY-MM-DD_YYYY-MM-DD.csv`.
+ */
+export function reportFileName(period: Period): string {
+  if (period.start.slice(0, 7) === period.end.slice(0, 7)) {
+    return `${period.start.slice(0, 7)}.csv`;
+  }
+  return `${period.start}_${period.end}.csv`;
+}
+
+/** Quote a CSV field per RFC 4180 only when it contains `,`, `"`, or newline. */
+function csvField(value: string): string {
+  if (/[",\n\r]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+/**
+ * Per-user resolved stats as CSV (`user,resolvedCount,storyPoints`), one row per
+ * user, trailing newline. Sprint churn is hierarchical (many moves per issue),
+ * so it is intentionally not flattened here — use the JSON/table views for it.
+ */
+export function toCsv(report: JiraReport): string {
+  const lines = ["user,resolvedCount,storyPoints"];
+  for (const row of report.rows) {
+    lines.push(
+      `${csvField(row.displayName)},${row.resolvedCount},${row.storyPoints}`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
 }

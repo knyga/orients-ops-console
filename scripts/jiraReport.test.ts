@@ -3,7 +3,9 @@ import {
   defaultMonthWindow,
   formatTable,
   parseArgs,
+  reportFileName,
   resolvePeriod,
+  toCsv,
   type JiraReport,
 } from "./jiraReport";
 
@@ -11,11 +13,16 @@ describe("parseArgs", () => {
   it("parses --start, --end, and --format", () => {
     expect(
       parseArgs(["--start", "2026-05-01", "--end", "2026-05-31", "--format", "table"]),
-    ).toEqual({ start: "2026-05-01", end: "2026-05-31", format: "table" });
+    ).toEqual({ start: "2026-05-01", end: "2026-05-31", format: "table", write: false });
   });
 
   it("defaults format to json and leaves dates undefined when absent", () => {
-    expect(parseArgs([])).toEqual({ start: undefined, end: undefined, format: "json" });
+    expect(parseArgs([])).toEqual({
+      start: undefined,
+      end: undefined,
+      format: "json",
+      write: false,
+    });
   });
 
   it("unrecognized --format value falls back to json", () => {
@@ -23,6 +30,7 @@ describe("parseArgs", () => {
       start: undefined,
       end: undefined,
       format: "json",
+      write: false,
     });
   });
 
@@ -31,6 +39,16 @@ describe("parseArgs", () => {
       start: "2026-05-01",
       end: undefined,
       format: "json",
+      write: false,
+    });
+  });
+
+  it("sets write when --write is present", () => {
+    expect(parseArgs(["--write"])).toEqual({
+      start: undefined,
+      end: undefined,
+      format: "json",
+      write: true,
     });
   });
 });
@@ -47,19 +65,24 @@ describe("defaultMonthWindow", () => {
 describe("resolvePeriod", () => {
   it("uses explicit bounds when both are given", () => {
     expect(
-      resolvePeriod({ start: "2026-05-01", end: "2026-05-31", format: "json" }, "2026-06-15"),
+      resolvePeriod(
+        { start: "2026-05-01", end: "2026-05-31", format: "json", write: false },
+        "2026-06-15",
+      ),
     ).toEqual({ start: "2026-05-01", end: "2026-05-31" });
   });
 
   it("falls back to the current month when bounds are omitted", () => {
-    expect(resolvePeriod({ format: "json" }, "2026-06-15")).toEqual({
+    expect(resolvePeriod({ format: "json", write: false }, "2026-06-15")).toEqual({
       start: "2026-06-01",
       end: "2026-06-15",
     });
   });
 
   it("ignores a lone start bound and uses the full current month", () => {
-    expect(resolvePeriod({ start: "2026-05-01", format: "json" }, "2026-06-15")).toEqual({
+    expect(
+      resolvePeriod({ start: "2026-05-01", format: "json", write: false }, "2026-06-15"),
+    ).toEqual({
       start: "2026-06-01",
       end: "2026-06-15",
     });
@@ -67,7 +90,10 @@ describe("resolvePeriod", () => {
 
   it("throws on a malformed explicit bound", () => {
     expect(() =>
-      resolvePeriod({ start: "06/01/2026", end: "2026-05-31", format: "json" }, "2026-06-15"),
+      resolvePeriod(
+        { start: "06/01/2026", end: "2026-05-31", format: "json", write: false },
+        "2026-06-15",
+      ),
     ).toThrow(/YYYY-MM-DD/);
   });
 });
@@ -112,5 +138,45 @@ describe("formatTable", () => {
       { rows: [], totals: { totalResolved: 0, totalStoryPoints: 0 }, sprintChurn: [] },
     );
     expect(out).toContain("No issues changed sprints");
+  });
+});
+
+describe("reportFileName", () => {
+  it("uses YYYY-MM when the window is within a single calendar month", () => {
+    expect(reportFileName({ start: "2025-05-01", end: "2025-05-31" })).toBe("2025-05.csv");
+  });
+
+  it("uses start_end when the window spans multiple months", () => {
+    expect(reportFileName({ start: "2025-04-15", end: "2025-05-10" })).toBe(
+      "2025-04-15_2025-05-10.csv",
+    );
+  });
+});
+
+describe("toCsv", () => {
+  it("emits a header and one row per user, story points preserved", () => {
+    const csv = toCsv({
+      rows: [
+        { accountId: "acc-1", displayName: "Alice Dev", resolvedCount: 5, storyPoints: 13.5 },
+        { accountId: null, displayName: "Unassigned", resolvedCount: 2, storyPoints: 0 },
+      ],
+      totals: { totalResolved: 7, totalStoryPoints: 13.5 },
+      sprintChurn: [],
+    });
+    const lines = csv.trimEnd().split("\n");
+    expect(lines[0]).toBe("user,resolvedCount,storyPoints");
+    expect(lines[1]).toBe("Alice Dev,5,13.5");
+    expect(lines[2]).toBe("Unassigned,2,0");
+  });
+
+  it("escapes names containing commas or quotes per RFC 4180", () => {
+    const csv = toCsv({
+      rows: [
+        { accountId: "x", displayName: 'Doe, "JD" Jr', resolvedCount: 1, storyPoints: 2 },
+      ],
+      totals: { totalResolved: 1, totalStoryPoints: 2 },
+      sprintChurn: [],
+    });
+    expect(csv.trimEnd().split("\n")[1]).toBe('"Doe, ""JD"" Jr",1,2');
   });
 });
