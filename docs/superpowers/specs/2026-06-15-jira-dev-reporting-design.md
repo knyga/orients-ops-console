@@ -27,10 +27,16 @@ integration (`lib/vimeo.ts` + `app/api/vimeo/route.ts`).
   the period grand total (no all-time query).
 - **"Resolved":** issues whose `resolutiondate` falls inside the range
   (standard JQL `resolved >= start AND resolved <= end`).
-- **Story points:** per-instance custom field, auto-detected by field name
-  ("Story Points" / "Story point estimate") via `GET /rest/api/3/field`, with
-  `JIRA_STORY_POINTS_FIELD` env override. Summed as-is per resolved issue, no
-  parent/sub-task roll-up. Missing/null → 0.
+- **Story points:** pinned via `JIRA_STORY_POINTS_FIELD`. The Orients instance
+  exposes *two* story-point fields (`customfield_10031` "Story Points" and
+  `customfield_10016` "Story point estimate"), so auto-detect-by-name is
+  ambiguous — the env var is therefore required. Verified value:
+  **`customfield_10016`** (760 populated issues in ATP; `10031` has 1 issue
+  total). Summed as-is per resolved issue, no parent/sub-task roll-up.
+  Missing/null → 0.
+- **Sprint field:** `customfield_10020` ("Sprint"). Sprint moves are read from
+  the issue changelog (`field === "Sprint"`, `fromString`/`toString` are sprint
+  names, e.g. `ATP 37` → `ATP 38`). Verified present and working.
 - **Unassigned issues:** bucketed under a single "Unassigned" row.
 - **Computation:** done server-side; the API route returns finished stats
   (Approach A). No raw changelog payloads shipped to the browser.
@@ -40,12 +46,16 @@ integration (`lib/vimeo.ts` + `app/api/vimeo/route.ts`).
 New `.env` / `.env.example` vars, read **only** on the server:
 
 ```
-JIRA_BASE_URL=https://your-org.atlassian.net
-JIRA_EMAIL=service-account@your-org.com
-JIRA_API_TOKEN=...                       # Atlassian API token, read access
-JIRA_PROJECT_KEYS=DEV,OPS                # comma-separated, fixed scope
-JIRA_STORY_POINTS_FIELD=customfield_...  # optional; auto-detected if unset
+JIRA_BASE_URL=https://orients.atlassian.net
+JIRA_EMAIL=oleksandr.knyga@orients.ai
+JIRA_API_TOKEN=...                          # Atlassian API token, read access
+JIRA_PROJECT_KEYS=ATP,MC,DRON               # comma-separated, fixed scope
+JIRA_STORY_POINTS_FIELD=customfield_10016   # required (two SP fields exist)
 ```
+
+Verified 2026-06-15 against `https://orients.atlassian.net`: auth OK
+(`/rest/api/3/myself` → 200), all three projects readable, story-point and
+sprint fields confirmed.
 
 ## Components
 
@@ -56,18 +66,22 @@ JIRA_STORY_POINTS_FIELD=customfield_...  # optional; auto-detected if unset
 - Reads env; builds the Basic auth header from `JIRA_EMAIL` + `JIRA_API_TOKEN`.
 - `JiraError extends Error` with an optional `status` — same shape as
   `VimeoError`.
-- `resolveStoryPointsField(): Promise<string>` — if `JIRA_STORY_POINTS_FIELD`
-  is set, returns it. Otherwise one `GET /rest/api/3/field` call, finds the
-  field whose name matches "Story Points" / "Story point estimate"
-  (case-insensitive), returns its `id`. Result cached in-module per process.
-  Throws `JiraError` (no status → 500) if none found.
+- `storyPointsField(): string` — returns `JIRA_STORY_POINTS_FIELD`. Required
+  (two SP fields exist, so auto-detect can't disambiguate). Throws `JiraError`
+  (no status → 500) if unset.
 - `fetchResolvedIssues(start, end): Promise<JiraIssue[]>`:
   - Validates `start`/`end` are `YYYY-MM-DD` (throws `JiraError` otherwise).
-  - POSTs `/rest/api/3/search` with:
+  - Calls the **new** search endpoint `GET /rest/api/3/search/jql` (the classic
+    `/rest/api/3/search` with `startAt`/`total` is deprecated on Jira Cloud).
+    Params:
     - JQL: `project in (<keys>) AND resolved >= "<start>" AND resolved <= "<end>" ORDER BY resolved ASC`
-    - `expand: ["changelog"]`
-    - `fields: ["summary", "assignee", "resolutiondate", "status", <story-points field>]`
-    - `maxResults: 100`, paging via `startAt` until `startAt + maxResults >= total`.
+    - `expand: changelog` (verified supported on this endpoint)
+    - `fields: summary, assignee, resolutiondate, status, <story-points field>`
+    - `maxResults: 100`
+  - **Pagination:** the response is `{ issues, isLast, nextPageToken }` — there
+    is **no `total`**. Loop: fetch a page, collect `issues`; if `isLast` is
+    true or `nextPageToken` is absent, stop; otherwise pass `nextPageToken` on
+    the next request.
   - All fetches use `cache: "no-store"` so stats reflect live Jira.
   - Maps non-2xx to `JiraError` with `res.status`, message truncated (~300
     chars) like the Vimeo client.
@@ -75,7 +89,7 @@ JIRA_STORY_POINTS_FIELD=customfield_...  # optional; auto-detected if unset
     (`{ accountId, displayName } | null`), `resolutiondate`, story-point value,
     and `changelog.histories`.
 
-**Pagination note on changelog:** `/rest/api/3/search?expand=changelog`
+**Pagination note on changelog:** `/rest/api/3/search/jql?expand=changelog`
 returns up to the most recent 100 history entries per issue inline. For the
 expected volume (sprint moves on dev issues) this is sufficient; if an issue
 exceeds 100 history entries the older ones are not fetched. This limit is
@@ -108,8 +122,7 @@ No React/Next imports — same discipline as `lib/reconcile.ts`.
 - `runtime = "nodejs"`, `dynamic = "force-dynamic"`.
 - Same validation as the Vimeo route: both params required (400), each must be
   `YYYY-MM-DD` (400), `start <= end` (400).
-- Resolves the story-points field, calls `fetchResolvedIssues`, runs
-  `aggregateByUser` + `sprintChurn`, returns
+- Calls `fetchResolvedIssues`, runs `aggregateByUser` + `sprintChurn`, returns
   `{ rows, totals, sprintChurn }` as JSON.
 - Catch: `JiraError` → 502 if it has a status (upstream), else 500 (config);
   other errors → 500. Mirrors the Vimeo route exactly.
