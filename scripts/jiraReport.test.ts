@@ -101,8 +101,20 @@ describe("resolvePeriod", () => {
 describe("formatTable", () => {
   const report: JiraReport = {
     rows: [
-      { accountId: "acc-1", displayName: "Alice Dev", resolvedCount: 5, storyPoints: 13 },
-      { accountId: null, displayName: "Unassigned", resolvedCount: 2, storyPoints: 0 },
+      {
+        accountId: "acc-1",
+        displayName: "Alice Dev",
+        resolvedCount: 5,
+        storyPoints: 13,
+        issueKeys: ["ATP-1", "ATP-2", "ATP-3", "ATP-4", "ATP-5"],
+      },
+      {
+        accountId: null,
+        displayName: "Unassigned",
+        resolvedCount: 2,
+        storyPoints: 0,
+        issueKeys: ["ATP-9", "ATP-10"],
+      },
     ],
     totals: { totalResolved: 7, totalStoryPoints: 13 },
     sprintChurn: [
@@ -126,6 +138,9 @@ describe("formatTable", () => {
     expect(out).toContain("Unassigned");
     expect(out).toContain("Resolved 7");
     expect(out).toContain("Story points 13");
+    // per-user resolved issue keys appear in the row
+    expect(out).toContain("Issues");
+    expect(out).toContain("ATP-1, ATP-2, ATP-3, ATP-4, ATP-5");
     expect(out).toContain("ATP-42");
     expect(out).toContain("ATP 37 → ATP 38");
     // empty sprint side renders as a dash
@@ -157,26 +172,44 @@ describe("toCsv", () => {
   it("emits a header and one row per user, story points preserved", () => {
     const csv = toCsv({
       rows: [
-        { accountId: "acc-1", displayName: "Alice Dev", resolvedCount: 5, storyPoints: 13.5 },
-        { accountId: null, displayName: "Unassigned", resolvedCount: 2, storyPoints: 0 },
+        {
+          accountId: "acc-1",
+          displayName: "Alice Dev",
+          resolvedCount: 5,
+          storyPoints: 13.5,
+          issueKeys: ["ATP-1", "ATP-2"],
+        },
+        {
+          accountId: null,
+          displayName: "Unassigned",
+          resolvedCount: 2,
+          storyPoints: 0,
+          issueKeys: ["ATP-9", "ATP-10"],
+        },
       ],
       totals: { totalResolved: 7, totalStoryPoints: 13.5 },
       sprintChurn: [],
     });
     const lines = csv.trimEnd().split("\n");
-    expect(lines[0]).toBe("user,resolvedCount,storyPoints");
-    expect(lines[1]).toBe("Alice Dev,5,13.5");
-    expect(lines[2]).toBe("Unassigned,2,0");
+    expect(lines[0]).toBe("user,resolvedCount,storyPoints,issues");
+    expect(lines[1]).toBe("Alice Dev,5,13.5,ATP-1 ATP-2");
+    expect(lines[2]).toBe("Unassigned,2,0,ATP-9 ATP-10");
   });
 
   it("escapes names containing commas or quotes per RFC 4180", () => {
     const csv = toCsv({
       rows: [
-        { accountId: "x", displayName: 'Doe, "JD" Jr', resolvedCount: 1, storyPoints: 2 },
+        {
+          accountId: "x",
+          displayName: 'Doe, "JD" Jr',
+          resolvedCount: 1,
+          storyPoints: 2,
+          issueKeys: ["ATP-1"],
+        },
       ],
       totals: { totalResolved: 1, totalStoryPoints: 2 },
       sprintChurn: [],
     });
-    expect(csv.trimEnd().split("\n")[1]).toBe('"Doe, ""JD"" Jr",1,2');
+    expect(csv.trimEnd().split("\n")[1]).toBe('"Doe, ""JD"" Jr",1,2,ATP-1');
   });
 });

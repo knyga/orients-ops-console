@@ -127,6 +127,7 @@ export default function DevReportingPage() {
                       <th className="px-4 py-2">User</th>
                       <th className="px-4 py-2 text-right">Resolved</th>
                       <th className="px-4 py-2 text-right">Story points</th>
+                      <th className="px-4 py-2">Issues</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -138,6 +139,9 @@ export default function DevReportingPage() {
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums text-slate-700">
                           {row.storyPoints}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-xs text-slate-500">
+                          {row.issueKeys.join(", ")}
                         </td>
                       </tr>
                     ))}

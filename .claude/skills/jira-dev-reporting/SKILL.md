@@ -27,13 +27,13 @@ npm run jira -- --start 2025-05-01 --end 2025-05-31
 
 It prints JSON (same shape as `GET /api/jira`):
 
-- `rows[]` — `{ accountId, displayName, resolvedCount, storyPoints }`, sorted by resolvedCount desc
+- `rows[]` — `{ accountId, displayName, resolvedCount, storyPoints, issueKeys }`, sorted by resolvedCount desc; `issueKeys` lists that user's resolved issues in resolution order
 - `totals` — `{ totalResolved, totalStoryPoints }`
 - `sprintChurn[]` — `{ issueKey, summary, changes[] }`, each change `{ from, to, when }`
 
 Answer counts/points from `rows`/`totals`; answer churn questions from `sprintChurn`. Add `--format table` for a human-readable view.
 
-To persist a period as a committed CSV report, add `--write` — it writes the per-user table to `reports/jira/<period>.csv` (e.g. `reports/jira/2025-05.csv` for a single month, `start_end.csv` otherwise) and prints the path to stderr. The CSV holds the per-user rows only (`user,resolvedCount,storyPoints`); sprint churn is hierarchical, so use the JSON/table views for it.
+To persist a period as a committed CSV report, add `--write` — it writes the per-user table to `reports/jira/<period>.csv` (e.g. `reports/jira/2025-05.csv` for a single month, `start_end.csv` otherwise) and prints the path to stderr. The CSV holds the per-user rows only (`user,resolvedCount,storyPoints,issues`, where `issues` is a space-separated key list); sprint churn is hierarchical, so use the JSON/table views for it.
 
 Dates are inclusive and must be `YYYY-MM-DD`. Missing `JIRA_*` env vars make the CLI exit non-zero with a clear message — tell the user to set them in `.env` (see `.env.example`).
 

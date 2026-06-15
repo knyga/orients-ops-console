@@ -38,6 +38,8 @@ export interface UserRow {
   displayName: string;
   resolvedCount: number;
   storyPoints: number;
+  /** Keys of the issues this user resolved, in encounter (resolution) order. */
+  issueKeys: string[];
 }
 
 /** Period grand totals across all users. */
@@ -67,12 +69,14 @@ export function aggregateByUser(issues: JiraIssue[]): {
     if (existing) {
       existing.resolvedCount += 1;
       existing.storyPoints += points;
+      existing.issueKeys.push(issue.key);
     } else {
       byUser.set(key, {
         accountId: issue.assignee?.accountId ?? null,
         displayName: issue.assignee?.displayName ?? "Unassigned",
         resolvedCount: 1,
         storyPoints: points,
+        issueKeys: [issue.key],
       });
     }
   }

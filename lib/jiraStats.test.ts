@@ -30,6 +30,18 @@ describe("aggregateByUser", () => {
     expect(bob).toMatchObject({ resolvedCount: 1, storyPoints: 2 });
   });
 
+  it("collects each user's resolved issue keys in encounter order", () => {
+    const { rows } = aggregateByUser([
+      issue({ key: "ATP-1" }),
+      issue({ key: "MC-1", assignee: { accountId: "u2", displayName: "Bob" } }),
+      issue({ key: "ATP-2" }),
+    ]);
+    const alice = rows.find((r) => r.accountId === "u1");
+    const bob = rows.find((r) => r.accountId === "u2");
+    expect(alice?.issueKeys).toEqual(["ATP-1", "ATP-2"]);
+    expect(bob?.issueKeys).toEqual(["MC-1"]);
+  });
+
   it("treats null/undefined story points as 0", () => {
     const { rows } = aggregateByUser([
       issue({ storyPoints: null }),

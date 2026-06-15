@@ -89,15 +89,17 @@ export function formatTable(period: Period, report: JiraReport): string {
   );
   lines.push("");
   lines.push("Resolved by user");
-  lines.push("User                          Resolved  Points");
-  lines.push("---------------------------  ---------  ------");
+  lines.push("User                          Resolved  Points  Issues");
+  lines.push("---------------------------  ---------  ------  ------");
   if (rows.length === 0) {
     lines.push("(none)");
   } else {
     for (const row of rows) {
       const name = row.displayName.slice(0, 27).padEnd(27);
+      // Issues is the last column, so its (possibly wrapping) list never
+      // disturbs the Resolved/Points alignment above.
       lines.push(
-        `${name}  ${String(row.resolvedCount).padStart(9)}  ${String(row.storyPoints).padStart(6)}`,
+        `${name}  ${String(row.resolvedCount).padStart(9)}  ${String(row.storyPoints).padStart(6)}  ${row.issueKeys.join(", ")}`,
       );
     }
   }
@@ -137,15 +139,17 @@ function csvField(value: string): string {
 }
 
 /**
- * Per-user resolved stats as CSV (`user,resolvedCount,storyPoints`), one row per
- * user, trailing newline. Sprint churn is hierarchical (many moves per issue),
- * so it is intentionally not flattened here — use the JSON/table views for it.
+ * Per-user resolved stats as CSV (`user,resolvedCount,storyPoints,issues`), one
+ * row per user, trailing newline. `issues` is a space-separated list of the
+ * keys that user resolved (space keeps it a single unquoted field). Sprint churn
+ * is hierarchical (many moves per issue), so it is intentionally not flattened
+ * here — use the JSON/table views for it.
  */
 export function toCsv(report: JiraReport): string {
-  const lines = ["user,resolvedCount,storyPoints"];
+  const lines = ["user,resolvedCount,storyPoints,issues"];
   for (const row of report.rows) {
     lines.push(
-      `${csvField(row.displayName)},${row.resolvedCount},${row.storyPoints}`,
+      `${csvField(row.displayName)},${row.resolvedCount},${row.storyPoints},${csvField(row.issueKeys.join(" "))}`,
     );
   }
   return `${lines.join("\n")}\n`;
