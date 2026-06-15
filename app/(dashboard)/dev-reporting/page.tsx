@@ -1,16 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { OrgActivity } from "@/lib/githubClient";
-import { summarize } from "@/lib/devStats";
-import { ContributorTable } from "@/components/ContributorTable";
-import { RepoActivityTable } from "@/components/RepoActivityTable";
+import { useState } from "react";
+import type {
+  PeriodTotals,
+  SprintChurnRow,
+  UserRow,
+} from "@/lib/jiraStats";
 
-/** `YYYY-MM-DD` for `days` ago in UTC. */
-function isoDaysAgo(days: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
+interface JiraReport {
+  rows: UserRow[];
+  totals: PeriodTotals;
+  sprintChurn: SprintChurnRow[];
+}
+
+/** First day of the current month, in `YYYY-MM-DD`. */
+function defaultStart(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-01`;
 }
 
 function todayIso(): string {
@@ -18,30 +25,24 @@ function todayIso(): string {
 }
 
 export default function DevReportingPage() {
-  const [start, setStart] = useState(() => isoDaysAgo(30));
+  const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(todayIso);
-  const [activity, setActivity] = useState<OrgActivity | null>(null);
+  const [report, setReport] = useState<JiraReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const summary = useMemo(
-    () => (activity ? summarize(activity) : null),
-    [activity],
-  );
-
-  async function loadActivity() {
+  async function fetchReport() {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ start, end });
-      const res = await fetch(`/api/github?${params.toString()}`);
+      const res = await fetch(`/api/jira?${params.toString()}`);
       const body = await res.json();
-      if (!res.ok)
-        throw new Error(body.error ?? `Request failed (${res.status})`);
-      setActivity(body.activity as OrgActivity);
+      if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+      setReport(body as JiraReport);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load activity.");
-      setActivity(null);
+      setError(e instanceof Error ? e.message : "Failed to fetch report.");
+      setReport(null);
     } finally {
       setLoading(false);
     }
@@ -51,12 +52,11 @@ export default function DevReportingPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-slate-900">
-          Dev Reporting — GitHub Activity
+          Dev Reporting — Jira
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Commits, pull requests and code landed on the default branch across
-          active <strong>orients-ai</strong> repositories. Day boundaries are
-          UTC. Bot accounts are flagged and ranked after humans.
+          Per-user issues resolved (count and story points) over the selected
+          period, plus issues that changed sprints. Read-only; reflects live Jira.
         </p>
       </div>
 
@@ -86,11 +86,11 @@ export default function DevReportingPage() {
           </label>
           <button
             type="button"
-            onClick={loadActivity}
+            onClick={fetchReport}
             disabled={loading || !start || !end}
             className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Loading…" : "Load activity"}
+            {loading ? "Fetching…" : "Fetch report"}
           </button>
         </div>
       </div>
@@ -101,47 +101,93 @@ export default function DevReportingPage() {
         </div>
       )}
 
-      {/* Period summary */}
-      {summary && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard label="Active repos" value={String(summary.totals.repos)} />
-          <SummaryCard
-            label="Contributors"
-            value={String(summary.totals.contributors)}
-          />
-          <SummaryCard label="Commits" value={String(summary.totals.commits)} />
-          <SummaryCard
-            label="PRs merged"
-            value={String(summary.totals.prsMerged)}
-          />
-        </div>
+      {report && (
+        <>
+          {/* Period totals */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SummaryCard label="Total resolved" value={String(report.totals.totalResolved)} />
+            <SummaryCard
+              label="Total story points"
+              value={String(report.totals.totalStoryPoints)}
+            />
+          </div>
+
+          {/* Per-user table */}
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-slate-900">Resolved by user</h2>
+            {report.rows.length === 0 ? (
+              <p className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
+                No issues resolved in this period.
+              </p>
+            ) : (
+              <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-400">
+                    <tr>
+                      <th className="px-4 py-2">User</th>
+                      <th className="px-4 py-2 text-right">Resolved</th>
+                      <th className="px-4 py-2 text-right">Story points</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {report.rows.map((row) => (
+                      <tr key={row.accountId ?? "unassigned"}>
+                        <td className="px-4 py-2 text-slate-900">{row.displayName}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-slate-700">
+                          {row.resolvedCount}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums text-slate-700">
+                          {row.storyPoints}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Sprint churn */}
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-slate-900">Sprint changes</h2>
+            {report.sprintChurn.length === 0 ? (
+              <p className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
+                No issues changed sprints in this period.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {report.sprintChurn.map((item) => (
+                  <li
+                    key={item.issueKey}
+                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                  >
+                    <div className="text-sm font-medium text-slate-900">
+                      <span className="font-mono text-slate-500">{item.issueKey}</span>{" "}
+                      {item.summary}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {item.changes.map((c, i) => (
+                        <span
+                          key={i}
+                          className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+                        >
+                          {c.from || "—"} → {c.to || "—"}
+                        </span>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
       )}
 
-      {/* Contributors */}
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-900">Contributors</h2>
-        {summary === null ? (
-          <p className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
-            Pick a period and load activity to begin.
-          </p>
-        ) : (
-          <ContributorTable rows={summary.contributors} />
-        )}
-      </section>
-
-      {/* Repositories */}
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-900">
-          Most active repositories
-        </h2>
-        {summary === null ? (
-          <p className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
-            Pick a period and load activity to begin.
-          </p>
-        ) : (
-          <RepoActivityTable rows={summary.repos} />
-        )}
-      </section>
+      {!report && !error && (
+        <p className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
+          Pick a period and fetch the report to begin.
+        </p>
+      )}
     </div>
   );
 }
