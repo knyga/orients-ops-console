@@ -9,9 +9,9 @@
   // No init-firewall / network lockdown: container has unrestricted outbound internet.
   // (Intentionally omitting the Claude Code reference firewall script.)
 
-  "forwardPorts": [3000],
+  "forwardPorts": [3003],
   "portsAttributes": {
-    "3000": {
+    "3003": {
       "label": "Next.js dev server",
       "onAutoForward": "notify"
     }
