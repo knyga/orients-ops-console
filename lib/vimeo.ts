@@ -6,6 +6,7 @@
  * The `server-only` import makes an accidental client import a build error.
  */
 import "server-only";
+import { videoUploadDate } from "./reconcile";
 
 const VIMEO_API = "https://api.vimeo.com/me/videos";
 const API_VERSION = "application/vnd.vimeo.*+json;version=3.4";
@@ -97,25 +98,32 @@ function firstPageUrl(): string {
   return `${VIMEO_API}?${params.toString()}`;
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
- * Fetch all videos uploaded within [start, end] (inclusive day bounds).
+ * Fetch all videos whose upload day (Europe/Kyiv) falls within [start, end].
+ *
+ * The window is matched on the *Kyiv calendar date* — the same basis the
+ * reconciliation uses to group days — not on a UTC instant. Matching on UTC
+ * would drop videos uploaded just after Kyiv midnight at the period edges
+ * (their UTC instant lands on the previous/next UTC day) and could pull in
+ * videos from the day after `end`.
  *
  * Results are sorted by date descending, so we stop paging as soon as a page's
- * oldest item predates `start` — we never scan the full account history. The
- * returned list is filtered to the period and preserves descending order.
+ * oldest item is on a Kyiv day before `start` — we never scan the full account
+ * history.
  *
- * @param start ISO date/datetime marking the inclusive start of the period.
- * @param end   ISO date/datetime marking the inclusive end of the period.
+ * @param start inclusive period start, `YYYY-MM-DD`.
+ * @param end   inclusive period end, `YYYY-MM-DD`.
  */
 export async function fetchVideosInPeriod(
   start: string,
   end: string,
 ): Promise<VimeoVideo[]> {
-  const startMs = new Date(start).getTime();
-  // Treat a bare `YYYY-MM-DD` end as the whole day by extending to its last ms.
-  const endMs = endOfPeriodMs(end);
-  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
-    throw new VimeoError(`Invalid period bounds: start=${start} end=${end}`);
+  if (!DATE_RE.test(start) || !DATE_RE.test(end)) {
+    throw new VimeoError(
+      `Period bounds must be YYYY-MM-DD: start=${start} end=${end}`,
+    );
   }
 
   const collected: VimeoVideo[] = [];
@@ -126,16 +134,17 @@ export async function fetchVideosInPeriod(
     const videos = page.data ?? [];
 
     for (const video of videos) {
-      const uploadedMs = new Date(video.created_time).getTime();
-      if (uploadedMs >= startMs && uploadedMs <= endMs) {
+      // Lexicographic comparison is valid for YYYY-MM-DD strings.
+      const day = videoUploadDate(video.created_time);
+      if (day >= start && day <= end) {
         collected.push(video);
       }
     }
 
-    // Descending order: once the oldest item on this page is before the period
-    // start, every later page is older still — stop.
+    // Descending order: once the oldest item on this page is on a Kyiv day
+    // before the period start, every later page is older still — stop.
     const oldestOnPage = videos[videos.length - 1];
-    if (oldestOnPage && new Date(oldestOnPage.created_time).getTime() < startMs) {
+    if (oldestOnPage && videoUploadDate(oldestOnPage.created_time) < start) {
       break;
     }
 
@@ -145,11 +154,4 @@ export async function fetchVideosInPeriod(
   }
 
   return collected;
-}
-
-/** Inclusive end-of-day for a bare date; passthrough for a full datetime. */
-function endOfPeriodMs(end: string): number {
-  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(end.trim());
-  const ms = new Date(isDateOnly ? `${end}T23:59:59.999Z` : end).getTime();
-  return ms;
 }

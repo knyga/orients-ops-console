@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { FlightHoursRow } from "@/lib/flightHours";
 import { parseFlightHoursCsv } from "@/lib/flightHours";
 
@@ -17,6 +17,7 @@ interface Props {
  */
 export function FlightHoursEditor({ rows, onChange, nextId }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
 
   const updateRow = (id: string, patch: Partial<FlightHoursRow>) =>
     onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -28,9 +29,17 @@ export function FlightHoursEditor({ rows, onChange, nextId }: Props) {
 
   const handleFile = async (file: File) => {
     const text = await file.text();
-    const parsed = parseFlightHoursCsv(text, nextId());
-    // Replace existing rows with the uploaded set.
-    onChange(parsed.length ? parsed : rows);
+    // Give every parsed row a unique id from the parent counter.
+    const parsed = parseFlightHoursCsv(text).map((r) => ({
+      ...r,
+      id: nextId(),
+    }));
+    if (parsed.length === 0) {
+      setCsvError("No valid date,flight_hours rows found in that file.");
+    } else {
+      setCsvError(null);
+      onChange(parsed); // replace existing rows with the uploaded set
+    }
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -69,6 +78,10 @@ export function FlightHoursEditor({ rows, onChange, nextId }: Props) {
         CSV columns: <code className="text-slate-500">date,flight_hours</code>{" "}
         (e.g. <code className="text-slate-500">2026-04-01,2</code>).
       </p>
+
+      {csvError && (
+        <p className="mb-3 text-xs font-medium text-red-600">{csvError}</p>
+      )}
 
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500">

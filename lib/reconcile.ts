@@ -135,8 +135,9 @@ export function aggregateByDay(
 
   for (const flight of flightDays) {
     const acc = ensure(flight.date);
-    // Last write wins if a date is entered twice; sum would double-count.
-    acc.flightHours = flight.flightHours;
+    // Sum if a date appears more than once (two flights logged the same day),
+    // matching toFlightDays in lib/flightHours.ts.
+    acc.flightHours += flight.flightHours;
     acc.hasFlightDay = true;
   }
 

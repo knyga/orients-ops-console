@@ -73,6 +73,17 @@ describe("aggregateByDay — the 50% gate", () => {
     expect(row.status).toBe("FLAG");
   });
 
+  it("sums flight hours when a date appears more than once", () => {
+    // Two flights logged the same day: 1h + 1.5h = 2.5h (150 min). 90 min video
+    // -> 0.6 -> OK. (Were the second entry to overwrite, it'd be 1.5h/90min=1.0.)
+    const [row] = aggregateByDay(
+      [videoOn("2026-04-06", 90 * 60)],
+      [flight("2026-04-06", 1), flight("2026-04-06", 1.5)],
+    );
+    expect(row.flightMinutes).toBe(150);
+    expect(row.status).toBe("OK");
+  });
+
   it("sums multiple videos on the same day before applying the gate", () => {
     // 2 x 40 min = 80 min video against 2h (120 min) flight -> 0.666 -> OK.
     const [row] = aggregateByDay(
