@@ -129,6 +129,19 @@ describe("formatTable", () => {
           prsOpened: 1,
           prsMerged: 0,
         },
+        {
+          key: "name:No Account",
+          login: null,
+          displayName: "No Account",
+          isBot: false,
+          unlinked: true,
+          commits: 1,
+          additions: 50,
+          deletions: 10,
+          net: 40,
+          prsOpened: 0,
+          prsMerged: 0,
+        },
       ],
       repos: [
         {
@@ -151,5 +164,7 @@ describe("formatTable", () => {
     expect(out).toContain("alice");
     expect(out).toContain("[bot]");
     expect(out).toContain("orients-ai/ops-console");
+    expect(out).toContain("(unlinked)");
+    expect(out).toContain("+340");
   });
 });

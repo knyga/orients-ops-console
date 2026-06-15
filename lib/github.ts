@@ -3,9 +3,11 @@
  *
  * Reads GH_ACCESS_TOKEN from process.env and delegates to the shared
  * lib/githubClient. The `server-only` import makes an accidental client import
- * a build error — the token must never reach the browser. The CLI does NOT use
- * this module; it calls lib/githubClient directly (server-only throws in plain
- * Node).
+ * a build error — the token must never reach the browser. The CLI
+ * (scripts/github.ts) also imports this module, running Node with
+ * `--conditions=react-server` so the `server-only` import resolves to a no-op
+ * there. The browser still cannot import it (no such condition in the client
+ * build), which keeps the token server-side.
  */
 import "server-only";
 import {
