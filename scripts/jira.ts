@@ -69,19 +69,21 @@ async function main(): Promise<void> {
   const { rows, totals } = aggregateByUser(issues);
   const report: JiraReport = { rows, totals, sprintChurn: sprintChurn(issues) };
 
+  // Compute summaries once (used by both the table view and the CSV).
+  let summaries: Map<string | null, string> | undefined;
+  if (args.summarize) {
+    process.stderr.write(`jira: summarizing ${rows.length} users via Claude…\n`);
+    summaries = await summarizeOccupations(ticketsByUser(issues));
+  }
+
   if (args.format === "table") {
-    console.log(formatTable(period, report));
+    console.log(formatTable(period, report, summaries));
   } else {
     console.log(JSON.stringify(report, null, 2));
   }
 
-  // --summarize implies --write (summaries only land in the CSV).
+  // --summarize implies --write (so the summaries are also persisted).
   if (args.write || args.summarize) {
-    let summaries: Map<string | null, string> | undefined;
-    if (args.summarize) {
-      process.stderr.write(`jira: summarizing ${rows.length} users via Claude…\n`);
-      summaries = await summarizeOccupations(ticketsByUser(issues));
-    }
     const path = writeCsv(period, report, summaries);
     process.stderr.write(
       `jira: wrote ${path} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points${args.summarize ? ", with summaries" : ""})\n`,

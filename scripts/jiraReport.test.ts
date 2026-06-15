@@ -179,6 +179,26 @@ describe("formatTable", () => {
     );
     expect(out).toContain("No issues changed sprints");
   });
+
+  it("adds a wrapped Summary column when summaries are provided", () => {
+    const summaries = new Map<string | null, string>([
+      [
+        "acc-1",
+        "Alice focused on the detection pipeline and model evaluation, " +
+          "with supporting infrastructure and tooling work across many tickets.",
+      ],
+    ]);
+    const out = formatTable({ start: "2026-06-01", end: "2026-06-15" }, report, summaries);
+    expect(out).toContain("Summary");
+    // the summary text appears (word-wrapped, so check a distinctive phrase)
+    expect(out).toContain("detection pipeline");
+    expect(out).toContain("Alice Dev");
+  });
+
+  it("omits the Summary column when no summaries are provided", () => {
+    const out = formatTable({ start: "2026-06-01", end: "2026-06-15" }, report);
+    expect(out).not.toContain("Summary");
+  });
 });
 
 describe("reportFileName", () => {

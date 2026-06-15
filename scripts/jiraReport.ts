@@ -83,9 +83,38 @@ export function resolvePeriod(args: ParsedArgs, today: string): Period {
   return { start, end };
 }
 
-/** Render a JiraReport as a compact human-readable table. */
-export function formatTable(period: Period, report: JiraReport): string {
+/** Greedy word-wrap; collapses all whitespace (incl. newlines) first. */
+function wrapText(text: string, width: number): string[] {
+  const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (words.length === 0) return [""];
+  const out: string[] = [];
+  let line = "";
+  for (const word of words) {
+    if (line.length === 0) {
+      line = word;
+    } else if (line.length + 1 + word.length <= width) {
+      line += ` ${word}`;
+    } else {
+      out.push(line);
+      line = word;
+    }
+  }
+  out.push(line);
+  return out;
+}
+
+/**
+ * Render a JiraReport as a compact human-readable table. When `summaries` is
+ * provided (the `--summarize` path), a wrapped Summary column is added to the
+ * per-user table and the Issues list is truncated to keep columns aligned.
+ */
+export function formatTable(
+  period: Period,
+  report: JiraReport,
+  summaries?: Map<string | null, string>,
+): string {
   const { rows, totals, sprintChurn } = report;
+  const withSummary = (summaries?.size ?? 0) > 0;
   const lines: string[] = [];
   lines.push(`Jira dev reporting   ${period.start} … ${period.end}`);
   lines.push(`Resolved ${totals.totalResolved}   Story points ${totals.totalStoryPoints}`);
@@ -94,18 +123,22 @@ export function formatTable(period: Period, report: JiraReport): string {
   );
   lines.push("");
   lines.push("Resolved by user");
-  lines.push("User                          Resolved  Points  Issues");
-  lines.push("---------------------------  ---------  ------  ------");
-  if (rows.length === 0) {
-    lines.push("(none)");
+  if (withSummary) {
+    appendUserTableWithSummary(lines, rows, summaries!);
   } else {
-    for (const row of rows) {
-      const name = row.displayName.slice(0, 27).padEnd(27);
-      // Issues is the last column, so its (possibly wrapping) list never
-      // disturbs the Resolved/Points alignment above.
-      lines.push(
-        `${name}  ${String(row.resolvedCount).padStart(9)}  ${String(row.storyPoints).padStart(6)}  ${row.issueKeys.join(", ")}`,
-      );
+    lines.push("User                          Resolved  Points  Issues");
+    lines.push("---------------------------  ---------  ------  ------");
+    if (rows.length === 0) {
+      lines.push("(none)");
+    } else {
+      for (const row of rows) {
+        const name = row.displayName.slice(0, 27).padEnd(27);
+        // Issues is the last column, so its (possibly wrapping) list never
+        // disturbs the Resolved/Points alignment above.
+        lines.push(
+          `${name}  ${String(row.resolvedCount).padStart(9)}  ${String(row.storyPoints).padStart(6)}  ${row.issueKeys.join(", ")}`,
+        );
+      }
     }
   }
   lines.push("");
@@ -121,6 +154,56 @@ export function formatTable(period: Period, report: JiraReport): string {
     }
   }
   return lines.join("\n");
+}
+
+// Column widths for the summarized per-user table.
+const NAME_W = 22;
+const RESOLVED_W = 8;
+const POINTS_W = 6;
+const ISSUES_W = 22;
+const SUMMARY_W = 50;
+
+/**
+ * Append the per-user table with a wrapped Summary column. Issues are truncated
+ * to ISSUES_W; the summary wraps to SUMMARY_W with continuation lines indented
+ * under the Summary column so the fixed columns stay aligned.
+ */
+function appendUserTableWithSummary(
+  lines: string[],
+  rows: UserRow[],
+  summaries: Map<string | null, string>,
+): void {
+  const head =
+    "User".padEnd(NAME_W) +
+    "  " +
+    "Resolved".padStart(RESOLVED_W) +
+    "  " +
+    "Points".padStart(POINTS_W) +
+    "  " +
+    "Issues".padEnd(ISSUES_W) +
+    "  " +
+    "Summary";
+  lines.push(head);
+  const prefixW = NAME_W + 2 + RESOLVED_W + 2 + POINTS_W + 2 + ISSUES_W + 2;
+  lines.push("-".repeat(prefixW + SUMMARY_W));
+  if (rows.length === 0) {
+    lines.push("(none)");
+    return;
+  }
+  for (const row of rows) {
+    const name = row.displayName.slice(0, NAME_W).padEnd(NAME_W);
+    const resolved = String(row.resolvedCount).padStart(RESOLVED_W);
+    const points = String(row.storyPoints).padStart(POINTS_W);
+    const issuesFull = row.issueKeys.join(" ");
+    const issues = (
+      issuesFull.length > ISSUES_W ? `${issuesFull.slice(0, ISSUES_W - 1)}…` : issuesFull
+    ).padEnd(ISSUES_W);
+    const summaryLines = wrapText(summaries.get(row.accountId) ?? "", SUMMARY_W);
+    const prefix = `${name}  ${resolved}  ${points}  ${issues}  `;
+    lines.push(prefix + summaryLines[0]);
+    const pad = " ".repeat(prefixW);
+    for (const line of summaryLines.slice(1)) lines.push(pad + line);
+  }
 }
 
 /**
