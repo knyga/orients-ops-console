@@ -157,7 +157,7 @@ describe("buildRepoRanking", () => {
       }),
     );
     expect(rows.map((r) => r.repo)).toEqual(["api", "web", "idle"]);
-    expect(rows[0].activityScore).toBe(3); // 1 commit + 1 opened + 1 merged
+    expect(rows[0].activityScore).toBe(4); // 1 commit + 2 opened + 1 merged
     expect(rows[2].activityScore).toBe(0); // idle repo still listed
   });
 });

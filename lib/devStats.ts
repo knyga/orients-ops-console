@@ -47,7 +47,7 @@ export interface RepoRow {
   net: number;
   prsOpened: number;
   prsMerged: number;
-  /** Composite ranking signal: commits + distinct PRs active in-period. */
+  /** Composite ranking signal: commits + prsOpened + prsMerged. */
   activityScore: number;
 }
 
@@ -146,8 +146,6 @@ function compareContributors(a: ContributorRow, b: ContributorRow): number {
 export function buildRepoRanking(activity: OrgActivity): RepoRow[] {
   const { from, to } = periodBounds(activity.start, activity.end);
   const rows = new Map<string, RepoRow>();
-  // Track distinct PRs active in-period per repo for the activityScore.
-  const activePrCount = new Map<string, number>();
 
   const ensure = (repo: string): RepoRow => {
     let row = rows.get(repo);
@@ -180,20 +178,12 @@ export function buildRepoRanking(activity: OrgActivity): RepoRow[] {
 
   for (const p of activity.pullRequests) {
     const row = ensure(p.repo);
-    const openedInPeriod = inPeriod(p.createdAt, from, to);
-    const mergedInPeriod = inPeriod(p.mergedAt, from, to);
-    if (openedInPeriod) row.prsOpened += 1;
-    if (mergedInPeriod) row.prsMerged += 1;
-    // A PR counts once toward the activity score regardless of whether it was
-    // both opened and merged in-period: "1 opened + 1 merged" = 2 events but
-    // only 2 distinct PRs active, not 3.
-    if (openedInPeriod || mergedInPeriod) {
-      activePrCount.set(p.repo, (activePrCount.get(p.repo) ?? 0) + 1);
-    }
+    if (inPeriod(p.createdAt, from, to)) row.prsOpened += 1;
+    if (inPeriod(p.mergedAt, from, to)) row.prsMerged += 1;
   }
 
   for (const row of rows.values()) {
-    row.activityScore = row.commits + (activePrCount.get(row.repo) ?? 0);
+    row.activityScore = row.commits + row.prsOpened + row.prsMerged;
   }
 
   return [...rows.values()].sort(compareRepos);
