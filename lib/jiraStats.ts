@@ -90,3 +90,53 @@ export function aggregateByUser(issues: JiraIssue[]): {
 
   return { rows, totals };
 }
+
+/** One sprint move read from an issue's changelog. */
+export interface SprintChange {
+  /** Sprint(s) the issue moved from; "" when added from no sprint. */
+  from: string;
+  /** Sprint(s) the issue moved to; "" when removed from all sprints. */
+  to: string;
+  /** ISO 8601 timestamp of the move. */
+  when: string;
+}
+
+/** An issue that changed sprints, with each move. */
+export interface SprintChurnRow {
+  issueKey: string;
+  summary: string;
+  changes: SprintChange[];
+}
+
+/**
+ * For each issue, extract every changelog entry where the Sprint field changed,
+ * ordered oldest-first by timestamp. Issues with no sprint change are omitted.
+ *
+ * Sprint `fromString`/`toString` are comma-separated sprint names as Jira
+ * records them (e.g. "ATP 37" -> "ATP 38"); we surface them verbatim. A null
+ * side (added to / removed from a sprint) is rendered as an empty string.
+ */
+export function sprintChurn(issues: JiraIssue[]): SprintChurnRow[] {
+  const rows: SprintChurnRow[] = [];
+
+  for (const issue of issues) {
+    const changes: SprintChange[] = [];
+    for (const history of issue.histories) {
+      for (const item of history.items) {
+        if (item.field === "Sprint") {
+          changes.push({
+            from: item.fromString ?? "",
+            to: item.toString ?? "",
+            when: history.created,
+          });
+        }
+      }
+    }
+    if (changes.length > 0) {
+      changes.sort((a, b) => a.when.localeCompare(b.when));
+      rows.push({ issueKey: issue.key, summary: issue.summary, changes });
+    }
+  }
+
+  return rows;
+}
