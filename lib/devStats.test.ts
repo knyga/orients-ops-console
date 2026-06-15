@@ -138,6 +138,33 @@ describe("buildContributorLeaderboard", () => {
     expect(rows[1].login).toBe("dependabot[bot]");
     expect(rows[1].isBot).toBe(true);
   });
+
+  it("sums commits as-is without re-filtering by date (they are pre-windowed by the fetch)", () => {
+    // Commit dated well outside the [2026-05-01, 2026-05-31] period. devStats
+    // trusts the client to have windowed commits, so it is still counted.
+    const rows = buildContributorLeaderboard(
+      activity({
+        commits: [commit("api", "alice", 7, 2, { date: "2026-01-01T12:00:00Z" })],
+      }),
+    );
+    const alice = rows.find((r) => r.login === "alice")!;
+    expect(alice.commits).toBe(1);
+    expect(alice.additions).toBe(7);
+  });
+
+  it("marks a contributor as a bot when any of their records is a bot", () => {
+    const rows = buildContributorLeaderboard(
+      activity({
+        commits: [
+          commit("api", "ci-acct", 1, 0, { isBot: false }),
+          commit("api", "ci-acct", 1, 0, { isBot: true }),
+        ],
+      }),
+    );
+    const row = rows.find((r) => r.login === "ci-acct")!;
+    expect(row.commits).toBe(2);
+    expect(row.isBot).toBe(true);
+  });
 });
 
 describe("buildRepoRanking", () => {
