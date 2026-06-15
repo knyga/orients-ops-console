@@ -1,7 +1,7 @@
 /**
  * Shared GitHub GraphQL client for dev reporting. NOT server-only: it reads no
  * environment and is imported by both the API-route wrapper (lib/github.ts) and
- * the CLI (scripts/dev-report.ts). The access token is always INJECTED by the
+ * the CLI (scripts/github.ts). The access token is always INJECTED by the
  * caller and never read here.
  *
  * Why no `import "server-only"` here: that package's default export throws in a
