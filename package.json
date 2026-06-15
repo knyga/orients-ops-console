@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "vimeo": "node --conditions=react-server --import tsx scripts/vimeo.ts",
-    "github": "node --conditions=react-server --import tsx scripts/github.ts"
+    "github": "node --conditions=react-server --import tsx scripts/github.ts",
+    "jira": "node --conditions=react-server --import tsx scripts/jira.ts"
   },
   "dependencies": {
     "next": "16.2.9",
