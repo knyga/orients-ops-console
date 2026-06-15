@@ -15,6 +15,8 @@ export interface ParsedArgs {
   format: OutputFormat;
   /** When true, persist the report as a CSV under reports/jira/. */
   write: boolean;
+  /** When true, generate per-user occupation summaries (via Claude) for the CSV. */
+  summarize: boolean;
 }
 
 export interface Period {
@@ -36,6 +38,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     end: undefined,
     format: "json",
     write: false,
+    summarize: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
@@ -51,6 +54,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       i += 1;
     } else if (flag === "--write") {
       args.write = true;
+    } else if (flag === "--summarize") {
+      args.summarize = true;
     }
   }
   return args;
@@ -139,17 +144,24 @@ function csvField(value: string): string {
 }
 
 /**
- * Per-user resolved stats as CSV (`user,resolvedCount,storyPoints,issues`), one
- * row per user, trailing newline. `issues` is a space-separated list of the
- * keys that user resolved (space keeps it a single unquoted field). Sprint churn
- * is hierarchical (many moves per issue), so it is intentionally not flattened
- * here — use the JSON/table views for it.
+ * Per-user resolved stats as CSV
+ * (`user,resolvedCount,storyPoints,issues,summary`), one row per user, trailing
+ * newline. `issues` is a space-separated list of the keys that user resolved
+ * (space keeps it a single unquoted field). `summary` is the Claude-generated
+ * occupation summary looked up from `summaries` by accountId — empty when no
+ * summaries are provided (the column is always present for a stable schema).
+ * Sprint churn is hierarchical (many moves per issue), so it is intentionally
+ * not flattened here — use the JSON/table views for it.
  */
-export function toCsv(report: JiraReport): string {
-  const lines = ["user,resolvedCount,storyPoints,issues"];
+export function toCsv(
+  report: JiraReport,
+  summaries?: Map<string | null, string>,
+): string {
+  const lines = ["user,resolvedCount,storyPoints,issues,summary"];
   for (const row of report.rows) {
+    const summary = summaries?.get(row.accountId) ?? "";
     lines.push(
-      `${csvField(row.displayName)},${row.resolvedCount},${row.storyPoints},${csvField(row.issueKeys.join(" "))}`,
+      `${csvField(row.displayName)},${row.resolvedCount},${row.storyPoints},${csvField(row.issueKeys.join(" "))},${csvField(summary)}`,
     );
   }
   return `${lines.join("\n")}\n`;

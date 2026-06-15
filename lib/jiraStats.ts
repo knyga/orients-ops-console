@@ -95,6 +95,38 @@ export function aggregateByUser(issues: JiraIssue[]): {
   return { rows, totals };
 }
 
+/** A user with the resolved issues (key + summary) attributed to them. */
+export interface UserTickets {
+  /** Jira accountId, or null for the Unassigned bucket. */
+  accountId: string | null;
+  displayName: string;
+  tickets: { key: string; summary: string }[];
+}
+
+/**
+ * Group resolved issues by assignee, keeping each issue's key + summary (in
+ * encounter/resolution order). Feeds the occupation-summary prompt; the
+ * per-user counts/points come from {@link aggregateByUser}.
+ */
+export function ticketsByUser(issues: JiraIssue[]): UserTickets[] {
+  const byUser = new Map<string, UserTickets>();
+  for (const issue of issues) {
+    const key = issue.assignee?.accountId ?? UNASSIGNED_KEY;
+    const ticket = { key: issue.key, summary: issue.summary };
+    const existing = byUser.get(key);
+    if (existing) {
+      existing.tickets.push(ticket);
+    } else {
+      byUser.set(key, {
+        accountId: issue.assignee?.accountId ?? null,
+        displayName: issue.assignee?.displayName ?? "Unassigned",
+        tickets: [ticket],
+      });
+    }
+  }
+  return [...byUser.values()];
+}
+
 /** One sprint move read from an issue's changelog. */
 export interface SprintChange {
   /** Sprint(s) the issue moved from; "" when added from no sprint. */

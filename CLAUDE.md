@@ -23,7 +23,7 @@ Copy `.env.example` to `.env` and set `VIMEO_TOKEN` (a Vimeo personal access tok
 - `npm test` — run the Vitest suite once
 - `npm run test:watch` — Vitest in watch mode
 - `npm run vimeo -- --start YYYY-MM-DD --end YYYY-MM-DD` — print Vimeo video stats (counts, recorded minutes, per-day) as JSON for the window; `--format table` for a human view. Defaults to the current Kyiv month. This is the CLI Claude Code uses to answer video-stats questions (see `.claude/skills/vimeo-stats/`).
-- `npm run jira -- --start YYYY-MM-DD --end YYYY-MM-DD` — print Jira dev-reporting stats (per-user resolved counts + story points, period totals, sprint churn) as JSON for the window; `--format table` for a human view; `--write` persists the per-user table to `reports/jira/<period>.csv` (committed, building a historical record). Output mirrors `GET /api/jira`. Defaults to the current month. This is the CLI Claude Code uses to answer dev-reporting questions (see `.claude/skills/jira-dev-reporting/`).
+- `npm run jira -- --start YYYY-MM-DD --end YYYY-MM-DD` — print Jira dev-reporting stats (per-user resolved counts + story points + their issue keys, period totals, sprint churn) as JSON for the window; `--format table` for a human view; `--write` persists the per-user table to `reports/jira/<period>.csv` (committed, building a historical record); `--summarize` (implies `--write`, needs `ANTHROPIC_API_KEY`) adds a Claude-generated per-user occupation summary column. Output mirrors `GET /api/jira`. Defaults to the current month. This is the CLI Claude Code uses to answer dev-reporting questions (see `.claude/skills/jira-dev-reporting/`).
 - Run a single test file: `npx vitest run lib/reconcile.test.ts`
 - Run tests matching a name: `npx vitest run -t "50%"`
 

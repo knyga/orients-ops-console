@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { aggregateByUser, sprintChurn, type JiraIssue } from "./jiraStats";
+import {
+  aggregateByUser,
+  sprintChurn,
+  ticketsByUser,
+  type JiraIssue,
+} from "./jiraStats";
 
 /** A resolved issue with sensible defaults; override per test. */
 function issue(over: Partial<JiraIssue> = {}): JiraIssue {
@@ -80,6 +85,34 @@ describe("aggregateByUser", () => {
       issue({ key: "MC-2", assignee: { accountId: "u2", displayName: "Bob" } }),
     ]);
     expect(rows.map((r) => r.displayName)).toEqual(["Bob", "Alice"]);
+  });
+});
+
+describe("ticketsByUser", () => {
+  it("groups key+summary per user, Unassigned for no assignee, in encounter order", () => {
+    const groups = ticketsByUser([
+      issue({ key: "ATP-1", summary: "Fix A" }),
+      issue({
+        key: "MC-1",
+        summary: "Build B",
+        assignee: { accountId: "u2", displayName: "Bob" },
+      }),
+      issue({ key: "ATP-2", summary: "Fix C" }),
+      issue({ key: "ATP-3", summary: "Orphan", assignee: null }),
+    ]);
+    const alice = groups.find((g) => g.accountId === "u1");
+    const bob = groups.find((g) => g.accountId === "u2");
+    const unassigned = groups.find((g) => g.accountId === null);
+    expect(alice).toEqual({
+      accountId: "u1",
+      displayName: "Alice",
+      tickets: [
+        { key: "ATP-1", summary: "Fix A" },
+        { key: "ATP-2", summary: "Fix C" },
+      ],
+    });
+    expect(bob?.tickets).toEqual([{ key: "MC-1", summary: "Build B" }]);
+    expect(unassigned?.displayName).toBe("Unassigned");
   });
 });
 

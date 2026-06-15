@@ -2,13 +2,14 @@
  * CLI: fetch Jira dev-reporting stats for a date window and print them.
  *
  * Usage: npm run jira -- --start 2026-05-01 --end 2026-05-31 [--format table]
- *        npm run jira -- --start 2026-05-01 --end 2026-05-31 --write
+ *        npm run jira -- --start 2026-05-01 --end 2026-05-31 --write [--summarize]
  * Defaults to the current calendar month (UTC) when bounds are omitted.
  *
  * Output mirrors `GET /api/jira`: per-user resolved counts + story points,
  * period totals, and sprint churn — the same shaping the dashboard consumes.
  * `--write` persists the per-user table as a CSV under reports/jira/ (committed
- * to build a historical record), in addition to printing to stdout.
+ * to build a historical record), in addition to printing to stdout. `--summarize`
+ * adds a per-user occupation summary column (via Claude); it implies `--write`.
  *
  * Runs only under Node with `--conditions=react-server` (see package.json) so
  * the `server-only` import in ../lib/jira resolves to its empty module.
@@ -17,7 +18,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchResolvedIssues } from "../lib/jira";
-import { aggregateByUser, sprintChurn } from "../lib/jiraStats";
+import { aggregateByUser, sprintChurn, ticketsByUser } from "../lib/jiraStats";
+import { summarizeOccupations } from "../lib/summarize";
 import {
   formatTable,
   parseArgs,
@@ -35,11 +37,15 @@ function reportsDir(): string {
 }
 
 /** Write the per-user CSV for `period` and return the path written. */
-function writeCsv(period: Period, report: JiraReport): string {
+function writeCsv(
+  period: Period,
+  report: JiraReport,
+  summaries?: Map<string | null, string>,
+): string {
   const dir = reportsDir();
   mkdirSync(dir, { recursive: true });
   const path = join(dir, reportFileName(period));
-  writeFileSync(path, toCsv(report));
+  writeFileSync(path, toCsv(report, summaries));
   return path;
 }
 
@@ -69,10 +75,16 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(report, null, 2));
   }
 
-  if (args.write) {
-    const path = writeCsv(period, report);
+  // --summarize implies --write (summaries only land in the CSV).
+  if (args.write || args.summarize) {
+    let summaries: Map<string | null, string> | undefined;
+    if (args.summarize) {
+      process.stderr.write(`jira: summarizing ${rows.length} users via Claude…\n`);
+      summaries = await summarizeOccupations(ticketsByUser(issues));
+    }
+    const path = writeCsv(period, report, summaries);
     process.stderr.write(
-      `jira: wrote ${path} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points)\n`,
+      `jira: wrote ${path} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points${args.summarize ? ", with summaries" : ""})\n`,
     );
   }
 }

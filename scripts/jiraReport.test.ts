@@ -13,7 +13,13 @@ describe("parseArgs", () => {
   it("parses --start, --end, and --format", () => {
     expect(
       parseArgs(["--start", "2026-05-01", "--end", "2026-05-31", "--format", "table"]),
-    ).toEqual({ start: "2026-05-01", end: "2026-05-31", format: "table", write: false });
+    ).toEqual({
+      start: "2026-05-01",
+      end: "2026-05-31",
+      format: "table",
+      write: false,
+      summarize: false,
+    });
   });
 
   it("defaults format to json and leaves dates undefined when absent", () => {
@@ -22,6 +28,7 @@ describe("parseArgs", () => {
       end: undefined,
       format: "json",
       write: false,
+      summarize: false,
     });
   });
 
@@ -31,6 +38,7 @@ describe("parseArgs", () => {
       end: undefined,
       format: "json",
       write: false,
+      summarize: false,
     });
   });
 
@@ -40,6 +48,7 @@ describe("parseArgs", () => {
       end: undefined,
       format: "json",
       write: false,
+      summarize: false,
     });
   });
 
@@ -49,6 +58,17 @@ describe("parseArgs", () => {
       end: undefined,
       format: "json",
       write: true,
+      summarize: false,
+    });
+  });
+
+  it("sets summarize when --summarize is present", () => {
+    expect(parseArgs(["--summarize"])).toEqual({
+      start: undefined,
+      end: undefined,
+      format: "json",
+      write: false,
+      summarize: true,
     });
   });
 });
@@ -66,14 +86,16 @@ describe("resolvePeriod", () => {
   it("uses explicit bounds when both are given", () => {
     expect(
       resolvePeriod(
-        { start: "2026-05-01", end: "2026-05-31", format: "json", write: false },
+        { start: "2026-05-01", end: "2026-05-31", format: "json", write: false, summarize: false },
         "2026-06-15",
       ),
     ).toEqual({ start: "2026-05-01", end: "2026-05-31" });
   });
 
   it("falls back to the current month when bounds are omitted", () => {
-    expect(resolvePeriod({ format: "json", write: false }, "2026-06-15")).toEqual({
+    expect(
+      resolvePeriod({ format: "json", write: false, summarize: false }, "2026-06-15"),
+    ).toEqual({
       start: "2026-06-01",
       end: "2026-06-15",
     });
@@ -81,7 +103,10 @@ describe("resolvePeriod", () => {
 
   it("ignores a lone start bound and uses the full current month", () => {
     expect(
-      resolvePeriod({ start: "2026-05-01", format: "json", write: false }, "2026-06-15"),
+      resolvePeriod(
+        { start: "2026-05-01", format: "json", write: false, summarize: false },
+        "2026-06-15",
+      ),
     ).toEqual({
       start: "2026-06-01",
       end: "2026-06-15",
@@ -91,7 +116,7 @@ describe("resolvePeriod", () => {
   it("throws on a malformed explicit bound", () => {
     expect(() =>
       resolvePeriod(
-        { start: "06/01/2026", end: "2026-05-31", format: "json", write: false },
+        { start: "06/01/2026", end: "2026-05-31", format: "json", write: false, summarize: false },
         "2026-06-15",
       ),
     ).toThrow(/YYYY-MM-DD/);
@@ -191,9 +216,46 @@ describe("toCsv", () => {
       sprintChurn: [],
     });
     const lines = csv.trimEnd().split("\n");
-    expect(lines[0]).toBe("user,resolvedCount,storyPoints,issues");
-    expect(lines[1]).toBe("Alice Dev,5,13.5,ATP-1 ATP-2");
-    expect(lines[2]).toBe("Unassigned,2,0,ATP-9 ATP-10");
+    expect(lines[0]).toBe("user,resolvedCount,storyPoints,issues,summary");
+    // no summaries map → empty summary column
+    expect(lines[1]).toBe("Alice Dev,5,13.5,ATP-1 ATP-2,");
+    expect(lines[2]).toBe("Unassigned,2,0,ATP-9 ATP-10,");
+  });
+
+  it("fills the summary column from a summaries map, keyed by accountId", () => {
+    const summaries = new Map<string | null, string>([
+      ["acc-1", "Led the detection pipeline work."],
+      [null, "Misc unassigned cleanup, commas, and \"quotes\"."],
+    ]);
+    const csv = toCsv(
+      {
+        rows: [
+          {
+            accountId: "acc-1",
+            displayName: "Alice Dev",
+            resolvedCount: 1,
+            storyPoints: 2,
+            issueKeys: ["ATP-1"],
+          },
+          {
+            accountId: null,
+            displayName: "Unassigned",
+            resolvedCount: 1,
+            storyPoints: 0,
+            issueKeys: ["ATP-2"],
+          },
+        ],
+        totals: { totalResolved: 2, totalStoryPoints: 2 },
+        sprintChurn: [],
+      },
+      summaries,
+    );
+    const lines = csv.trimEnd().split("\n");
+    expect(lines[1]).toBe("Alice Dev,1,2,ATP-1,Led the detection pipeline work.");
+    // summary with commas/quotes is RFC-4180 escaped
+    expect(lines[2]).toBe(
+      'Unassigned,1,0,ATP-2,"Misc unassigned cleanup, commas, and ""quotes""."',
+    );
   });
 
   it("escapes names containing commas or quotes per RFC 4180", () => {
@@ -210,6 +272,6 @@ describe("toCsv", () => {
       totals: { totalResolved: 1, totalStoryPoints: 2 },
       sprintChurn: [],
     });
-    expect(csv.trimEnd().split("\n")[1]).toBe('"Doe, ""JD"" Jr",1,2,ATP-1');
+    expect(csv.trimEnd().split("\n")[1]).toBe('"Doe, ""JD"" Jr",1,2,ATP-1,');
   });
 });
