@@ -7,7 +7,7 @@ import Link from "next/link";
  */
 const TABS: { href: string; label: string; enabled: boolean }[] = [
   { href: "/field-ops", label: "Field Ops", enabled: true },
-  { href: "/dev-reporting", label: "Dev Reporting", enabled: false },
+  { href: "/dev-reporting", label: "Dev Reporting", enabled: true },
 ];
 
 export default function DashboardLayout({
