@@ -67,6 +67,19 @@ describe("resolvePeriod", () => {
     });
   });
 
+  it("ignores a lone bound and uses the full current month", () => {
+    expect(resolvePeriod({ start: "2026-05-01", format: "json" }, "2026-06-15")).toEqual({
+      start: "2026-06-01",
+      end: "2026-06-15",
+      timezone: "Europe/Kyiv",
+    });
+    expect(resolvePeriod({ end: "2026-05-31", format: "json" }, "2026-06-15")).toEqual({
+      start: "2026-06-01",
+      end: "2026-06-15",
+      timezone: "Europe/Kyiv",
+    });
+  });
+
   it("throws on a malformed date", () => {
     expect(() =>
       resolvePeriod({ start: "2026/05/01", end: "2026-05-31", format: "json" }, "2026-06-15"),

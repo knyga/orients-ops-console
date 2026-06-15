@@ -66,16 +66,16 @@ export function defaultMonthWindow(today: string): { start: string; end: string 
 }
 
 /**
- * Resolve the reporting window: explicit `--start`/`--end` when both present,
- * otherwise the current month. Throws on a malformed explicit bound.
+ * Resolve the reporting window. Uses the explicit `--start`/`--end` only when
+ * BOTH are present; otherwise falls back to the full current month (a lone
+ * bound is ignored, which avoids an inverted start>end window). Throws on a
+ * malformed explicit bound.
  */
 export function resolvePeriod(args: ParsedArgs, today: string): Period {
   let start = args.start;
   let end = args.end;
   if (!start || !end) {
-    const window = defaultMonthWindow(today);
-    start = start ?? window.start;
-    end = end ?? window.end;
+    ({ start, end } = defaultMonthWindow(today));
   }
   if (!DATE_RE.test(start) || !DATE_RE.test(end)) {
     throw new Error(`Period bounds must be YYYY-MM-DD: start=${start} end=${end}`);
