@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "vimeo": "node --conditions=react-server --import tsx scripts/vimeo.ts"
+    "vimeo": "node --conditions=react-server --import tsx scripts/vimeo.ts",
+    "github": "node --conditions=react-server --import tsx scripts/github.ts"
   },
   "dependencies": {
     "next": "16.2.9",
