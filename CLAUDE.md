@@ -17,19 +17,29 @@ Copy `.env.example` to `.env` and set `VIMEO_TOKEN` (a Vimeo personal access tok
 
 ## Commands
 
-- `npm run dev` — start the Next.js dev server (http://localhost:3000)
+- `npm run dev` — start the Next.js dev server (http://localhost:3003)
 - `npm run build` — production build
 - `npm run lint` — ESLint (flat config, `eslint-config-next` core-web-vitals + typescript)
 - `npm test` — run the Vitest suite once
 - `npm run test:watch` — Vitest in watch mode
-- `npm run vimeo -- --start YYYY-MM-DD --end YYYY-MM-DD` — print Vimeo video stats (counts, recorded minutes, per-day) as JSON for the window; `--format table` for a human view. Defaults to the current Kyiv month. This is the CLI Claude Code uses to answer video-stats questions (see `.claude/skills/vimeo-stats/`).
-- `npm run jira -- --start YYYY-MM-DD --end YYYY-MM-DD` — print Jira dev-reporting stats (per-user resolved counts + story points + their issue keys, period totals, sprint churn) as JSON for the window; `--format table` for a human view; `--write` persists the per-user table to `reports/jira/<period>.csv` (committed, building a historical record); `--summarize` (implies `--write`, needs `ANTHROPIC_API_KEY`) adds a Claude-generated per-user occupation summary column. Output mirrors `GET /api/jira`. Defaults to the current month. This is the CLI Claude Code uses to answer dev-reporting questions (see `.claude/skills/jira-dev-reporting/`).
+- `npm run vimeo -- --start YYYY-MM-DD --end YYYY-MM-DD` — print Vimeo video stats (counts, recorded minutes, per-day) as JSON for the window; `--format table` for a human view; `--write` persists committed `reports/vimeo/<period>.{json,csv}`. Defaults to the current Kyiv month. CLI for video-stats questions (see `.claude/skills/vimeo-stats/`).
+- `npm run jira -- --start YYYY-MM-DD --end YYYY-MM-DD` — print Jira dev-reporting stats (per-user resolved counts + story points + their issue keys, period totals, sprint churn) as JSON; `--format table` for a human view; `--write` persists committed `reports/jira/<period>.{json,csv}` (lossless JSON is the web render source; CSV is a human record); `--summarize` (implies `--write`, needs `ANTHROPIC_API_KEY`) adds a Claude per-user occupation summary; `--dump-tickets`/`--summaries-file` drive the sonnet-subagent summary flow. Output mirrors `GET /api/jira`. Defaults to the current month. (See `.claude/skills/jira-dev-reporting/`.)
+- `npm run github -- --start YYYY-MM-DD --end YYYY-MM-DD` — print GitHub dev-reporting stats (per-contributor commits/additions/deletions/net + PRs opened/merged, repo ranking) as JSON; `--format table`; `--write` persists committed `reports/github/<period>.{json,csv}`; `--summarize`/`--summaries-file`/`--dump-work` drive the same summary flow as Jira. Output mirrors `GET /api/github`. (See `.claude/skills/github-dev-reporting/`.)
+- `npm run fieldops -- --start YYYY-MM-DD --end YYYY-MM-DD` — reconcile live Vimeo against committed flight hours (`reports/field-ops/inputs/<period>.csv`, override with `--inputs`); applies the 50% gate and prints the daily rows + summary as JSON; `--format table`; `--write` persists committed `reports/field-ops/<period>.{json,csv}`. Defaults to the current Kyiv month.
 - Run a single test file: `npx vitest run lib/reconcile.test.ts`
 - Run tests matching a name: `npx vitest run -t "50%"`
 
 ## Architecture
 
-An internal ops console (Next.js 16 App Router, React 19, Tailwind v4, TypeScript strict). The one shipped feature is **Field Ops video reconciliation**; the dashboard nav is data-driven with an `enabled` flag (`app/(dashboard)/layout.tsx`) so future modules (e.g. Dev Reporting) slot in as disabled tabs.
+An internal ops console (Next.js 16 App Router, React 19, Tailwind v4, TypeScript strict). Shipped features: **Field Ops video reconciliation**, **Dev Reporting (Jira)**, and **GitHub Activity** — the dashboard nav is data-driven with an `enabled` flag (`app/(dashboard)/layout.tsx`).
+
+### Artifacts & the skill→CLI→committed-artifact→web pattern (read this for any new feature)
+
+**Claude Code is first-class: the skill/CLI is the product.** Each reporting feature's CLI (`npm run <feature>`) computes a period's data and, with `--write`, persists **two committed sidecars** under `reports/<feature>/<period>.{json,csv}`: a **lossless JSON** (the web's render source — the exact shape `GET /api/<feature>` returns) and a **flat CSV** (a human/spreadsheet record; intentionally lossy — no nested data like sprint churn or repo ranking). The shared read/write/list logic is in `lib/reports.ts` (CLI-safe, **not** `server-only`); the pure period-key helpers are in `lib/period.ts` (client-bundle-safe, no `node:fs`). `periodKey` is the canonical key: `YYYY-MM` for a single month, else `YYYY-MM-DD_YYYY-MM-DD`.
+
+The web is **hybrid**: `GET /api/<feature>` serves the committed JSON for `?period=<key>` (404 when absent), lists committed periods for `?periods=1`, and falls back to a **live** fetch for `?refresh=1&start=&end=` (the only network path). **The web never writes `reports/` — committing artifacts is exclusively the CLI's job.** The reporting pages share the `lib/usePeriodReport` hook (period picker → render newest committed → "Refresh live" for the current month). Field Ops is the exception: `/api/field-ops` is committed-only because live reconciliation needs the ephemeral pasted flight hours, which stays a client computation against `/api/vimeo?refresh=1`.
+
+To add a new reporting feature, follow `.claude/skills/authoring-reporting-features/SKILL.md`.
 
 ### The reconciliation domain (read `lib/reconcile.ts` first)
 
@@ -47,11 +57,11 @@ The business policy lives as a doc comment at the top of `lib/reconcile.ts` and 
 - The browser calls `app/api/vimeo/route.ts` (`GET /api/vimeo?start=&end=`), never Vimeo directly. The route validates `YYYY-MM-DD` bounds and maps `VimeoError` → 502 (upstream) or 500 (missing config/token).
 - `fetchVideosInPeriod` relies on Vimeo's `sort=date&direction=desc` to stop paging early once a page predates `start`, so it never scans full account history. All Vimeo fetches use `cache: "no-store"` — reconciliation must reflect live truth.
 
-The same server-only client also backs a CLI, `scripts/vimeo.ts` (run via `npm run vimeo`). Because `lib/vimeo.ts` imports `server-only` — whose default export throws — the CLI runs Node with `--conditions=react-server` so that import resolves to its empty module. All shaping lives in the pure, tested `scripts/vimeoStats.ts`; the CLI does not compute reconciliation (no flight-hours source yet).
+The same server-only client also backs a CLI, `scripts/vimeo.ts` (run via `npm run vimeo`). Because `lib/vimeo.ts` imports `server-only` — whose default export throws — the CLI runs Node with `--conditions=react-server` so that import resolves to its empty module. All shaping lives in the pure, tested `scripts/vimeoStats.ts`. The same `server-only` + `--conditions=react-server` discipline applies to `lib/jira.ts`, `lib/github.ts` (token-injected client in `lib/githubClient.ts`, which is deliberately *not* server-only) and `lib/summarize.ts`. Reconciliation now also has a CLI — `npm run fieldops` (`scripts/fieldops.ts`) — combining live Vimeo with committed flight hours.
 
 ### UI flow
 
-`app/(dashboard)/field-ops/page.tsx` is the only stateful client page. It fetches videos via the API route into React state, the user enters/pastes flight hours into `FlightHoursEditor` (CSV paste parsed by `lib/flightHours.ts`, tolerant of headers/blank lines/`,` or `;`), and reconciliation is recomputed client-side in a `useMemo` calling `aggregateByDay`/`summarize`. Flight hours are **ephemeral** (in-memory only; nothing is persisted server-side).
+`app/(dashboard)/field-ops/page.tsx` defaults to rendering the **committed** reconciliation for the selected period (read-only). Its **Live (unsaved)** mode is the original interactive flow: fetch videos via `/api/vimeo?refresh=1`, paste flight hours into `FlightHoursEditor` (CSV parsed by `lib/flightHours.ts`, tolerant of headers/blank lines/`,` or `;`), reconciliation recomputed client-side in a `useMemo` calling `aggregateByDay`/`summarize`. Pasted flight hours are still **ephemeral**; to make a month a committed source of record, the hours are committed to `reports/field-ops/inputs/<period>.csv` and `npm run fieldops -- --write` produces the artifact. The Dev Reporting and GitHub pages follow the shared `usePeriodReport` hybrid pattern (committed by default, live Refresh for the current month).
 
 ## Conventions
 
