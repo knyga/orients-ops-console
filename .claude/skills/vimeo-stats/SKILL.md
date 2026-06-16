@@ -34,6 +34,8 @@ It prints JSON:
 
 Answer counts/sums from `totals`/`byDay`; derive anything else (busiest day, longest clip) from `videos`. Add `--format table` for a human-readable view.
 
+To persist a period as a committed artifact, add `--write`: it writes the lossless stats to `reports/vimeo/<period>.json` (the web's render source — same shape as above) and a flat `reports/vimeo/<period>.csv` (`date,videoCount,recordedMinutes`), printing both paths to stderr. The web renders the committed JSON via `GET /api/vimeo?period=<key>` (and lists committed periods via `?periods=1`); the live `?start=&end=` path still fetches fresh from Vimeo.
+
 Dates are inclusive and must be `YYYY-MM-DD`. A missing `VIMEO_TOKEN` makes the CLI exit non-zero with a clear message — tell the user to set it in `.env`.
 
 ## Out of scope

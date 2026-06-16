@@ -11,6 +11,8 @@ export interface ParsedArgs {
   start?: string;
   end?: string;
   format: OutputFormat;
+  /** When true, persist the stats as committed reports/vimeo/<period>.{json,csv}. */
+  write: boolean;
 }
 
 export interface Period {
@@ -46,7 +48,12 @@ function round1(n: number): number {
 
 /** Parse `--start`, `--end`, `--format` from raw CLI args. Unknown flags ignored. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { start: undefined, end: undefined, format: "json" };
+  const args: ParsedArgs = {
+    start: undefined,
+    end: undefined,
+    format: "json",
+    write: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -55,6 +62,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (flag === "--format") {
       args.format = value === "table" ? "table" : "json";
       i += 1;
+    } else if (flag === "--write") {
+      args.write = true;
     }
   }
   return args;
@@ -137,4 +146,18 @@ export function formatTable(stats: VimeoStats): string {
     `TOTAL        ${String(totals.videoCount).padStart(6)}   ${String(totals.recordedMinutes).padStart(7)}`,
   );
   return lines.join("\n");
+}
+
+/**
+ * Per-day Vimeo stats as CSV (`date,videoCount,recordedMinutes`), one row per
+ * day with a trailing newline — the flat human/spreadsheet record. The lossless
+ * per-video detail lives in the JSON sidecar (`videos[]`), not here. All fields
+ * are ISO dates / numbers, so no RFC-4180 escaping is needed.
+ */
+export function toCsv(stats: VimeoStats): string {
+  const lines = ["date,videoCount,recordedMinutes"];
+  for (const day of stats.byDay) {
+    lines.push(`${day.date},${day.videoCount},${day.recordedMinutes}`);
+  }
+  return `${lines.join("\n")}\n`;
 }

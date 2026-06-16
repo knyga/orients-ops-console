@@ -6,6 +6,7 @@ import {
   formatTable,
   parseArgs,
   resolvePeriod,
+  toCsv,
 } from "./vimeoStats";
 
 /** A Vimeo video uploaded at noon Kyiv on `date` (stable day mapping). */
@@ -28,11 +29,25 @@ describe("parseArgs", () => {
   it("reads --start, --end and --format", () => {
     expect(
       parseArgs(["--start", "2026-05-01", "--end", "2026-05-31", "--format", "table"]),
-    ).toEqual({ start: "2026-05-01", end: "2026-05-31", format: "table" });
+    ).toEqual({ start: "2026-05-01", end: "2026-05-31", format: "table", write: false });
   });
 
   it("defaults format to json and leaves dates undefined when absent", () => {
-    expect(parseArgs([])).toEqual({ start: undefined, end: undefined, format: "json" });
+    expect(parseArgs([])).toEqual({
+      start: undefined,
+      end: undefined,
+      format: "json",
+      write: false,
+    });
+  });
+
+  it("sets write when --write is present", () => {
+    expect(parseArgs(["--write"])).toEqual({
+      start: undefined,
+      end: undefined,
+      format: "json",
+      write: true,
+    });
   });
 });
 
@@ -48,7 +63,7 @@ describe("defaultMonthWindow", () => {
 describe("resolvePeriod", () => {
   it("uses explicit bounds when both are given", () => {
     const period = resolvePeriod(
-      { start: "2026-05-01", end: "2026-05-31", format: "json" },
+      { start: "2026-05-01", end: "2026-05-31", format: "json", write: false },
       "2026-06-15",
     );
     expect(period).toEqual({
@@ -59,7 +74,7 @@ describe("resolvePeriod", () => {
   });
 
   it("falls back to the current month when bounds are omitted", () => {
-    const period = resolvePeriod({ format: "json" }, "2026-06-15");
+    const period = resolvePeriod({ format: "json", write: false }, "2026-06-15");
     expect(period).toEqual({
       start: "2026-06-01",
       end: "2026-06-15",
@@ -68,12 +83,14 @@ describe("resolvePeriod", () => {
   });
 
   it("ignores a lone bound and uses the full current month", () => {
-    expect(resolvePeriod({ start: "2026-05-01", format: "json" }, "2026-06-15")).toEqual({
+    expect(
+      resolvePeriod({ start: "2026-05-01", format: "json", write: false }, "2026-06-15"),
+    ).toEqual({
       start: "2026-06-01",
       end: "2026-06-15",
       timezone: "Europe/Kyiv",
     });
-    expect(resolvePeriod({ end: "2026-05-31", format: "json" }, "2026-06-15")).toEqual({
+    expect(resolvePeriod({ end: "2026-05-31", format: "json", write: false }, "2026-06-15")).toEqual({
       start: "2026-06-01",
       end: "2026-06-15",
       timezone: "Europe/Kyiv",
@@ -82,7 +99,10 @@ describe("resolvePeriod", () => {
 
   it("throws on a malformed date", () => {
     expect(() =>
-      resolvePeriod({ start: "2026/05/01", end: "2026-05-31", format: "json" }, "2026-06-15"),
+      resolvePeriod(
+        { start: "2026/05/01", end: "2026-05-31", format: "json", write: false },
+        "2026-06-15",
+      ),
     ).toThrow(/YYYY-MM-DD/);
   });
 });
@@ -136,5 +156,17 @@ describe("formatTable", () => {
     expect(table).toContain("2026-05-02");
     expect(table).toMatch(/TOTAL/i);
     expect(table).toContain("2026-05-01 … 2026-05-31"); // period header
+  });
+});
+
+describe("toCsv", () => {
+  it("emits a header and one row per day", () => {
+    const stats = buildStats(
+      [videoOn("2026-05-01", 1800), videoOn("2026-05-01", 1800), videoOn("2026-05-02", 600)],
+      { start: "2026-05-01", end: "2026-05-31", timezone: "Europe/Kyiv" },
+    );
+    expect(toCsv(stats)).toBe(
+      "date,videoCount,recordedMinutes\n2026-05-01,2,60\n2026-05-02,1,10\n",
+    );
   });
 });

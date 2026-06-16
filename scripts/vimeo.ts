@@ -2,14 +2,26 @@
  * CLI: fetch Vimeo video stats for a date window and print them.
  *
  * Usage: npm run vimeo -- --start 2026-05-01 --end 2026-05-31 [--format table]
+ *        npm run vimeo -- --start 2026-05-01 --end 2026-05-31 --write
  * Defaults to the current Europe/Kyiv calendar month when bounds are omitted.
+ *
+ * `--write` persists the stats as committed reports/vimeo/<period>.{json,csv}
+ * (the lossless JSON is the web's render source; the CSV is a human record), in
+ * addition to printing to stdout.
  *
  * Runs only under Node with `--conditions=react-server` (see package.json) so
  * the `server-only` import in ../lib/vimeo resolves to its empty module.
  */
 import { fetchVideosInPeriod } from "../lib/vimeo";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
-import { buildStats, formatTable, parseArgs, resolvePeriod } from "./vimeoStats";
+import { writeReport } from "../lib/reports";
+import {
+  buildStats,
+  formatTable,
+  parseArgs,
+  resolvePeriod,
+  toCsv,
+} from "./vimeoStats";
 
 /** Today's date (YYYY-MM-DD) in the field timezone. */
 function todayInFieldTz(): string {
@@ -39,6 +51,16 @@ async function main(): Promise<void> {
     console.log(formatTable(stats));
   } else {
     console.log(JSON.stringify(stats, null, 2));
+  }
+
+  if (args.write) {
+    const { jsonPath, csvPath } = writeReport("vimeo", period, {
+      json: JSON.stringify(stats, null, 2),
+      csv: toCsv(stats),
+    });
+    process.stderr.write(
+      `vimeo: wrote ${jsonPath} and ${csvPath} (${stats.totals.videoCount} videos, ${stats.totals.recordedMinutes} min)\n`,
+    );
   }
 }
 
