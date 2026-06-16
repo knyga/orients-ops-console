@@ -10,11 +10,16 @@
  * `--write` persists the per-user table as a CSV under reports/jira/ (committed
  * to build a historical record), in addition to printing to stdout. `--summarize`
  * adds a per-user occupation summary column (via Claude); it implies `--write`.
+ * `--summaries-file <path>` supplies those summaries from a JSON file
+ * (accountId → text) instead of calling Claude — the path used when Claude Code
+ * sonnet subagents generate the prose; it also implies `--write`.
+ * `--dump-tickets` prints per-user tickets (key + title) as JSON and exits — the
+ * input those subagents consume.
  *
  * Runs only under Node with `--conditions=react-server` (see package.json) so
  * the `server-only` import in ../lib/jira resolves to its empty module.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchResolvedIssues } from "../lib/jira";
@@ -54,6 +59,17 @@ function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Load externally-supplied per-user summaries from a JSON file. The file is a
+ * plain object of accountId → summary text (the Unassigned bucket, accountId
+ * null, has no key). Returned as the same Map shape summarizeOccupations yields,
+ * so the table/CSV consume it identically.
+ */
+function loadSummariesFile(path: string): Map<string | null, string> {
+  const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, string>;
+  return new Map<string | null, string>(Object.entries(raw));
+}
+
 async function main(): Promise<void> {
   // Load .env (where the JIRA_* vars live) if present; ignore if absent.
   try {
@@ -66,12 +82,26 @@ async function main(): Promise<void> {
   const period = resolvePeriod(args, todayUtc());
 
   const issues = await fetchResolvedIssues(period.start, period.end);
+
+  // --dump-tickets: emit per-user tickets (key + title) for an external
+  // summarizer (e.g. Claude Code sonnet subagents) and exit. No Claude, no CSV.
+  if (args.dumpTickets) {
+    console.log(JSON.stringify(ticketsByUser(issues), null, 2));
+    return;
+  }
+
   const { rows, totals } = aggregateByUser(issues);
   const report: JiraReport = { rows, totals, sprintChurn: sprintChurn(issues) };
 
-  // Compute summaries once (used by both the table view and the CSV).
+  // Compute summaries once (used by both the table view and the CSV). They come
+  // either from an external file (--summaries-file) or from Claude (--summarize).
   let summaries: Map<string | null, string> | undefined;
-  if (args.summarize) {
+  if (args.summariesFile) {
+    summaries = loadSummariesFile(args.summariesFile);
+    process.stderr.write(
+      `jira: loaded ${summaries.size} summaries from ${args.summariesFile}\n`,
+    );
+  } else if (args.summarize) {
     process.stderr.write(`jira: summarizing ${rows.length} users via Claude…\n`);
     summaries = await summarizeOccupations(ticketsByUser(issues));
   }
@@ -82,11 +112,11 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(report, null, 2));
   }
 
-  // --summarize implies --write (so the summaries are also persisted).
-  if (args.write || args.summarize) {
+  // --summarize / --summaries-file imply --write (so summaries are persisted).
+  if (args.write || args.summarize || args.summariesFile) {
     const path = writeCsv(period, report, summaries);
     process.stderr.write(
-      `jira: wrote ${path} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points${args.summarize ? ", with summaries" : ""})\n`,
+      `jira: wrote ${path} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points${summaries ? ", with summaries" : ""})\n`,
     );
   }
 }

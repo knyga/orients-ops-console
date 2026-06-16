@@ -19,6 +19,8 @@ describe("parseArgs", () => {
       format: "table",
       write: false,
       summarize: false,
+      summariesFile: undefined,
+      dumpTickets: false,
     });
   });
 
@@ -29,6 +31,8 @@ describe("parseArgs", () => {
       format: "json",
       write: false,
       summarize: false,
+      summariesFile: undefined,
+      dumpTickets: false,
     });
   });
 
@@ -39,6 +43,8 @@ describe("parseArgs", () => {
       format: "json",
       write: false,
       summarize: false,
+      summariesFile: undefined,
+      dumpTickets: false,
     });
   });
 
@@ -49,6 +55,8 @@ describe("parseArgs", () => {
       format: "json",
       write: false,
       summarize: false,
+      summariesFile: undefined,
+      dumpTickets: false,
     });
   });
 
@@ -59,6 +67,8 @@ describe("parseArgs", () => {
       format: "json",
       write: true,
       summarize: false,
+      summariesFile: undefined,
+      dumpTickets: false,
     });
   });
 
@@ -69,6 +79,22 @@ describe("parseArgs", () => {
       format: "json",
       write: false,
       summarize: true,
+      summariesFile: undefined,
+      dumpTickets: false,
+    });
+  });
+
+  it("captures --summaries-file's path and sets --dump-tickets", () => {
+    expect(
+      parseArgs(["--summaries-file", "/tmp/s.json", "--dump-tickets"]),
+    ).toEqual({
+      start: undefined,
+      end: undefined,
+      format: "json",
+      write: false,
+      summarize: false,
+      summariesFile: "/tmp/s.json",
+      dumpTickets: true,
     });
   });
 });
@@ -86,7 +112,7 @@ describe("resolvePeriod", () => {
   it("uses explicit bounds when both are given", () => {
     expect(
       resolvePeriod(
-        { start: "2026-05-01", end: "2026-05-31", format: "json", write: false, summarize: false },
+        { start: "2026-05-01", end: "2026-05-31", format: "json", write: false, summarize: false, dumpTickets: false },
         "2026-06-15",
       ),
     ).toEqual({ start: "2026-05-01", end: "2026-05-31" });
@@ -94,7 +120,7 @@ describe("resolvePeriod", () => {
 
   it("falls back to the current month when bounds are omitted", () => {
     expect(
-      resolvePeriod({ format: "json", write: false, summarize: false }, "2026-06-15"),
+      resolvePeriod({ format: "json", write: false, summarize: false, dumpTickets: false }, "2026-06-15"),
     ).toEqual({
       start: "2026-06-01",
       end: "2026-06-15",
@@ -104,7 +130,7 @@ describe("resolvePeriod", () => {
   it("ignores a lone start bound and uses the full current month", () => {
     expect(
       resolvePeriod(
-        { start: "2026-05-01", format: "json", write: false, summarize: false },
+        { start: "2026-05-01", format: "json", write: false, summarize: false, dumpTickets: false },
         "2026-06-15",
       ),
     ).toEqual({
@@ -116,7 +142,7 @@ describe("resolvePeriod", () => {
   it("throws on a malformed explicit bound", () => {
     expect(() =>
       resolvePeriod(
-        { start: "06/01/2026", end: "2026-05-31", format: "json", write: false, summarize: false },
+        { start: "06/01/2026", end: "2026-05-31", format: "json", write: false, summarize: false, dumpTickets: false },
         "2026-06-15",
       ),
     ).toThrow(/YYYY-MM-DD/);

@@ -17,6 +17,18 @@ export interface ParsedArgs {
   write: boolean;
   /** When true, generate per-user occupation summaries (via Claude) for the CSV. */
   summarize: boolean;
+  /**
+   * When set, read per-user summaries (a JSON object of accountId → text) from
+   * this file and use them for the table/CSV instead of calling Claude. Lets an
+   * external summarizer (e.g. Claude Code sonnet subagents) supply the prose.
+   * Implies --write.
+   */
+  summariesFile?: string;
+  /**
+   * When true, print per-user tickets (key + title) as JSON and exit — the input
+   * an external summarizer consumes. No Claude call, no CSV.
+   */
+  dumpTickets: boolean;
 }
 
 export interface Period {
@@ -39,6 +51,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     format: "json",
     write: false,
     summarize: false,
+    summariesFile: undefined,
+    dumpTickets: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
@@ -56,6 +70,11 @@ export function parseArgs(argv: string[]): ParsedArgs {
       args.write = true;
     } else if (flag === "--summarize") {
       args.summarize = true;
+    } else if (flag === "--summaries-file") {
+      args.summariesFile = value;
+      i += 1;
+    } else if (flag === "--dump-tickets") {
+      args.dumpTickets = true;
     }
   }
   return args;
