@@ -1,0 +1,441 @@
+{
+  "org": "orients-ai",
+  "period": {
+    "start": "2026-05-01",
+    "end": "2026-05-31"
+  },
+  "contributors": [
+    {
+      "key": "login:nadiia-khasyshyn",
+      "login": "nadiia-khasyshyn",
+      "displayName": "nadiia-khasyshyn",
+      "isBot": false,
+      "unlinked": false,
+      "commits": 45,
+      "additions": 3318,
+      "deletions": 1068,
+      "net": 2250,
+      "prsOpened": 25,
+      "prsMerged": 20
+    },
+    {
+      "key": "login:forobohd-orients",
+      "login": "forobohd-orients",
+      "displayName": "forobohd-orients",
+      "isBot": false,
+      "unlinked": false,
+      "commits": 27,
+      "additions": 14413,
+      "deletions": 5886,
+      "net": 8527,
+      "prsOpened": 22,
+      "prsMerged": 20
+    },
+    {
+      "key": "login:danylo-tomashy",
+      "login": "danylo-tomashy",
+      "displayName": "danylo-tomashy",
+      "isBot": false,
+      "unlinked": false,
+      "commits": 7,
+      "additions": 1227,
+      "deletions": 154,
+      "net": 1073,
+      "prsOpened": 12,
+      "prsMerged": 8
+    },
+    {
+      "key": "login:daniltomashi",
+      "login": "daniltomashi",
+      "displayName": "daniltomashi",
+      "isBot": false,
+      "unlinked": false,
+      "commits": 3,
+      "additions": 9328,
+      "deletions": 19,
+      "net": 9309,
+      "prsOpened": 0,
+      "prsMerged": 0
+    },
+    {
+      "key": "login:VolodymyrPavliukevych",
+      "login": "VolodymyrPavliukevych",
+      "displayName": "VolodymyrPavliukevych",
+      "isBot": false,
+      "unlinked": false,
+      "commits": 3,
+      "additions": 1840,
+      "deletions": 644,
+      "net": 1196,
+      "prsOpened": 2,
+      "prsMerged": 3
+    },
+    {
+      "key": "login:andrii-yefimov",
+      "login": "andrii-yefimov",
+      "displayName": "andrii-yefimov",
+      "isBot": false,
+      "unlinked": false,
+      "commits": 1,
+      "additions": 8,
+      "deletions": 0,
+      "net": 8,
+      "prsOpened": 0,
+      "prsMerged": 0
+    },
+    {
+      "key": "login:lzaiatsoai",
+      "login": "lzaiatsoai",
+      "displayName": "lzaiatsoai",
+      "isBot": false,
+      "unlinked": false,
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 1,
+      "prsMerged": 0
+    }
+  ],
+  "repos": [
+    {
+      "repo": "vartovyi",
+      "commits": 45,
+      "additions": 12710,
+      "deletions": 6711,
+      "net": 5999,
+      "prsOpened": 56,
+      "prsMerged": 48,
+      "activityScore": 149
+    },
+    {
+      "repo": "vlm-detector-finetuning",
+      "commits": 26,
+      "additions": 1937,
+      "deletions": 669,
+      "net": 1268,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 26
+    },
+    {
+      "repo": "ardupilot-presets",
+      "commits": 4,
+      "additions": 8,
+      "deletions": 6,
+      "net": 2,
+      "prsOpened": 2,
+      "prsMerged": 2,
+      "activityScore": 8
+    },
+    {
+      "repo": "orients-mp-plugin",
+      "commits": 5,
+      "additions": 4865,
+      "deletions": 366,
+      "net": 4499,
+      "prsOpened": 1,
+      "prsMerged": 0,
+      "activityScore": 6
+    },
+    {
+      "repo": "update-center-api",
+      "commits": 3,
+      "additions": 1286,
+      "deletions": 0,
+      "net": 1286,
+      "prsOpened": 2,
+      "prsMerged": 1,
+      "activityScore": 6
+    },
+    {
+      "repo": "thermal_camera_playground",
+      "commits": 3,
+      "additions": 9328,
+      "deletions": 19,
+      "net": 9309,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 3
+    },
+    {
+      "repo": "orients-mission-center",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 1,
+      "prsMerged": 0,
+      "activityScore": 1
+    },
+    {
+      "repo": "a-v-assembly",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "airsim-world",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "Colosseum",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "cv-playground",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "detection-pipeline",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "drone-brake-sim",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "gate_box",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "label-studio-ml-backend",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "ml-pipeline",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "nano-track",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "orients-extension",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "orients-infra",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "orients-middleware",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "orients-ops-console",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "pitch-corrector",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "poc",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "sam-2-labeling-automation",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "sharedmemory",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "siam-trackers",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "sine-poc",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "sound",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "synthetic-data-experiments",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "update-center-webapp",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "vatovyi-cv-logs-analysis",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    },
+    {
+      "repo": "VINS-Mobile",
+      "commits": 0,
+      "additions": 0,
+      "deletions": 0,
+      "net": 0,
+      "prsOpened": 0,
+      "prsMerged": 0,
+      "activityScore": 0
+    }
+  ],
+  "totals": {
+    "repos": 32,
+    "contributors": 7,
+    "commits": 86,
+    "additions": 30134,
+    "deletions": 7771,
+    "net": 22363,
+    "prsOpened": 62,
+    "prsMerged": 51
+  },
+  "summaries": {
+    "login:forobohd-orients": "Broad firmware and embedded systems work spanning flight control, optical flow integration, and build/deployment tooling. Flight control contributions include failsafe improvements (voltage failsafe, failsafe logic overhaul), position hold fixes, azimuth-hold descend, manual max angle correction, and a tunnel mode (with a revert). Optical flow was integrated as a separate process. On the pendrive/deployment side: pendrive bundle checksum, disabling bundle generation, obfuscation fixes, and build fixes. An intermediate persistent storage layer was added (atp-1553/1552/1581), along with RAM refresh logic (reverted). Logging improvements and tracker stop handling were also included. Separately, ground station provisioning work bootstrapped a new update-center-api repo with registration endpoints, an X25519 security protocol, a Config Editor screen for editing default.toml, and a Settings/Update Center registration screen with keypair storage as plaintext base64. ArduPilot presets were updated with a servo function addition.",
+    "login:nadiia-khasyshyn": "Focused on computer vision, detection pipeline, and UAV system reliability. On the detection/CV side: added a new classifier and a detection model (0.8f), built a thermal pipeline with S3 staging, frame limits, and thermal-direct detection, added thermal mode, thermal bbox debug logging, thermal coordinate offset fixes (with a revert cycle), post-processing filters (horizon crop, aspect ratio, no-overlap), and an inverted thermal filter. Tracker invalidation was enhanced with distance-dependent logic, passed/failed window logging, and attack reset on thermal filter detection. OSD improvements included informative azimuth OSD and a general vartovyi informative OSD. Battery usage prediction was added. On the pendrive/deployment side: godot hash save/check, obfuscate toggle, pendrive build field reduction, picamera restart on capture timeout, preserving godot files on copy failure, and greeter replacement with a wallpaper-based lightdm-gtk-greeter. Security work included JWT-based authorization for ground station private key retrieval. Metrics sync and FPS tracker log fixes round out the period.",
+    "login:danylo-tomashy": "Concentrated on sine/positioning reliability, smart flight modes, and Godot UI integration. Sine-related work included glitch detection, a fix for a startup sine bug, fallback to dead reckoning when sine is unavailable during descent, approximate position calculation on descent without sine, and returning to position-hold on glitch. Smart mode was introduced for takeoff (limited to flights above 10 m). RAM refresh after influx was implemented. Azimuth service control was added as a new plugin (orients-mp-plugin). Godot UI work included overlaying the thermal filter and adding thermal/RGB camera switching via stick. A video writer close-on-disable fix and azimuth service control complete the scope.",
+    "login:VolodymyrPavliukevych": "Focused on low-level OS/kernel hardening and MAVLink integration. Implemented secure boot via a new kernel (atp-1534), turned off UART debug output and made kernel boot quiet, and landed a MAVLink subscriber approach (atp-1476). Also implemented disabling wireless devices on the platform (atp-1593).",
+    "login:andrii-yefimov": "Single infrastructure change — updated task-definition.json, indicating work on deployment or container task configuration.",
+    "login:daniltomashi": "Initial repository setup and documentation work: an initial commit, renaming the main document to README, and adding a camera capabilities explanation that specifies using temperature as an exact value.",
+    "login:lzaiatsoai": "Single contribution — a radio horizon feature (Feat/radio horizon) in the orients-mission-center repo."
+  }
+}

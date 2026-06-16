@@ -3,6 +3,7 @@ import {
   buildContributorLeaderboard,
   buildRepoRanking,
   summarize,
+  workByContributor,
 } from "./devStats";
 import type {
   CommitRecord,
@@ -20,11 +21,12 @@ function commit(
   login: string | null,
   additions: number,
   deletions: number,
-  opts: { name?: string; isBot?: boolean; date?: string } = {},
+  opts: { name?: string; isBot?: boolean; date?: string; message?: string } = {},
 ): CommitRecord {
   return {
     repo: repoName,
     oid: `${repoName}-${login}-${additions}-${deletions}-${opts.date ?? "x"}`,
+    messageHeadline: opts.message ?? "commit headline",
     committedDate: opts.date ?? "2026-05-10T12:00:00Z",
     additions,
     deletions,
@@ -42,11 +44,13 @@ function pr(
     createdAt?: string;
     mergedAt?: string | null;
     isBot?: boolean;
+    title?: string;
   } = {},
 ): PullRequestRecord {
   return {
     repo: repoName,
     number: opts.number ?? 1,
+    title: opts.title ?? "pr title",
     authorLogin: login,
     authorName: login,
     isBot: opts.isBot ?? false,
@@ -221,5 +225,67 @@ describe("summarize", () => {
     expect(summary.repos).toEqual([]);
     expect(summary.totals.commits).toBe(0);
     expect(summary.totals.contributors).toBe(0);
+  });
+});
+
+describe("workByContributor", () => {
+  it("maps PR titles + commit headlines into UserTickets, keyed by login", () => {
+    const users = workByContributor(
+      activity({
+        commits: [
+          commit("api", "alice", 10, 0, { message: "Add auth guard" }),
+          commit("api", "alice", 5, 1, { message: "Fix token refresh" }),
+        ],
+        pullRequests: [
+          pr("api", "alice", { number: 7, title: "Auth hardening", createdAt: "2026-05-12T10:00:00Z" }),
+        ],
+      }),
+    );
+    expect(users).toHaveLength(1);
+    const alice = users[0];
+    expect(alice.accountId).toBe("login:alice");
+    expect(alice.displayName).toBe("alice");
+    // commits first, then in-period PRs
+    expect(alice.tickets.map((t) => t.summary)).toEqual([
+      "Add auth guard",
+      "Fix token refresh",
+      "Auth hardening",
+    ]);
+    expect(alice.tickets.at(-1)!.key).toBe("api#7");
+  });
+
+  it("skips bots and out-of-period PRs", () => {
+    const users = workByContributor(
+      activity({
+        commits: [commit("api", "dependabot[bot]", 3, 0, { isBot: true })],
+        pullRequests: [
+          // opened + merged before the period: excluded
+          pr("api", "alice", {
+            number: 1,
+            createdAt: "2026-04-01T10:00:00Z",
+            mergedAt: "2026-04-02T10:00:00Z",
+          }),
+          // merged in-period: included even though opened earlier
+          pr("api", "bob", {
+            number: 2,
+            createdAt: "2026-04-20T10:00:00Z",
+            mergedAt: "2026-05-09T10:00:00Z",
+            title: "Ship it",
+          }),
+        ],
+      }),
+    );
+    expect(users.map((u) => u.accountId)).toEqual(["login:bob"]);
+    expect(users[0].tickets).toEqual([{ key: "api#2", summary: "Ship it" }]);
+  });
+
+  it("groups unlinked commit authors under name:<author>", () => {
+    const users = workByContributor(
+      activity({
+        commits: [commit("api", null, 4, 1, { name: "No Account", message: "Tweak config" })],
+      }),
+    );
+    expect(users[0].accountId).toBe("name:No Account");
+    expect(users[0].displayName).toBe("No Account");
   });
 });

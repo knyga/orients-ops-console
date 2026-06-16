@@ -22,6 +22,7 @@
  * No React / Next imports — pure and unit-tested.
  */
 import type { OrgActivity } from "./githubClient";
+import type { UserTickets } from "./jiraStats";
 
 export interface ContributorRow {
   /** Stable grouping key: `login:<login>`, or `name:<authorName>` if unlinked. */
@@ -194,6 +195,50 @@ function compareRepos(a: RepoRow, b: RepoRow): number {
     return b.activityScore - a.activityScore;
   if (b.commits !== a.commits) return b.commits - a.commits;
   return a.repo.localeCompare(b.repo);
+}
+
+/**
+ * Per-contributor work items (PR titles + commit headlines) in the `UserTickets`
+ * shape, so the occupation-summary plumbing (buildOccupationPrompt /
+ * summarizeOccupations) and the CLI's --summaries-file flow can be reused
+ * verbatim from Jira. `accountId` is the same stable grouping key as the
+ * leaderboard (`login:<login>` or `name:<authorName>`) so a summary keyed by it
+ * lines up with each ContributorRow.key. Bots are skipped — they're not people
+ * to describe. PRs are filtered to those actually opened or merged in-period
+ * (activity.pullRequests is an updatedAt-ordered superset).
+ */
+export function workByContributor(activity: OrgActivity): UserTickets[] {
+  const { from, to } = periodBounds(activity.start, activity.end);
+  const byKey = new Map<string, UserTickets>();
+
+  const ensure = (login: string | null, name: string): UserTickets => {
+    const key = login ? `login:${login}` : `name:${name}`;
+    let user = byKey.get(key);
+    if (!user) {
+      user = { accountId: key, displayName: login ?? name, tickets: [] };
+      byKey.set(key, user);
+    }
+    return user;
+  };
+
+  for (const c of activity.commits) {
+    if (c.isBot) continue;
+    ensure(c.authorLogin, c.authorName).tickets.push({
+      key: c.oid.slice(0, 7),
+      summary: c.messageHeadline,
+    });
+  }
+
+  for (const p of activity.pullRequests) {
+    if (p.isBot) continue;
+    if (!inPeriod(p.createdAt, from, to) && !inPeriod(p.mergedAt, from, to)) continue;
+    ensure(p.authorLogin, p.authorName).tickets.push({
+      key: `${p.repo}#${p.number}`,
+      summary: p.title,
+    });
+  }
+
+  return [...byKey.values()];
 }
 
 export function summarize(activity: OrgActivity): DevStatsSummary {

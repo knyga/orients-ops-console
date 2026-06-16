@@ -15,10 +15,10 @@ export function buildOccupationPrompt(user: UserTickets): string {
     .map((t) => `- ${t.key}: ${t.summary}`)
     .join("\n");
   return [
-    `You are summarizing what a software engineer worked on during a reporting period, based only on the Jira issues they resolved.`,
+    `You are summarizing what a software engineer worked on during a reporting period, based only on the work items they delivered (Jira issues, pull requests, and/or commits).`,
     ``,
     `Engineer: ${user.displayName}`,
-    `Resolved issues (key: title — titles may be in Ukrainian, keep proper nouns as-is):`,
+    `Work items (id: title — titles may be in Ukrainian, keep proper nouns as-is):`,
     list,
     ``,
     `Write a concise occupation summary in English describing their focus areas and the kind of work they did (e.g. detection/CV pipeline, flight control, OS/infra, tooling). Group related issues into themes rather than listing every ticket. Be factual; do not speculate beyond the titles. Strictly under 200 words. Output only the summary prose — no preamble, headings, or bullet list.`,

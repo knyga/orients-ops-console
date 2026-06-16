@@ -28,6 +28,8 @@ export interface RepoRecord {
 export interface CommitRecord {
   repo: string;
   oid: string;
+  /** First line of the commit message (feeds the occupation summary). */
+  messageHeadline: string;
   /** ISO 8601 commit timestamp. */
   committedDate: string;
   additions: number;
@@ -42,6 +44,8 @@ export interface CommitRecord {
 export interface PullRequestRecord {
   repo: string;
   number: number;
+  /** PR title (feeds the occupation summary). */
+  title: string;
   authorLogin: string | null;
   authorName: string;
   isBot: boolean;
@@ -199,6 +203,7 @@ interface CommitPage {
           pageInfo: { hasNextPage: boolean; endCursor: string | null };
           nodes: {
             oid: string;
+            messageHeadline: string;
             committedDate: string;
             additions: number;
             deletions: number;
@@ -223,6 +228,7 @@ query($org: String!, $repo: String!, $since: GitTimestamp!, $until: GitTimestamp
             pageInfo { hasNextPage endCursor }
             nodes {
               oid
+              messageHeadline
               committedDate
               additions
               deletions
@@ -259,6 +265,7 @@ async function fetchCommits(
       out.push({
         repo,
         oid: n.oid,
+        messageHeadline: n.messageHeadline,
         committedDate: n.committedDate,
         additions: n.additions,
         deletions: n.deletions,
@@ -278,6 +285,7 @@ interface PrPage {
       pageInfo: { hasNextPage: boolean; endCursor: string | null };
       nodes: {
         number: number;
+        title: string;
         createdAt: string;
         mergedAt: string | null;
         updatedAt: string;
@@ -295,7 +303,7 @@ query($org: String!, $repo: String!, $cursor: String) {
     pullRequests(first: 100, after: $cursor, orderBy: {field: UPDATED_AT, direction: DESC}) {
       pageInfo { hasNextPage endCursor }
       nodes {
-        number createdAt mergedAt updatedAt additions deletions
+        number title createdAt mergedAt updatedAt additions deletions
         author { login __typename }
       }
     }
@@ -331,6 +339,7 @@ async function fetchPullRequests(
       out.push({
         repo,
         number: n.number,
+        title: n.title,
         authorLogin: login,
         authorName: login ?? "(unknown)",
         isBot: actorIsBot(n.author?.__typename, login),

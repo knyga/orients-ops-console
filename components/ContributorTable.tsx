@@ -5,8 +5,19 @@ function signed(n: number): string {
   return n > 0 ? `+${n}` : String(n);
 }
 
-/** Contributor leaderboard — bot rows are tinted and badged. */
-export function ContributorTable({ rows }: { rows: ContributorRow[] }) {
+/**
+ * Contributor leaderboard — bot rows are tinted and badged. When `summaries` is
+ * provided (committed reports carry per-contributor occupation summaries keyed
+ * by ContributorRow.key), a Summary column is appended.
+ */
+export function ContributorTable({
+  rows,
+  summaries,
+}: {
+  rows: ContributorRow[];
+  summaries?: Record<string, string>;
+}) {
+  const showSummary = summaries && Object.keys(summaries).length > 0;
   if (rows.length === 0) {
     return (
       <p className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
@@ -27,6 +38,7 @@ export function ContributorTable({ rows }: { rows: ContributorRow[] }) {
             <th className="px-3 py-2 text-right">Net</th>
             <th className="px-3 py-2 text-right">PRs opened</th>
             <th className="px-3 py-2 text-right">PRs merged</th>
+            {showSummary && <th className="px-3 py-2">Summary</th>}
           </tr>
         </thead>
         <tbody>
@@ -68,6 +80,11 @@ export function ContributorTable({ rows }: { rows: ContributorRow[] }) {
               <td className="px-3 py-2 text-right tabular-nums text-slate-700">
                 {row.prsMerged}
               </td>
+              {showSummary && (
+                <td className="px-3 py-2 text-xs text-slate-600">
+                  {summaries?.[row.key] ?? ""}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
