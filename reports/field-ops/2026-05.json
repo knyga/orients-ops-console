@@ -1,0 +1,168 @@
+{
+  "period": {
+    "start": "2026-05-01",
+    "end": "2026-05-31",
+    "timezone": "Europe/Kyiv"
+  },
+  "daily": [
+    {
+      "date": "2026-05-01",
+      "videoCount": 18,
+      "recordedMinutes": 84.95,
+      "flightMinutes": 150,
+      "ratio": 0.5663333333333334,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-04",
+      "videoCount": 20,
+      "recordedMinutes": 95.88333333333334,
+      "flightMinutes": 240,
+      "ratio": 0.3995138888888889,
+      "status": "FLAG"
+    },
+    {
+      "date": "2026-05-05",
+      "videoCount": 3,
+      "recordedMinutes": 24.666666666666668,
+      "flightMinutes": 42,
+      "ratio": 0.5873015873015873,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-06",
+      "videoCount": 8,
+      "recordedMinutes": 31.783333333333335,
+      "flightMinutes": 90,
+      "ratio": 0.35314814814814816,
+      "status": "FLAG"
+    },
+    {
+      "date": "2026-05-08",
+      "videoCount": 23,
+      "recordedMinutes": 108.83333333333333,
+      "flightMinutes": 180,
+      "ratio": 0.6046296296296296,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-10",
+      "videoCount": 10,
+      "recordedMinutes": 36.166666666666664,
+      "flightMinutes": 60,
+      "ratio": 0.6027777777777777,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-12",
+      "videoCount": 15,
+      "recordedMinutes": 92.93333333333334,
+      "flightMinutes": 240,
+      "ratio": 0.38722222222222225,
+      "status": "FLAG"
+    },
+    {
+      "date": "2026-05-15",
+      "videoCount": 32,
+      "recordedMinutes": 114.1,
+      "flightMinutes": 210,
+      "ratio": 0.5433333333333333,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-17",
+      "videoCount": 15,
+      "recordedMinutes": 42.13333333333333,
+      "flightMinutes": 120,
+      "ratio": 0.3511111111111111,
+      "status": "FLAG"
+    },
+    {
+      "date": "2026-05-19",
+      "videoCount": 16,
+      "recordedMinutes": 114.31666666666666,
+      "flightMinutes": 180,
+      "ratio": 0.6350925925925925,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-21",
+      "videoCount": 32,
+      "recordedMinutes": 152.81666666666666,
+      "flightMinutes": 360,
+      "ratio": 0.4244907407407407,
+      "status": "FLAG"
+    },
+    {
+      "date": "2026-05-22",
+      "videoCount": 5,
+      "recordedMinutes": 35.05,
+      "flightMinutes": 60,
+      "ratio": 0.5841666666666666,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-23",
+      "videoCount": 16,
+      "recordedMinutes": 70.25,
+      "flightMinutes": 180,
+      "ratio": 0.3902777777777778,
+      "status": "FLAG"
+    },
+    {
+      "date": "2026-05-26",
+      "videoCount": 30,
+      "recordedMinutes": 164.58333333333334,
+      "flightMinutes": 240,
+      "ratio": 0.685763888888889,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-27",
+      "videoCount": 37,
+      "recordedMinutes": 202.45,
+      "flightMinutes": 300,
+      "ratio": 0.6748333333333333,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-29",
+      "videoCount": 4,
+      "recordedMinutes": 21.783333333333335,
+      "flightMinutes": 36,
+      "ratio": 0.6050925925925926,
+      "status": "OK"
+    },
+    {
+      "date": "2026-05-30",
+      "videoCount": 18,
+      "recordedMinutes": 121.48333333333333,
+      "flightMinutes": 300,
+      "ratio": 0.40494444444444444,
+      "status": "FLAG"
+    },
+    {
+      "date": "2026-05-31",
+      "videoCount": 4,
+      "recordedMinutes": 21.85,
+      "flightMinutes": 60,
+      "ratio": 0.3641666666666667,
+      "status": "FLAG"
+    }
+  ],
+  "summary": {
+    "totalVideos": 306,
+    "totalRecordedMinutes": 1536.033333333333,
+    "flaggedDays": [
+      "2026-05-04",
+      "2026-05-06",
+      "2026-05-12",
+      "2026-05-17",
+      "2026-05-21",
+      "2026-05-23",
+      "2026-05-30",
+      "2026-05-31"
+    ]
+  },
+  "flightInputPath": "/workspaces/orients-ops-console/reports/field-ops/inputs/2026-05.csv"
+}

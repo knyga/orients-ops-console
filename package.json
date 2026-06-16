@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "vimeo": "node --conditions=react-server --import tsx scripts/vimeo.ts",
     "github": "node --conditions=react-server --import tsx scripts/github.ts",
-    "jira": "node --conditions=react-server --import tsx scripts/jira.ts"
+    "jira": "node --conditions=react-server --import tsx scripts/jira.ts",
+    "fieldops": "node --conditions=react-server --import tsx scripts/fieldops.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",
