@@ -3,6 +3,7 @@
  * the human-readable table view. No server/Next imports — unit-tested, mirrors
  * scripts/githubStats.ts. The domain aggregation lives in ../lib/jiraStats.
  */
+import { periodKey } from "../lib/reports";
 import type { PeriodTotals, SprintChurnRow, UserRow } from "../lib/jiraStats";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -226,15 +227,13 @@ function appendUserTableWithSummary(
 }
 
 /**
- * Stable filename for a period's CSV report. A window inside one calendar month
- * collapses to `YYYY-MM.csv` (the common monthly cadence); anything spanning
- * months keeps both explicit bounds: `YYYY-MM-DD_YYYY-MM-DD.csv`.
+ * Stable filename for a period's CSV report — the canonical `periodKey` plus a
+ * `.csv` extension (e.g. `2025-05.csv`, or `2025-04-15_2025-05-10.csv` across
+ * months). The key logic lives in ../lib/reports so the JSON sidecar and every
+ * other feature share it.
  */
 export function reportFileName(period: Period): string {
-  if (period.start.slice(0, 7) === period.end.slice(0, 7)) {
-    return `${period.start.slice(0, 7)}.csv`;
-  }
-  return `${period.start}_${period.end}.csv`;
+  return `${periodKey(period)}.csv`;
 }
 
 /** Quote a CSV field per RFC 4180 only when it contains `,`, `"`, or newline. */
