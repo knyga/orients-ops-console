@@ -1,0 +1,81 @@
+{
+  "rows": [
+    {
+      "accountId": "Nadia Khasyshyn",
+      "displayName": "Nadia Khasyshyn",
+      "resolvedCount": 14,
+      "storyPoints": 8,
+      "issueKeys": [
+        "ATP-1586",
+        "ATP-1607",
+        "ATP-1577",
+        "ATP-1584",
+        "ATP-1615",
+        "ATP-1616",
+        "ATP-1620",
+        "ATP-1622",
+        "ATP-1570",
+        "ATP-1606",
+        "ATP-1625",
+        "ATP-1623",
+        "ATP-1643",
+        "ATP-1627"
+      ]
+    },
+    {
+      "accountId": "Mr Lab",
+      "displayName": "Mr Lab",
+      "resolvedCount": 5,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1611",
+        "ATP-1612",
+        "ATP-1629",
+        "ATP-1609",
+        "ATP-1647"
+      ]
+    },
+    {
+      "accountId": "Bohdan Forostianyi",
+      "displayName": "Bohdan Forostianyi",
+      "resolvedCount": 4,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1559",
+        "ATP-1599",
+        "ATP-1591",
+        "ATP-1593"
+      ]
+    },
+    {
+      "accountId": "Danylo Tomashy",
+      "displayName": "Danylo Tomashy",
+      "resolvedCount": 2,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1530",
+        "ATP-1614"
+      ]
+    },
+    {
+      "accountId": null,
+      "displayName": "Unassigned",
+      "resolvedCount": 1,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1624"
+      ]
+    }
+  ],
+  "totals": {
+    "totalResolved": 26,
+    "totalStoryPoints": 8
+  },
+  "sprintChurn": [],
+  "summaries": {
+    "Nadia Khasyshyn": "Nadia Khasyshyn had a broad scope spanning CV/ML pipelines, embedded systems, and tooling. On the detection side she evaluated the current classifier against recent field footage, benchmarked Hailo YOLO models on a large dataset, ran evaluation on the Hailo simulator, investigated Locate Anything for auto-annotation, and tuned the zoom factor for the new model. In embedded/OS work she delivered an informative OSD for Вартовий with CPU optimization, integrated a second camera into the optical-flow process, and surfaced dual-camera output to Godot. On tooling and system reliability she implemented programmatic process-restart retries, a log-copy mechanism from RPI, an attack-invalidation time-window constraint, build-configurable mission support, flash expiry timestamps, and audited the dataset_tool for dataset-generation errors.",
+    "Mr Lab": "Mr Lab concentrated on hardware integration, field readiness, and secure deployment. He reflashed drones to a secure-boot system image, researched compass degradation detection or mitigation ahead of flight, and prepared a drone for handover to 5ОШБр. On the hardware integration side he integrated an analog video encryptor and a thermal camera on Азимут for military operators. The work is primarily lab-and-field engineering with a focus on physical device configuration and mission-critical handoff.",
+    "Bohdan Forostianyi": "Bohdan Forostianyi focused on communication reliability and system configuration for the drone platform. He pre-configured Ardu parameters for the custom optical-flow setup, built a guaranteed-delivery mechanism for payloads larger than 96 bytes over radio, and created a service that allows remote modification of configuration files via radio link. He also hardened the RPI environment by disabling WiFi and Bluetooth to reduce interference and attack surface.",
+    "Danylo Tomashy": "Danylo Tomashy worked on flight controller communication and telemetry infrastructure. His focus was on the data pipeline between onboard components: one task covered sending metric-reset commands from RAM to InfluxDB via a stack mechanism, and another investigated a DATA96 command routing issue where RPI could read data from the FC but commands were not being forwarded to the flight controller. Both items point to low-level inter-process and radio-link protocol work."
+  }
+}

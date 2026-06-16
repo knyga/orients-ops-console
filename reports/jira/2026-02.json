@@ -1,0 +1,155 @@
+{
+  "rows": [
+    {
+      "accountId": "Bohdan Forostianyi",
+      "displayName": "Bohdan Forostianyi",
+      "resolvedCount": 19,
+      "storyPoints": 40.5,
+      "issueKeys": [
+        "ATP-1260",
+        "ATP-1271",
+        "ATP-1272",
+        "ATP-1281",
+        "ATP-1297",
+        "ATP-1286",
+        "ATP-1254",
+        "ATP-1310",
+        "ATP-1311",
+        "ATP-1300",
+        "ATP-1298",
+        "ATP-1307",
+        "ATP-1326",
+        "ATP-1324",
+        "ATP-1273",
+        "ATP-1189",
+        "ATP-1329",
+        "ATP-1313",
+        "ATP-1351"
+      ]
+    },
+    {
+      "accountId": "Nadia Khasyshyn",
+      "displayName": "Nadia Khasyshyn",
+      "resolvedCount": 16,
+      "storyPoints": 31.5,
+      "issueKeys": [
+        "ATP-1253",
+        "ATP-1245",
+        "ATP-1268",
+        "ATP-1280",
+        "ATP-1269",
+        "ATP-1304",
+        "ATP-1302",
+        "ATP-1303",
+        "ATP-1305",
+        "ATP-1306",
+        "ATP-1322",
+        "ATP-1279",
+        "ATP-1330",
+        "ATP-1321",
+        "ATP-1334",
+        "ATP-1132"
+      ]
+    },
+    {
+      "accountId": "Danylo Tomashy",
+      "displayName": "Danylo Tomashy",
+      "resolvedCount": 9,
+      "storyPoints": 14,
+      "issueKeys": [
+        "ATP-1237",
+        "ATP-1241",
+        "ATP-1265",
+        "ATP-1277",
+        "ATP-1296",
+        "ATP-1294",
+        "ATP-1291",
+        "ATP-1276",
+        "ATP-1278"
+      ]
+    },
+    {
+      "accountId": "Volodymyr Pavliukevych",
+      "displayName": "Volodymyr Pavliukevych",
+      "resolvedCount": 9,
+      "storyPoints": 15,
+      "issueKeys": [
+        "ATP-1221",
+        "ATP-1299",
+        "ATP-1214",
+        "ATP-1312",
+        "ATP-1295",
+        "ATP-1327",
+        "ATP-1081",
+        "ATP-1338",
+        "ATP-1331"
+      ]
+    },
+    {
+      "accountId": "Andrii",
+      "displayName": "Andrii",
+      "resolvedCount": 2,
+      "storyPoints": 6,
+      "issueKeys": [
+        "ATP-1249",
+        "ATP-1186"
+      ]
+    },
+    {
+      "accountId": "Horpynchenko Maksym",
+      "displayName": "Horpynchenko Maksym",
+      "resolvedCount": 2,
+      "storyPoints": 4,
+      "issueKeys": [
+        "ATP-1096",
+        "ATP-1097"
+      ]
+    },
+    {
+      "accountId": "Kostiantyn V.",
+      "displayName": "Kostiantyn V.",
+      "resolvedCount": 2,
+      "storyPoints": 3,
+      "issueKeys": [
+        "ATP-1317",
+        "ATP-1315"
+      ]
+    },
+    {
+      "accountId": "Liubomyr Zaiats",
+      "displayName": "Liubomyr Zaiats",
+      "resolvedCount": 2,
+      "storyPoints": 1,
+      "issueKeys": [
+        "ATP-1309",
+        "ATP-1308"
+      ]
+    },
+    {
+      "accountId": "taras.panasyuk",
+      "displayName": "taras.panasyuk",
+      "resolvedCount": 2,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1287",
+        "ATP-1325"
+      ]
+    }
+  ],
+  "totals": {
+    "totalResolved": 63,
+    "totalStoryPoints": 115
+  },
+  "sprintChurn": [],
+  "summaries": {
+    "Bohdan Forostianyi": "Bohdan worked primarily on flight control and autopilot integration. A significant portion of his work involved ArduPilot configuration — forcing specific Ardu versions, organizing presets, and tuning flight parameters such as cruise/search angles. On the control-algorithm side he implemented and refined position-hold modes using sine-based GPS injection and Optical Flow, added azimuth hold, compensated for roll drift, worked on adaptive PID signal handling (zeroing individual PID components, adaptive max signal), and tackled approach logic for moving targets. He also addressed system-reliability concerns: heartbeat monitoring with disconnect handling, restarting the flight controller when initial altitude is below zero, and selectively deactivating processes during tracking. On the perception side he evaluated Hailo and PyTorch detectors on January data to locate model degradation, worked on minimizing bush false detections, and assembled a hard-negative dataset for the December 2025 – January 2026 period. A distance model output-rate fix (once per second) rounded out his detector-related contributions.",
+    "Nadia Khasyshyn": "Nadia focused almost entirely on the detection and classification pipeline. Her core theme was improving the binary classifier: she trained it from scratch without saved weights, explored triplet loss as an alternative training objective, evaluated and integrated an SVM classifier for vehicle detection, and worked on a combined buildings-and-standard classifier. Dataset curation was a parallel strand — she built hard-negative sets for buildings and low-light scenarios, cleaned the buildings dataset by removing images too similar to vehicle images, and computed TP/FP similarity between vehicle and buildings datasets. On the model architecture side she increased input frame size and worked on minimizing building false detections at the YOLO level. Additional work included publishing classifier metrics and charts to mlflow.orients.ai, implementing a smart video writer, detecting nighttime conditions in frames, detecting white-line contours from a night camera, and evaluating tiled detection with zoom.",
+    "Danylo Tomashy": "Danylo worked on flight navigation, mission logic, and sensor integration. His navigation work covered sine-wave flight-path execution — aborting sine missions on loss of flight-controller signal and smoothing altitude oscillations during sine-based navigation. He integrated the MAV_CMD external position estimate to eliminate mission overshoot, added a soft limit on waypoint approach distance, and incorporated Optical Flow Position Hold into the mission sequence. On the sensor-integration side he integrated the night camera and its video writer, integrated a thermal camera detection-confirmation filter on the central tile, and drew dead-reckoning trajectories on a Grafana map.",
+    "Volodymyr Pavliukevych": "Volodymyr worked across the detection pipeline and supporting tooling. He investigated and verified re-detection IOU support, fixed a distance-detector metrics error, and resolved a Hailo network-group index crash (CHECK failed on network_index=2). He prepared the v0.4 winter model and fixed a crop-window bug in the tiled Hailo detector. On the Optical Flow front he reverse-engineered the Зорітек OF implementation and implemented custom height-dependent OF offset scaling. He also built an embedding helper tool to identify training-set images that lead to false positives, and investigated a navigation-node crash.",
+    "Andrii": "Andrii resolved two tickets focused on build and hardware integration: enabling flash-drive builds pinned to a specific tracker version, and integrating digital video on the Вартовий platform.",
+    "Horpynchenko Maksym": "Maksym completed the UI for two core ground-control screens: the main page and the mission editor.",
+    "Kostiantyn V.": "Kostiantyn addressed hardware reliability and safety: diagnosing and resolving a sine-board burnout caused by voltage spikes, and selecting an appropriate parachute for the platform.",
+    "Liubomyr Zaiats": "Liubomyr resolved two infrastructure and hardware tasks: launching the night camera with image-combination logic, and configuring static IP addresses on the laptop.",
+    "taras.panasyuk": "Taras worked on hardware mechanical design: designing a mounting bracket to hold the thermal camera parallel to the standard camera, and lowering the camera on a servo for Optical Flow use."
+  }
+}

@@ -7,8 +7,9 @@
  *
  * Output mirrors `GET /api/jira`: per-user resolved counts + story points,
  * period totals, and sprint churn — the same shaping the dashboard consumes.
- * `--write` persists the per-user table as a CSV under reports/jira/ (committed
- * to build a historical record), in addition to printing to stdout. `--summarize`
+ * `--write` persists the period as committed artifacts under reports/jira/: a
+ * lossless `<period>.json` (the web's render source) and a flat `<period>.csv`
+ * human record, in addition to printing to stdout. `--summarize`
  * adds a per-user occupation summary column (via Claude); it implies `--write`.
  * `--summaries-file <path>` supplies those summaries from a JSON file
  * (accountId → text) instead of calling Claude — the path used when Claude Code
@@ -19,39 +20,45 @@
  * Runs only under Node with `--conditions=react-server` (see package.json) so
  * the `server-only` import in ../lib/jira resolves to its empty module.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { fetchResolvedIssues } from "../lib/jira";
 import { aggregateByUser, sprintChurn, ticketsByUser } from "../lib/jiraStats";
 import { summarizeOccupations } from "../lib/summarize";
+import { writeReport } from "../lib/reports";
 import {
   formatTable,
   parseArgs,
-  reportFileName,
   resolvePeriod,
   toCsv,
   type JiraReport,
   type Period,
 } from "./jiraReport";
 
-/** Absolute path to reports/jira/, resolved relative to the repo (this file). */
-function reportsDir(): string {
-  const here = dirname(fileURLToPath(import.meta.url)); // …/scripts
-  return join(here, "..", "reports", "jira");
-}
-
-/** Write the per-user CSV for `period` and return the path written. */
-function writeCsv(
+/**
+ * Persist the period's committed artifacts: a lossless `<period>.json` (the
+ * web's render source — the JiraReport plus, when present, per-user summaries
+ * keyed by accountId so the committed view can show them without a live Claude
+ * call) and a flat `<period>.csv` human record. Returns the paths written.
+ */
+function writeArtifacts(
   period: Period,
   report: JiraReport,
   summaries?: Map<string | null, string>,
-): string {
-  const dir = reportsDir();
-  mkdirSync(dir, { recursive: true });
-  const path = join(dir, reportFileName(period));
-  writeFileSync(path, toCsv(report, summaries));
-  return path;
+): { jsonPath: string; csvPath: string } {
+  const body =
+    summaries && summaries.size > 0
+      ? {
+          ...report,
+          // Drop the null (Unassigned) bucket — it carries no summary.
+          summaries: Object.fromEntries(
+            [...summaries].filter((entry): entry is [string, string] => entry[0] !== null),
+          ),
+        }
+      : report;
+  return writeReport("jira", period, {
+    json: JSON.stringify(body, null, 2),
+    csv: toCsv(report, summaries),
+  });
 }
 
 /** Today's date (YYYY-MM-DD) in UTC. */
@@ -114,9 +121,9 @@ async function main(): Promise<void> {
 
   // --summarize / --summaries-file imply --write (so summaries are persisted).
   if (args.write || args.summarize || args.summariesFile) {
-    const path = writeCsv(period, report, summaries);
+    const { jsonPath, csvPath } = writeArtifacts(period, report, summaries);
     process.stderr.write(
-      `jira: wrote ${path} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points${summaries ? ", with summaries" : ""})\n`,
+      `jira: wrote ${jsonPath} and ${csvPath} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points${summaries ? ", with summaries" : ""})\n`,
     );
   }
 }

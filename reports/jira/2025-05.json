@@ -1,0 +1,183 @@
+{
+  "rows": [
+    {
+      "accountId": "Bohdan Forostianyi",
+      "displayName": "Bohdan Forostianyi",
+      "resolvedCount": 24,
+      "storyPoints": 40.5,
+      "issueKeys": [
+        "ATP-259",
+        "ATP-202",
+        "ATP-260",
+        "ATP-261",
+        "ATP-206",
+        "ATP-263",
+        "ATP-173",
+        "ATP-289",
+        "ATP-270",
+        "ATP-302",
+        "ATP-269",
+        "ATP-314",
+        "ATP-225",
+        "ATP-325",
+        "ATP-298",
+        "ATP-322",
+        "ATP-326",
+        "ATP-334",
+        "ATP-340",
+        "ATP-357",
+        "ATP-345",
+        "ATP-316",
+        "ATP-331",
+        "ATP-279"
+      ]
+    },
+    {
+      "accountId": "Andrii Svidnytskyi",
+      "displayName": "Andrii Svidnytskyi",
+      "resolvedCount": 14,
+      "storyPoints": 2,
+      "issueKeys": [
+        "ATP-237",
+        "ATP-257",
+        "ATP-284",
+        "ATP-303",
+        "ATP-305",
+        "ATP-330",
+        "ATP-300",
+        "ATP-306",
+        "ATP-369",
+        "ATP-355",
+        "ATP-354",
+        "ATP-352",
+        "ATP-353",
+        "ATP-266"
+      ]
+    },
+    {
+      "accountId": "denys.borysov",
+      "displayName": "denys.borysov",
+      "resolvedCount": 13,
+      "storyPoints": 36,
+      "issueKeys": [
+        "ATP-190",
+        "ATP-239",
+        "ATP-256",
+        "ATP-272",
+        "ATP-252",
+        "ATP-176",
+        "ATP-285",
+        "ATP-309",
+        "ATP-175",
+        "ATP-319",
+        "ATP-321",
+        "ATP-348",
+        "ATP-324"
+      ]
+    },
+    {
+      "accountId": "dmytro.rozdobudko",
+      "displayName": "dmytro.rozdobudko",
+      "resolvedCount": 13,
+      "storyPoints": 29,
+      "issueKeys": [
+        "ATP-273",
+        "ATP-211",
+        "ATP-290",
+        "ATP-275",
+        "ATP-294",
+        "ATP-291",
+        "ATP-313",
+        "ATP-301",
+        "ATP-293",
+        "ATP-329",
+        "ATP-323",
+        "ATP-328",
+        "ATP-375"
+      ]
+    },
+    {
+      "accountId": "Horpynchenko Maksym",
+      "displayName": "Horpynchenko Maksym",
+      "resolvedCount": 6,
+      "storyPoints": 5,
+      "issueKeys": [
+        "ATP-245",
+        "ATP-247",
+        "ATP-280",
+        "ATP-282",
+        "ATP-249",
+        "ATP-96"
+      ]
+    },
+    {
+      "accountId": null,
+      "displayName": "Unassigned",
+      "resolvedCount": 4,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-288",
+        "ATP-203",
+        "ATP-344",
+        "ATP-351"
+      ]
+    },
+    {
+      "accountId": "Andrii",
+      "displayName": "Andrii",
+      "resolvedCount": 3,
+      "storyPoints": 4,
+      "issueKeys": [
+        "ATP-223",
+        "ATP-255",
+        "ATP-327"
+      ]
+    },
+    {
+      "accountId": "Ruslan",
+      "displayName": "Ruslan",
+      "resolvedCount": 3,
+      "storyPoints": 5,
+      "issueKeys": [
+        "ATP-22",
+        "ATP-184",
+        "ATP-264"
+      ]
+    },
+    {
+      "accountId": "dmytro.antoniuk",
+      "displayName": "dmytro.antoniuk",
+      "resolvedCount": 2,
+      "storyPoints": 4,
+      "issueKeys": [
+        "ATP-262",
+        "ATP-130"
+      ]
+    },
+    {
+      "accountId": "Oleksandr",
+      "displayName": "Oleksandr",
+      "resolvedCount": 1,
+      "storyPoints": 2,
+      "issueKeys": [
+        "ATP-271"
+      ]
+    }
+  ],
+  "totals": {
+    "totalResolved": 83,
+    "totalStoryPoints": 127.5
+  },
+  "sprintChurn": [],
+  "summaries": {
+    "Bohdan Forostianyi": "Bohdan Forostianyi worked as a software engineer on an autopilot/drone system spanning flight control, computer vision, and supporting infrastructure.\n\nA major focus was GNSS-denied (no-GNSS) flight capabilities, including integrating GUIDED_NO_GPS, implementing boomerang behavior, backward flight, drone speed estimation for distance-based cruise, and fixing related waypoint attribute errors. He also contributed to broader flight control and mission management, implementing automatic withdrawal, relative missions, mission type metadata, per-mission-item speed configuration, automatic flight ID updates, and setpoint rendering in Godot.\n\nOn the computer vision side, he fine-tuned and evaluated YOLO-based detection models (OYolo-Human, sight YOLO 8s) on extended datasets, and improved target detection logic by using horizon estimation from pitch and altitude as the basis for tile computation and ground-target filtering. He added undistorted coordinates and target distance measurement to the active roller, and applied detection-box shifting to correct for wind.\n\nAdditionally, he handled infrastructure and tooling tasks such as network configuration for autopilot connectivity, hotspot activation, adding date metrics to InfluxDB, copying mavproxy logs to USB storage, and resolving video recording and data-format bugs in newer system versions.",
+    "Andrii Svidnytskyi": "Andrii Svidnytskyi worked primarily as a field test and flight-control engineer on an autonomous drone platform, with the bulk of his resolved issues involving hands-on flight testing and tuning. A major focus area was flight control and PID tuning: he investigated drone oscillations and tip-overs related to D-component settings on roll and throttle PIDs, tuned a \"lier\" correction factor for adaptive roll and yaw, calibrated pitch ramp rates and throttle parameters (THR_DZ, THROTTLE CUTOFF), and explored practical limits for parameters such as PILOT_SPEED_DN. He conducted flight behavior characterization, including system hit-rate testing from various starting configurations, no-GPS cruise speed measurement, angled target-approach behavior, and collection of fixed-pitch approach data.\n\nHe also contributed to the detection/CV and targeting pipeline, testing human detection and tracking using a default YOLO model. Additional work spanned diagnostics and supporting systems: resolving missing post-flight metrics logging, fixing an activation module that intermittently failed to broadcast WiFi, and finding a method to protect the camera from rain droplets. Overall, his work combined practical field experimentation, flight controller parameter tuning, target acquisition testing, and hardware/software troubleshooting for drone operations.",
+    "denys.borysov": "Denys Borysov worked primarily as a computer vision and machine learning engineer focused on object detection systems. A significant portion of their work centered on building and integrating a semantic classifier for equipment/technique recognition, including its initial integration into the broader pipeline. They improved detection quality through techniques such as radial re-scoring and color normalization on camera inputs.\n\nA recurring theme was dataset and false-positive management: they analyzed false positives, cleaned datasets, applied Hard Negative Mining, updated cropping scripts, and rebalanced datasets with hard-negative empty images to improve model performance.\n\nThey also invested in tooling and annotation workflows, reworking annotation scripts to support multiple videos and adapting Colab notebooks to import annotations and multiple objects in compatible formats.\n\nBeyond CV, they contributed to flight control and autopilot functionality, implementing automated attack from a static position, false auto-attack reset logic, and integration of a physical transmitter as a joystick with Gazebo simulation on the autopilot.\n\nOverall, their focus spanned the detection/CV pipeline (classification, scoring, dataset curation), supporting annotation tooling, and autopilot/flight-control behaviors, reflecting a hybrid role combining ML model development with simulation and control integration.",
+    "dmytro.rozdobudko": "During this reporting period, dmytro.rozdobudko focused primarily on data annotation and dataset preparation for a computer vision / object detection pipeline. The core of their work involved labeling video and image data in Label Studio, including processing video_captures by slicing them into target-relevant fragments, importing the resulting clips, and annotating them across multiple capture dates (13.04, 16.04, 02.05). They also re-annotated existing footage of people and vehicles at full screen resolution to improve label quality, and corrected or refined imported annotations in Label Studio on several occasions.\n\nBeyond routine labeling, they enriched datasets with additional metadata, such as camera angle values, and extended coverage of specific categories like civilian vehicles. They also contributed to dataset quality improvement through hard-negative mining against an open-source dataset, supporting better model training. Finally, they handled reporting tasks such as filling out periodic status reports.\n\nOverall, their work centered on building, curating, and maintaining high-quality annotated image and video datasets to support detection model development.",
+    "Horpynchenko Maksym": "Horpynchenko Maksym focused primarily on mission planning and map-based flight control features for an aerial/drone application. A significant portion of their work centered on the interactive map and waypoint management, including resolving synchronization issues where the map state diverged from the actual mission—such as inconsistencies after removing all waypoints (ATP-280, ATP-282) and failures to refresh the map following mission changes made through a dropdown (ATP-249). They also implemented mission-related functionality including downloading missions (ATP-247) and visualizing coverage by displaying a cover area radius (ATP-245). Beyond mission and map work, they contributed to flight control logic by adding a check for whether a cruise mode is active (ATP-96). Overall, their efforts combined feature development for mission handling and map visualization with bug fixing aimed at maintaining consistency between the displayed map state and the underlying mission data.",
+    "Andrii": "Andrii focused on infrastructure, observability, and system integration work. A primary theme was monitoring and metrics, including building a Grafana dashboard to track team success metrics and refining error reporting by suppressing Sentry notifications originating from the video node to reduce noise. He also contributed to OS and system image configuration, adding support for IMX-290 cameras to the system image. Overall, his work spanned tooling, monitoring/observability, and low-level camera and system image setup, reflecting a focus on infrastructure and operational reliability rather than application feature development.",
+    "Ruslan": "Ruslan's work during this reporting period spanned infrastructure integration, video processing, and computer vision visualization. He integrated Sentry error monitoring into the Orients system, contributing to observability and reliability tooling. He also addressed a video recording defect involving inverted channels, indicating work on the media/data capture pipeline. Additionally, he worked on the Godot-based visualization layer, implementing the display of all detected targets along with their scores, which suggests involvement in surfacing CV/detection outputs through a rendering interface. Overall, his contributions combined infrastructure/monitoring setup, video recording fixes, and detection result visualization.",
+    "dmytro.antoniuk": "Dmytro Antoniuk focused on data preparation and dataset management for a computer vision / detection pipeline. Their work centered on importing and integrating image datasets into Label Studio, a data annotation platform. This included importing a dataset of civilian vehicles as well as the Lacmus dataset containing people (likely oriented toward person/object detection). Overall, their contributions supported the data ingestion and annotation tooling side of a CV workflow, ensuring relevant datasets were available and properly loaded for labeling and subsequent model training.",
+    "Oleksandr": "Oleksandr's work during this reporting period focused on drone telemetry and onboard data logging. The single resolved issue involved enabling telemetry log recording on the drone (ATP-271), indicating involvement in flight systems instrumentation and data capture. This work falls within the embedded/onboard software and infrastructure domain, supporting the collection of operational telemetry data that is typically used for diagnostics, monitoring, and post-flight analysis. Based on the available information, his contribution centered on configuring or implementing logging functionality at the drone level rather than higher-level application or detection pipelines."
+  }
+}

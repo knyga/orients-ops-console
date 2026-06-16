@@ -1,52 +1,37 @@
 "use client";
 
-import { useState } from "react";
-import type {
-  PeriodTotals,
-  SprintChurnRow,
-  UserRow,
-} from "@/lib/jiraStats";
+import { usePeriodReport } from "@/lib/usePeriodReport";
+import type { PeriodTotals, SprintChurnRow, UserRow } from "@/lib/jiraStats";
 
+/** Committed reports may carry per-user summaries (keyed by accountId). */
 interface JiraReport {
   rows: UserRow[];
   totals: PeriodTotals;
   sprintChurn: SprintChurnRow[];
-}
-
-/** First day of the current month, in `YYYY-MM-DD`. */
-function defaultStart(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-01`;
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  summaries?: Record<string, string>;
 }
 
 export default function DevReportingPage() {
-  const [start, setStart] = useState(defaultStart);
-  const [end, setEnd] = useState(todayIso);
-  const [report, setReport] = useState<JiraReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    periods,
+    currentKey,
+    selected,
+    report,
+    loading,
+    error,
+    canRefresh,
+    select,
+    refreshLive,
+  } = usePeriodReport<JiraReport>({
+    feature: "jira",
+    mapCommitted: (body) => body as JiraReport,
+    mapLive: (body) => body as JiraReport,
+    liveQuery: ({ start, end }) => `start=${start}&end=${end}`,
+  });
 
-  async function fetchReport() {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ start, end });
-      const res = await fetch(`/api/jira?${params.toString()}`);
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
-      setReport(body as JiraReport);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to fetch report.");
-      setReport(null);
-    } finally {
-      setLoading(false);
-    }
-  }
+  // The current month is selectable even before it's committed (live refresh).
+  const options = periods.includes(currentKey) ? periods : [currentKey, ...periods];
+  const hasSummaries = report?.summaries && Object.keys(report.summaries).length > 0;
 
   return (
     <div className="space-y-6">
@@ -55,48 +40,47 @@ export default function DevReportingPage() {
           Dev Reporting — Jira
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Per-user issues resolved (count and story points) over the selected
-          period, plus issues that changed sprints. Read-only; reflects live Jira.
+          Per-user issues resolved (count and story points) plus sprint changes.
+          Renders the committed report for the selected period; the current month
+          can be refreshed against live Jira.
         </p>
       </div>
 
       {/* Controls */}
       <div className="rounded-md border border-slate-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-slate-900">Period</h3>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            Start
-            <input
-              type="date"
-              value={start}
-              max={end}
-              onChange={(e) => setStart(e.target.value)}
+            Period
+            <select
+              value={selected ?? currentKey}
+              onChange={(e) => select(e.target.value)}
               className="rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums"
-            />
+            >
+              {options.map((key) => (
+                <option key={key} value={key}>
+                  {key}
+                  {key === currentKey ? " (current)" : ""}
+                  {!periods.includes(key) ? " — not committed" : ""}
+                </option>
+              ))}
+            </select>
           </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            End
-            <input
-              type="date"
-              value={end}
-              min={start}
-              onChange={(e) => setEnd(e.target.value)}
-              className="rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={fetchReport}
-            disabled={loading || !start || !end}
-            className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? "Fetching…" : "Fetch report"}
-          </button>
+          {canRefresh && (
+            <button
+              type="button"
+              onClick={refreshLive}
+              disabled={loading}
+              className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Loading…" : "Refresh live"}
+            </button>
+          )}
+          {loading && <span className="text-xs text-slate-400">Loading…</span>}
         </div>
       </div>
 
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {error}
         </div>
       )}
@@ -128,6 +112,7 @@ export default function DevReportingPage() {
                       <th className="px-4 py-2 text-right">Resolved</th>
                       <th className="px-4 py-2 text-right">Story points</th>
                       <th className="px-4 py-2">Issues</th>
+                      {hasSummaries && <th className="px-4 py-2">Summary</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -143,6 +128,11 @@ export default function DevReportingPage() {
                         <td className="px-4 py-2 font-mono text-xs text-slate-500">
                           {row.issueKeys.join(", ")}
                         </td>
+                        {hasSummaries && (
+                          <td className="px-4 py-2 text-xs text-slate-600">
+                            {row.accountId ? report.summaries?.[row.accountId] ?? "" : ""}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -187,9 +177,9 @@ export default function DevReportingPage() {
         </>
       )}
 
-      {!report && !error && (
+      {!report && !error && !loading && (
         <p className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
-          Pick a period and fetch the report to begin.
+          No committed reports yet. Select the current month and Refresh live.
         </p>
       )}
     </div>

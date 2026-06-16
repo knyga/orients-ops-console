@@ -1,0 +1,221 @@
+{
+  "rows": [
+    {
+      "accountId": "Bohdan Forostianyi",
+      "displayName": "Bohdan Forostianyi",
+      "resolvedCount": 26,
+      "storyPoints": 7,
+      "issueKeys": [
+        "ATP-1349",
+        "ATP-1350",
+        "ATP-1361",
+        "ATP-1378",
+        "ATP-1381",
+        "ATP-1399",
+        "ATP-1398",
+        "ATP-1395",
+        "ATP-1421",
+        "ATP-1427",
+        "MC-8",
+        "MC-22",
+        "MC-18",
+        "MC-21",
+        "MC-2",
+        "ATP-1406",
+        "MC-29",
+        "MC-38",
+        "MC-25",
+        "MC-34",
+        "ATP-1423",
+        "ATP-1452",
+        "ATP-1449",
+        "ATP-1450",
+        "ATP-1457",
+        "ATP-1456"
+      ]
+    },
+    {
+      "accountId": "Nadia Khasyshyn",
+      "displayName": "Nadia Khasyshyn",
+      "resolvedCount": 17,
+      "storyPoints": 24.5,
+      "issueKeys": [
+        "ATP-1362",
+        "ATP-1347",
+        "ATP-1156",
+        "ATP-1383",
+        "ATP-1377",
+        "ATP-1235",
+        "ATP-1364",
+        "ATP-1366",
+        "ATP-1365",
+        "ATP-1233",
+        "ATP-1341",
+        "ATP-1418",
+        "ATP-1384",
+        "ATP-1424",
+        "ATP-1367",
+        "ATP-1436",
+        "ATP-1443"
+      ]
+    },
+    {
+      "accountId": "Horpynchenko Maksym",
+      "displayName": "Horpynchenko Maksym",
+      "resolvedCount": 15,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1360",
+        "ATP-1409",
+        "ATP-1411",
+        "ATP-1414",
+        "ATP-1416",
+        "ATP-1415",
+        "ATP-1417",
+        "MC-13",
+        "MC-14",
+        "MC-1",
+        "MC-3",
+        "MC-12",
+        "MC-17",
+        "MC-15",
+        "MC-7"
+      ]
+    },
+    {
+      "accountId": "Volodymyr Pavliukevych",
+      "displayName": "Volodymyr Pavliukevych",
+      "resolvedCount": 13,
+      "storyPoints": 28,
+      "issueKeys": [
+        "ATP-1386",
+        "ATP-1323",
+        "ATP-1346",
+        "ATP-1339",
+        "ATP-1385",
+        "ATP-1379",
+        "ATP-1391",
+        "ATP-1288",
+        "ATP-1437",
+        "ATP-1438",
+        "ATP-1454",
+        "ATP-1433",
+        "ATP-1445"
+      ]
+    },
+    {
+      "accountId": "Danylo Tomashy",
+      "displayName": "Danylo Tomashy",
+      "resolvedCount": 11,
+      "storyPoints": 18,
+      "issueKeys": [
+        "ATP-1332",
+        "ATP-1375",
+        "ATP-1376",
+        "ATP-1393",
+        "ATP-1380",
+        "ATP-1408",
+        "ATP-1405",
+        "ATP-1396",
+        "ATP-1392",
+        "ATP-1429",
+        "ATP-1425"
+      ]
+    },
+    {
+      "accountId": "Andrii",
+      "displayName": "Andrii",
+      "resolvedCount": 7,
+      "storyPoints": 5,
+      "issueKeys": [
+        "ATP-1262",
+        "ATP-1404",
+        "ATP-1389",
+        "ATP-1420",
+        "ATP-1390",
+        "ATP-1428",
+        "ATP-1446"
+      ]
+    },
+    {
+      "accountId": "taras.panasyuk",
+      "displayName": "taras.panasyuk",
+      "resolvedCount": 4,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1355",
+        "ATP-1363",
+        "ATP-1373",
+        "ATP-1374"
+      ]
+    },
+    {
+      "accountId": "Liubomyr Zaiats",
+      "displayName": "Liubomyr Zaiats",
+      "resolvedCount": 3,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1337",
+        "ATP-1359",
+        "ATP-1358"
+      ]
+    },
+    {
+      "accountId": "Mr Lab",
+      "displayName": "Mr Lab",
+      "resolvedCount": 2,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1419",
+        "ATP-1435"
+      ]
+    },
+    {
+      "accountId": "Oleksandr Knyga",
+      "displayName": "Oleksandr Knyga",
+      "resolvedCount": 2,
+      "storyPoints": 5,
+      "issueKeys": [
+        "ATP-1368",
+        "ATP-1388"
+      ]
+    },
+    {
+      "accountId": null,
+      "displayName": "Unassigned",
+      "resolvedCount": 2,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1397",
+        "ATP-1430"
+      ]
+    },
+    {
+      "accountId": "Andrian Korchynskiy",
+      "displayName": "Andrian Korchynskiy",
+      "resolvedCount": 1,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1357"
+      ]
+    }
+  ],
+  "totals": {
+    "totalResolved": 103,
+    "totalStoryPoints": 87.5
+  },
+  "sprintChurn": [],
+  "summaries": {
+    "Bohdan Forostianyi": "Bohdan focused primarily on flight control and autopilot behavior. He worked on position-hold improvements — including wind compensation, manual saturation handling, and stabilization of the relay platform that was circling without wind. He addressed signal-response smoothing, azimuth leveling under low-pitch conditions, and wind-vector-based command filtering. On the sensor side, he investigated rangefinder misbehavior at altitude limits and reduced CPU usage from rangefinder control logic. He also tackled PID instability detection, navigation-command retry logic (sine, optical flow), and RAM usage analysis per process. A secondary theme was mission tooling for the Godot-based UI: adding integration missions with and without gimbal, fixing mission-item creation and validation bugs, improving COVER_AREA radius rendering, and enabling mission cycle rendering. He also adapted the repository for the Азимут platform by disabling unused processes.",
+    "Nadia Khasyshyn": "Nadia's work spanned the full detection and tracking pipeline. She investigated false-negative detection issues on the Feb-14 model, integrated zoom into the tracker and detector, and made the detection score and classifier adaptive based on zoom level — also wiring in zoom with the tracking-reset logic developed by Volodymyr. She moved XGBoost models into the assets store and re-uploaded data from temporary label-studio storage to the main instance. She fixed a critical tracking FPS drop, addressed the \"jelly\" effect in field recordings, and resolved missing flash-drive status information. On the Godot UI side, she added a detector-debug panel, OSD tile-coordinate rendering, and completed a broader UI redesign. She also investigated open thermal datasets, reduced false positives on a sawmill target, and integrated a building classifier.",
+    "Horpynchenko Maksym": "Maksym drove the migration of the Mission Planner to a web interface and resolved a large volume of UX bugs in the new tool. Key work included flash-drive detection and reading of mission files, fixing metadata persistence, streamlining the Create flow so it no longer auto-loads a mission, adding a Position Hold correction point, improving GPS label clarity, and ensuring Load Mission opens the file picker immediately. He cleaned up the UI by removing redundant buttons, fixing unwanted auto-save on item edit, eliminating a spurious scrollbar on Windows, and placing new waypoints near the previous one. He also implemented item duplication and enforced that items cannot be added without coordinates.",
+    "Volodymyr Pavliukevych": "Volodymyr's work covered optical flow, tracking reliability, OS/storage integration, and model publishing. He published the v0.7 detection model, developed and improved a custom optical flow integration, and worked on minimizing tracker jumps to unintended objects — including during zoom. He resolved several OS-level issues: flash-drive not detected on first boot, random unmounts, the system not recognizing the flight controller after reboot, and RPi reconnection failures. He also moved scripts and emulation from the flash drive into an encrypted image, stripped Азимут-unrelated code from the repository during flash-drive builds, and provisioned server access for Nadia.",
+    "Danylo Tomashy": "Danylo concentrated on gimbal integration at the flight-controller level. He integrated the gimbal into attack-from-search missions, implemented a rotation-mechanism reset after mission stop, and built a convenient way to test gimbal missions. He fixed multiple bugs: gimbal zoom conflicting with system zoom causing tracker crashes, the tracker jumping when the gimbal was panning, rotation stopping at retry limit rather than at target point, and a broken gimbal-plus-return-to-target mission sequence. He also improved the mission-writing UI to make gimbal parameters more intuitive, and added error logging for failures occurring in class __init__ methods.",
+    "Andrii": "Andrii focused on OS hardening and embedded-system stability. He protected the RAM disk from display-user access, investigated TPM2 as a system security mechanism, and enabled Flux querying in the local OS. He fixed a series of new-OS regression bugs: video not recording on Raspberry Pi after reboot, RPi requiring a reboot before each new flash-drive run, the drone not exiting Land mode after the flash drive was removed, and the flight controller not reconnecting to RPi after a restart.",
+    "taras.panasyuk": "Taras worked on hardware design and mechanical components. He designed a dummy target sized to a Saine patch, created a battery mounting bracket, iterated it into a functional version, and designed a movable camera mount along the Y axis for the relay platform.",
+    "Liubomyr Zaiats": "Liubomyr's work centered on communication and antenna research. He conducted a market analysis of relay platforms to identify the most widespread options, explored solutions for servo-driven antenna steering, and designed a beacon-localizer concept for recovering lost drones. His output was research and solution proposals rather than implementation work.",
+    "Mr Lab": "Mr Lab handled mechanical hardware tasks: designing an angled mount for a 5.8 GHz antenna and removing the GPS slot from the previous tail design.",
+    "Oleksandr Knyga": "Oleksandr worked on mission-planner architecture and documentation. He defined contracts and the data schema for the mission scheduler, and created a human-curated Mission Writing Guide covering essential user-facing parameters.",
+    "Andrian Korchynskiy": "Andrian's resolved work for the period was a single endurance test measuring how long the drone can remain airborne."
+  }
+}

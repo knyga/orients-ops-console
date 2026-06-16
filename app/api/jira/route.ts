@@ -1,28 +1,58 @@
 import { NextResponse } from "next/server";
 import { fetchResolvedIssues, JiraError } from "@/lib/jira";
 import { aggregateByUser, sprintChurn } from "@/lib/jiraStats";
+import { listPeriods, parsePeriodKey, readReportJson } from "@/lib/reports";
 
 // Token + Jira calls live only on the server; never statically cache.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const FEATURE = "jira";
 
 /**
- * GET /api/jira?start=YYYY-MM-DD&end=YYYY-MM-DD
+ * GET /api/jira — hybrid read path:
+ *   ?periods=1            → { periods } the committed period keys (newest first)
+ *   ?period=<key>         → the committed lossless report JSON
+ *                           ({ rows, totals, sprintChurn, summaries? }), or 404
+ *   ?start=&end=[&refresh]→ live fetch from Jira (the original behavior; the
+ *                           only network path)
  *
- * The browser calls this route (never Jira directly). We fetch the period's
- * resolved issues server-side, aggregate per-user stats + sprint churn, and
- * return them as JSON.
+ * Committing artifacts is the CLI's job (`npm run jira -- --write`); this route
+ * only reads them.
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+
+  if (searchParams.get("periods")) {
+    return NextResponse.json({ periods: listPeriods(FEATURE) });
+  }
+
+  const period = searchParams.get("period");
+  if (period) {
+    if (!parsePeriodKey(period)) {
+      return NextResponse.json(
+        { error: "`period` must be YYYY-MM or YYYY-MM-DD_YYYY-MM-DD." },
+        { status: 400 },
+      );
+    }
+    const report = readReportJson(FEATURE, period);
+    if (!report) {
+      return NextResponse.json(
+        { error: `No committed report for ${period}.` },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json(report);
+  }
+
+  // Live mode: ?start=&end= (with optional ?refresh=1).
   const start = searchParams.get("start");
   const end = searchParams.get("end");
 
   if (!start || !end) {
     return NextResponse.json(
-      { error: "Both `start` and `end` query params are required." },
+      { error: "Provide `period`, `periods`, or both `start` and `end`." },
       { status: 400 },
     );
   }

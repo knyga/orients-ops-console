@@ -20,17 +20,13 @@ import {
   readdirSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { periodKey, type Period } from "./period";
 
-const MONTH_RE = /^\d{4}-\d{2}$/;
-const DAY = "\\d{4}-\\d{2}-\\d{2}";
-const RANGE_RE = new RegExp(`^(${DAY})_(${DAY})$`);
-
-export interface Period {
-  start: string;
-  end: string;
-}
+// Re-export the pure period helpers so existing importers of "../lib/reports"
+// (scripts/jiraReport, the period tests) keep working; the logic itself lives
+// in ./period, which is client-bundle-safe (no node:fs).
+export { periodKey, parsePeriodKey, type Period } from "./period";
 
 /** Allow tests to redirect the artifact root. */
 export interface ReportOpts {
@@ -38,41 +34,13 @@ export interface ReportOpts {
 }
 
 /**
- * Canonical period key shared by every feature and used as the `?period=` URL
- * value. A window inside one calendar month collapses to `YYYY-MM` (the common
- * monthly cadence); anything spanning months keeps both explicit bounds as
- * `YYYY-MM-DD_YYYY-MM-DD`. This is the period-key half of jiraReport's
- * `reportFileName` — that function now delegates here.
+ * Repo-root `reports/` directory. Resolved from `process.cwd()` rather than this
+ * file's path: both `next dev`/`next start` and the `npm run` CLIs launch from
+ * the repo root, and Next bundles server modules so `import.meta.url` would point
+ * into `.next/`, not the source tree.
  */
-export function periodKey(period: Period): string {
-  if (period.start.slice(0, 7) === period.end.slice(0, 7)) {
-    return period.start.slice(0, 7);
-  }
-  return `${period.start}_${period.end}`;
-}
-
-/**
- * Inverse of `periodKey`. A `YYYY-MM` key expands to the first..last day of that
- * month; a range key returns its two bounds verbatim. Returns null for anything
- * malformed so callers (API routes) can answer 400.
- */
-export function parsePeriodKey(key: string): Period | null {
-  if (MONTH_RE.test(key)) {
-    const [year, month] = key.split("-").map(Number);
-    // Day 0 of the next month is the last day of this one (UTC, no DST drift).
-    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    return { start: `${key}-01`, end: `${key}-${String(lastDay).padStart(2, "0")}` };
-  }
-  const range = RANGE_RE.exec(key);
-  if (range) {
-    return { start: range[1], end: range[2] };
-  }
-  return null;
-}
-
-/** Repo-root `reports/` directory, resolved relative to this file (…/lib). */
 export function defaultBaseDir(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), "..", "reports");
+  return join(process.cwd(), "reports");
 }
 
 /** Absolute path to a feature's artifact file for `key` with extension `ext`. */

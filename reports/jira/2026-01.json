@@ -1,0 +1,169 @@
+{
+  "rows": [
+    {
+      "accountId": "Bohdan Forostianyi",
+      "displayName": "Bohdan Forostianyi",
+      "resolvedCount": 18,
+      "storyPoints": 21,
+      "issueKeys": [
+        "ATP-1173",
+        "ATP-1129",
+        "ATP-1177",
+        "ATP-1169",
+        "ATP-1192",
+        "ATP-1133",
+        "ATP-1212",
+        "ATP-1201",
+        "ATP-1197",
+        "ATP-1195",
+        "ATP-1187",
+        "ATP-1203",
+        "ATP-1216",
+        "ATP-1202",
+        "ATP-1211",
+        "ATP-1229",
+        "ATP-1248",
+        "ATP-1250"
+      ]
+    },
+    {
+      "accountId": "Nadia Khasyshyn",
+      "displayName": "Nadia Khasyshyn",
+      "resolvedCount": 17,
+      "storyPoints": 28,
+      "issueKeys": [
+        "ATP-1118",
+        "ATP-1181",
+        "ATP-1190",
+        "ATP-1179",
+        "ATP-1193",
+        "ATP-1180",
+        "ATP-1207",
+        "ATP-1208",
+        "ATP-1183",
+        "ATP-1182",
+        "ATP-1230",
+        "ATP-1236",
+        "ATP-1209",
+        "ATP-1219",
+        "ATP-1247",
+        "ATP-1231",
+        "ATP-1205"
+      ]
+    },
+    {
+      "accountId": "Volodymyr Pavliukevych",
+      "displayName": "Volodymyr Pavliukevych",
+      "resolvedCount": 16,
+      "storyPoints": 28,
+      "issueKeys": [
+        "ATP-1199",
+        "ATP-1165",
+        "ATP-1168",
+        "ATP-1164",
+        "ATP-1175",
+        "ATP-1150",
+        "ATP-1218",
+        "ATP-1215",
+        "ATP-1246",
+        "ATP-1222",
+        "ATP-1178",
+        "ATP-1220",
+        "ATP-1255",
+        "ATP-1266",
+        "ATP-1270",
+        "ATP-1267"
+      ]
+    },
+    {
+      "accountId": "Danylo Tomashy",
+      "displayName": "Danylo Tomashy",
+      "resolvedCount": 12,
+      "storyPoints": 21,
+      "issueKeys": [
+        "ATP-1105",
+        "ATP-1109",
+        "ATP-1106",
+        "ATP-1108",
+        "ATP-1107",
+        "ATP-1191",
+        "ATP-758",
+        "ATP-1227",
+        "ATP-1228",
+        "ATP-1239",
+        "ATP-1238",
+        "ATP-1244"
+      ]
+    },
+    {
+      "accountId": "Andrian Korchynskiy",
+      "displayName": "Andrian Korchynskiy",
+      "resolvedCount": 4,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1078",
+        "ATP-957",
+        "ATP-1113",
+        "ATP-1136"
+      ]
+    },
+    {
+      "accountId": "Andrii Gresyk",
+      "displayName": "Andrii Gresyk",
+      "resolvedCount": 4,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1114",
+        "ATP-1142",
+        "ATP-923",
+        "ATP-1143"
+      ]
+    },
+    {
+      "accountId": "taras.panasyuk",
+      "displayName": "taras.panasyuk",
+      "resolvedCount": 4,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1069",
+        "ATP-1134",
+        "ATP-1064",
+        "ATP-1204"
+      ]
+    },
+    {
+      "accountId": "Andrii",
+      "displayName": "Andrii",
+      "resolvedCount": 1,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1240"
+      ]
+    },
+    {
+      "accountId": "Liubomyr Zaiats",
+      "displayName": "Liubomyr Zaiats",
+      "resolvedCount": 1,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1194"
+      ]
+    }
+  ],
+  "totals": {
+    "totalResolved": 77,
+    "totalStoryPoints": 98
+  },
+  "sprintChurn": [],
+  "summaries": {
+    "Bohdan Forostianyi": "Bohdan focused primarily on drone flight control and detection/CV pipeline work. On the flight control side, he worked on altitude control improvements — including drone inertia compensation, a dedicated altitude control class, and a VZ controller — plus adaptive acceleration toward a target, early landing initiation, and IMU-based backup navigation. He also tackled resource optimization, reducing CPU usage in Godot and preparation scripts. On the detection and tracking side, he contributed to figure prediction, horizon detection during tracking, minimizing false detections of trees, threshold tuning for re-detection, and integrating a speed estimation model into the controller. Supporting work included GPS-distance calculation for dataset collection, a detector metrics dashboard, and fixing unit tests.",
+    "Nadia Khasyshyn": "Nadia was deeply focused on the ML pipeline for object detection and tracking. She generated training data across multiple vehicle classes, built and retrained XGBoost classifier versions with expanded feature sets (camera geometry, horizon, target angle, altitude), and extended the ML pipeline to include NCNN model conversion. She improved the Kalman filter model, investigated large bounding-box jump heuristics, and integrated speed-estimation models (including x/y component decomposition) into the detection system. She also set up InfluxDB metrics collection for both the detector and tracker, prepared distance datasets, and contributed a horizon-line integration into existing data.",
+    "Volodymyr Pavliukevych": "Volodymyr was primarily focused on the object tracker (OAITracker) and the CV/detection pipeline. He merged a new tracker into Vartovy, implemented ROI resizing during tracking, restricted re-detection to within the previous bounding-box position, added adaptive tile sizing on re-detect, and tuned false-positive filter behavior at close range. He also investigated bounding-box size spikes after detection onset, checked cvTracker probability logic, fixed an XGBoost file crash, added and exposed additional tracker metrics, produced a tracker flow diagram, and fixed confusion matrix metrics for ONNX and Hailo models in the ML pipeline. He also ran a YOLO training from scratch on the standard dataset.",
+    "Danylo Tomashy": "Danylo worked across flight control and navigation. He implemented pre-mission Alt Hold enforcement, semi-manual descent to scanning altitude, and SNS/optical-flow navigation switching — including per-waypoint navigation type configuration. On the data and observability side, he set up InfluxDB recording of rangefinder and optical-flow measurements during flights and ensured navigation metrics from the sine-based system are stored correctly. He also delivered a POC for position navigation using ideal velocity and compass readings, fixed a cruise-to-manual control transition bug, and cleaned up exception handling in fc_write_rc. Compass declination auto-configuration based on mission start point was also resolved.",
+    "Andrian Korchynskiy": "Andrian worked on field operations and hardware evaluation. His tasks covered static beacons research, long-range flight testing, identifying a calculator for estimating flight altitude via beacons, and selecting the right propeller type for the standard drone build. His work spans both field validation and hardware configuration decisions.",
+    "Andrii Gresyk": "Andrii Gresyk focused on simulation infrastructure. He added ArUco marker support to the Coliseum simulator, implemented a physical drone model within the simulator, added support for moving targets in the simulator, and introduced the ability to program custom scenarios in Coliseum. All resolved tickets relate to improving simulator fidelity and flexibility for testing.",
+    "taras.panasyuk": "taras.panasyuk focused on drone hardware and mechanical reliability. His work covered designing a stable camera mount, damping oscillations on the gimbal, optimizing the tail section for field repairability, and improving the reliability of the VTX antenna mount. All four tickets relate to physical build quality and field serviceability of the drone platform.",
+    "Andrii": "Andrii resolved a Grafana observability issue where the map panel displayed only a single route instead of all recorded routes, restoring correct multi-route visualization in the monitoring dashboard.",
+    "Liubomyr Zaiats": "Liubomyr completed a single field data-collection task: gathering in-flight speed measurements using GPS. This feeds into the team's dataset efforts for speed-estimation model development."
+  }
+}

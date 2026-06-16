@@ -1,0 +1,111 @@
+{
+  "rows": [
+    {
+      "accountId": "Nadia Khasyshyn",
+      "displayName": "Nadia Khasyshyn",
+      "resolvedCount": 26,
+      "storyPoints": 8,
+      "issueKeys": [
+        "ATP-1441",
+        "ATP-1442",
+        "ATP-1533",
+        "ATP-1517",
+        "ATP-1541",
+        "ATP-1540",
+        "ATP-1348",
+        "ATP-1506",
+        "ATP-1538",
+        "ATP-1547",
+        "ATP-1542",
+        "ATP-1545",
+        "ATP-1522",
+        "ATP-1550",
+        "ATP-1576",
+        "ATP-1566",
+        "ATP-1589",
+        "ATP-1532",
+        "ATP-1573",
+        "ATP-1592",
+        "ATP-1575",
+        "ATP-1588",
+        "ATP-1535",
+        "ATP-1554",
+        "ATP-1601",
+        "ATP-1603"
+      ]
+    },
+    {
+      "accountId": "Bohdan Forostianyi",
+      "displayName": "Bohdan Forostianyi",
+      "resolvedCount": 14,
+      "storyPoints": 0,
+      "issueKeys": [
+        "ATP-1525",
+        "ATP-1524",
+        "ATP-1387",
+        "ATP-1526",
+        "ATP-1546",
+        "ATP-1555",
+        "ATP-1562",
+        "ATP-1561",
+        "ATP-1560",
+        "ATP-1583",
+        "ATP-1552",
+        "ATP-1581",
+        "ATP-1553",
+        "ATP-1558"
+      ]
+    },
+    {
+      "accountId": "Danylo Tomashy",
+      "displayName": "Danylo Tomashy",
+      "resolvedCount": 13,
+      "storyPoints": 6,
+      "issueKeys": [
+        "ATP-1539",
+        "ATP-1422",
+        "ATP-1510",
+        "ATP-1401",
+        "ATP-1521",
+        "ATP-1531",
+        "ATP-1319",
+        "ATP-1549",
+        "ATP-1563",
+        "ATP-1578",
+        "ATP-1557",
+        "ATP-1574",
+        "ATP-1590"
+      ]
+    },
+    {
+      "accountId": "Volodymyr Pavliukevych",
+      "displayName": "Volodymyr Pavliukevych",
+      "resolvedCount": 11,
+      "storyPoints": 53,
+      "issueKeys": [
+        "ATP-1537",
+        "ATP-1476",
+        "ATP-1520",
+        "ATP-1511",
+        "ATP-1515",
+        "ATP-1453",
+        "ATP-1527",
+        "ATP-1516",
+        "ATP-1543",
+        "ATP-1572",
+        "ATP-1587"
+      ]
+    }
+  ],
+  "totals": {
+    "totalResolved": 64,
+    "totalStoryPoints": 67
+  },
+  "sprintChurn": [],
+  "summaries": {
+    "Nadia Khasyshyn": "Nadia's work spanned detection/CV pipeline optimization, data labeling workflows, and system tooling. On the ML side, she built a model evaluation system, automated hyperparameter tuning with RayTune for the detection pipeline, ran a classifier iteration on 40k new-dataset samples, and validated a dataset with an alternative model. Data-labeling work included spatial annotation using Gemini data for evaluation, setting up a daily labeling process, uploading daily annotations to Label Studio, and establishing thermal-data labeling from RGB field footage. Tracker and OSD improvements included fixing FPS discrepancy between the tracker node and tracker, adding a distance-dependent tracker invalidator, displaying tracker-reset info on the OSD, and adding an informative OSD for azimuth mode. Build and system tooling covered adding an obfuscation toggle in flash builds, saving and verifying Godot hash before system copy, fixing incomplete metrics synchronization, and resolving a main.py CPU spike to 40%.",
+    "Bohdan Forostianyi": "Bohdan's work centered on flight-control logic and autopilot feature development. He extended failsafe protection, fixing a voltage-based failsafe that triggered incorrectly after TAKEOFF and implementing second-layer radio encryption. A significant cluster of work involved azimuth control: stabilizing azimuth during Land descent, disabling servo movement on azimuth startup, adding manual azimuth angle control during flight, and correcting THR_DZ behavior when azimuth is active. He built a MAVLink Tunnel, added manual altitude control without leaving stabilization mode, and created a parameter-setting abstraction. On the security and activation side, he developed a Mission Planner plugin for configuration updates and code activation, and implemented code execution from OS memory.",
+    "Danylo Tomashy": "Danylo worked across thermal camera integration, mission logic, and failsafe/navigation resilience. On the camera side, he adapted the thermal camera codebase, implemented auto-calibration of the thermal offset against a warm object, investigated thermal SDK capabilities, and synchronized thermal and daylight video streams; he also fixed video recording not toggling via RC channel. For mission and attack logic, he extended missions to account for post-descent drift and implemented stopping an attack after FP object tracking is dropped, with return to mission. Navigation resilience was a third theme: he added compass-based return on radio-beacon loss, Smart Takeoff, detection of beacon glitch as a failsafe trigger, return-to-point with position hold on glitch, and a Sine Failsafe for continuing a Вартовий mission when beacons are lost.",
+    "Volodymyr Pavliukevych": "Volodymyr focused on OS and embedded-systems infrastructure. His primary theme was flash-drive image build reliability: fixing slow build times, reducing noise in build output, ensuring updated code propagates correctly from the flash drive into the running system, and preventing Godot files from being deleted on reinstall. He resolved a conflict between mavlink-router and the DNS service, fixed autopilot startup failures after flash-drive reboots, and investigated intermittent device-descriptor errors in the field. A second major theme was Secure Boot: he researched RPI Secure Boot provisioning, set up a provisioner, and enabled Secure Boot on a compatible OS. He also optimized emulator shutdown time and switched a state listener from redis.get to a pub/sub model."
+  }
+}
