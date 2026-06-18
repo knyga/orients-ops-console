@@ -32,4 +32,9 @@ describe("activeObligations", () => {
   it("defaults to the committed OBLIGATIONS and yields a non-empty list for a recent month", () => {
     expect(activeObligations({ start: "2026-05-01", end: "2026-05-31" }).length).toBeGreaterThan(0);
   });
+
+  it("includes an obligation whose effectiveTo equals the period start (boundary)", () => {
+    const list = [ob({ id: "a", effectiveFrom: "2026-01-01", effectiveTo: "2026-03-01" })];
+    expect(activeObligations({ start: "2026-03-01", end: "2026-03-31" }, list).map((o) => o.id)).toEqual(["a"]);
+  });
 });
