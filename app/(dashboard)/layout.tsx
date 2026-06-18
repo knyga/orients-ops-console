@@ -9,6 +9,7 @@ const TABS: { href: string; label: string; enabled: boolean }[] = [
   { href: "/field-ops", label: "Field Ops", enabled: true },
   { href: "/dev-reporting", label: "Dev Reporting", enabled: true },
   { href: "/github-reporting", label: "GitHub Activity", enabled: true },
+  { href: "/policy-tracking", label: "Policy Tracking", enabled: true },
 ];
 
 export default function DashboardLayout({
