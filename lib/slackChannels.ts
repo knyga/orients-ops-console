@@ -1,11 +1,15 @@
 /**
- * Committed list of Slack channels the policy tracker reads. Adding a channel is
- * a small PR. `id` is the Slack channel id (e.g. C0123ABCD — Channel → View
- * channel details → bottom of the dialog). `name` is the human handle and is the
- * value an obligation's `channel` field matches against in lib/policyRegistry.
+ * Committed list of Slack channels this bot reads, for the Orients workspace
+ * (orientsai.slack.com). These are the real channel ids — the bot must be a
+ * member of each (conversations.history returns nothing otherwise). Adding a
+ * channel is a small PR. `id` is the Slack channel id (Channel → View channel
+ * details → bottom of the dialog, or the last path segment of the archive URL).
+ * `name` is the human handle and is the value an obligation's `channel` field
+ * matches against in lib/policyRegistry.
  *
- * Replace the placeholder ids with the workspace's real channel ids before the
- * first run; the names must stay in sync with lib/policyRegistry obligations.
+ * NOTE: lib/slack.ts fetches every channel listed here on each call. Names must
+ * stay in sync with whatever consumers match on (lib/policyRegistry obligations,
+ * the field-qa flight-hours reader, etc.).
  */
 export interface SlackChannel {
   id: string;
@@ -13,9 +17,9 @@ export interface SlackChannel {
 }
 
 export const TRACKED_CHANNELS: SlackChannel[] = [
-  { id: "C_BUDGETS_REPLACE_ME", name: "budgets" },
-  { id: "C_STATS_REPLACE_ME", name: "stats" },
-  { id: "C_FIELD_REPORTS_REPLACE_ME", name: "field-reports" },
-  { id: "C_FIELD_QA_REPLACE_ME", name: "field-qa" },
-  { id: "C_DATASETS_REPLACE_ME", name: "datasets" },
+  { id: "C09M551C9UK", name: "issue-log" },
+  { id: "C08GX9DE54P", name: "general" },
+  { id: "C08GY2NKF9D", name: "field-qa" },
+  { id: "C08KG802THU", name: "datasets" },
+  { id: "C09ETTREPCY", name: "order_writeoff" },
 ];
