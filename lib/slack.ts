@@ -91,10 +91,15 @@ function permalink(channelId: string, ts: string): string {
   return `https://${workspace}.slack.com/archives/${channelId}/p${ts.replace(".", "")}`;
 }
 
-/** Inclusive day → Unix epoch seconds at UTC midnight (Slack `oldest`/`latest` bounds). */
+/**
+ * A YYYY-MM-DD day → Slack `oldest`/`latest` bound (Unix epoch seconds, fractional
+ * allowed). Start of day for `oldest`; end of day (…59.999) for `latest`, so the
+ * full final second of the day is inclusive.
+ */
 function epoch(day: string, endOfDay = false): string {
-  const ms = new Date(`${day}T00:00:00.000Z`).getTime() + (endOfDay ? 86_399_000 : 0);
-  return String(Math.floor(ms / 1000));
+  const midnight = new Date(`${day}T00:00:00.000Z`).getTime();
+  const ms = endOfDay ? midnight + 86_399_999 : midnight;
+  return String(ms / 1000);
 }
 
 /**
