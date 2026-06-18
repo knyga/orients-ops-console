@@ -219,3 +219,20 @@ export function buildSchedule(
 
   return { period, occurrences, skipped };
 }
+
+/**
+ * Obligations whose `channel` is not among `knownChannels` (the tracked channel
+ * names from lib/slackChannels). Their occurrences can never gather candidate
+ * messages — no message ever carries that channel name — so they would silently
+ * read as MISSING/PENDING. A non-empty result means the schedule is incomplete;
+ * callers (the CLI) should surface it loudly rather than emit misleading rows.
+ */
+export function unconfiguredObligations(
+  obligations: Obligation[],
+  knownChannels: string[],
+): { obligationId: string; channel: string }[] {
+  const known = new Set(knownChannels);
+  return obligations
+    .filter((o) => !known.has(o.channel))
+    .map((o) => ({ obligationId: o.id, channel: o.channel }));
+}
