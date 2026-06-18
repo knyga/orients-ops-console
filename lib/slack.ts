@@ -86,8 +86,9 @@ interface HistoryResponse extends SlackOk {
 }
 
 function permalink(channelId: string, ts: string): string {
-  const workspace = process.env.SLACK_WORKSPACE;
-  if (!workspace) return "";
+  // This bot is built only for the Orients workspace; default the subdomain so
+  // permalinks work without SLACK_WORKSPACE, while still allowing an override.
+  const workspace = process.env.SLACK_WORKSPACE || "orientsai";
   return `https://${workspace}.slack.com/archives/${channelId}/p${ts.replace(".", "")}`;
 }
 
