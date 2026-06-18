@@ -132,10 +132,12 @@ Mirrors the Jira feature file-for-file.
 
 ## Cadence model (v1)
 
-First-class, deterministic: **weekly** (a weekday, e.g. Monday budget status),
-**monthly** (by a deadline day-of-month, e.g. "by the 5th"), and
-**monthly-window** (e.g. "first half of the month" for dynamic-budget
-publication).
+First-class, deterministic: **weekly** (a weekday, e.g. Monday budget status)
+and **monthly** (by a deadline day-of-month, e.g. "by the 5th"; the candidate
+window is the 1st through the due day, so a "first half of the month" deadline
+is just `monthly` with `dueDay: 15`). The leniency nuance of a window deadline
+vs a hard deadline lives in the obligation's `description`, which the verdict
+step reads — it does not need its own cadence variant.
 
 **Out of scope for v1 (documented, not silently dropped):** *per-event*
 obligations whose due date is triggered by an external event we lack a source

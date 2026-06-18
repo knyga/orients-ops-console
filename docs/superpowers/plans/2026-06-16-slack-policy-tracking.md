@@ -173,8 +173,7 @@ import type { Period } from "./period";
 /** How often an obligation comes due. */
 export type Cadence =
   | { type: "weekly"; weekday: number } // ISO weekday: 1=Mon … 7=Sun
-  | { type: "monthly"; dueDay: number } // due by the Nth calendar day (≤ 28)
-  | { type: "monthly-window"; throughDay: number } // due within the first N days
+  | { type: "monthly"; dueDay: number } // due by the Nth calendar day (≤ 28); window is the 1st → dueDay
   | { type: "per-event" }; // triggered by an external event — not scheduled in v1
 
 export interface Obligation {
@@ -235,10 +234,10 @@ export const OBLIGATIONS: Obligation[] = [
     id: "dynamic-budget-publication",
     title: "Dynamic budget publication",
     description:
-      "Maryna publishes the dynamic monthly budgets in the first half of each month.",
+      "Maryna publishes the dynamic monthly budgets in the first half of each month (by the 15th).",
     channel: "budgets",
     responsible: ["Maryna"],
-    cadence: { type: "monthly-window", throughDay: 15 },
+    cadence: { type: "monthly", dueDay: 15 },
     gracePeriodWorkingDays: 1,
     effectiveFrom: "2026-05-01",
     keywords: ["budget", "бюджет", "dynamic", "динамічн"],
@@ -564,8 +563,8 @@ function occurrenceWindows(ob: Obligation, period: Period): Window[] {
       .map((day) => ({ dueDate: day, windowStart: day }));
   }
 
-  if (ob.cadence.type === "monthly" || ob.cadence.type === "monthly-window") {
-    const day = ob.cadence.type === "monthly" ? ob.cadence.dueDay : ob.cadence.throughDay;
+  if (ob.cadence.type === "monthly") {
+    const day = ob.cadence.dueDay;
     return monthsInPeriod(period)
       .map((month) => ({ dueDate: `${month}-${pad2(day)}`, windowStart: `${month}-01` }))
       .filter((w) => within(w.dueDate));
