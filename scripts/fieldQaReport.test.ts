@@ -30,9 +30,14 @@ describe("resolvePeriod", () => {
       resolvePeriod({ format: "json", write: false, start: "2026-06-01", end: "2026-06-18" }, "2026-06-18"),
     ).toEqual({ start: "2026-06-01", end: "2026-06-18", timezone: "Europe/Kyiv" });
   });
-  it("falls back to the current month when a bound is missing", () => {
+  it("ignores a lone bound and uses the full current month", () => {
+    // A lone --start (not the month's first day) is overwritten, proving the
+    // all-or-nothing behavior rather than passing by coincidence.
     expect(
-      resolvePeriod({ format: "json", write: false, start: "2026-06-01" }, "2026-06-18"),
+      resolvePeriod({ format: "json", write: false, start: "2026-06-10" }, "2026-06-18"),
+    ).toEqual({ start: "2026-06-01", end: "2026-06-18", timezone: "Europe/Kyiv" });
+    expect(
+      resolvePeriod({ format: "json", write: false, end: "2026-06-30" }, "2026-06-18"),
     ).toEqual({ start: "2026-06-01", end: "2026-06-18", timezone: "Europe/Kyiv" });
   });
   it("throws on a malformed date", () => {
