@@ -127,14 +127,14 @@ export function formatTable(report: PolicyReport): string {
   const lines: string[] = [];
   lines.push(`Policy execution   ${report.period.start} … ${report.period.end}   (as of ${report.runDate})`);
   lines.push("");
-  lines.push("Due date     Status        Verdict   Ev  Obligation");
-  lines.push("----------   -----------   -------   --  ----------");
+  lines.push("Due date     Status         Verdict   Ev  Obligation");
+  lines.push("----------   ------------   -------   --  ----------");
   if (report.occurrences.length === 0) {
     lines.push("(no scheduled occurrences in this period)");
   } else {
     for (const o of report.occurrences) {
       lines.push(
-        `${o.dueDate}   ${o.status.padEnd(11)}   ${(o.verdict ?? "—").padEnd(7)}   ${String(o.candidates.length).padStart(2)}  ${o.title}`,
+        `${o.dueDate}   ${o.status.padEnd(12)}   ${(o.verdict ?? "—").padEnd(7)}   ${String(o.candidates.length).padStart(2)}  ${o.title}`,
       );
     }
   }

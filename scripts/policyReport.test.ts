@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PolicySchedule } from "../lib/policySchedule";
-import { applyVerdicts, parseArgs, resolvePeriod, toCsv } from "./policyReport";
+import { applyVerdicts, formatTable, parseArgs, resolvePeriod, toCsv } from "./policyReport";
 
 const schedule: PolicySchedule = {
   period: { start: "2026-05-01", end: "2026-05-31" },
@@ -77,5 +77,24 @@ describe("toCsv", () => {
     expect(csv).toContain("Weekly budget status report,budgets,2026-05-04,NEEDS_REVIEW,DONE,");
     expect(csv).toContain('"On time, no issues"');
     expect(csv.endsWith("\n")).toBe(true);
+  });
+});
+
+describe("formatTable", () => {
+  it("renders the as-of line, an aligned NEEDS_REVIEW row, and the skipped section", () => {
+    const report = applyVerdicts(schedule, "2026-06-16");
+    const out = formatTable(report);
+    expect(out).toContain("(as of 2026-06-16)");
+    expect(out).toContain("2026-05-04   NEEDS_REVIEW   —");
+    expect(out).toContain("Skipped (not scheduled in v1):");
+    expect(out).toContain("drone-remainder-report — per-event cadence not scheduled in v1");
+  });
+});
+
+describe("applyVerdicts (bare path)", () => {
+  it("leaves an occurrence with no matching verdict bare", () => {
+    const report = applyVerdicts(schedule, "2026-06-16");
+    expect(report.occurrences[0].verdict).toBeUndefined();
+    expect(report.occurrences[0].rationale).toBeUndefined();
   });
 });
