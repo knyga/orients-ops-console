@@ -53,6 +53,10 @@ instead of filling that CSV by hand.
   `reports/field-qa/<period>.json` provenance artifact. Review happens via the git
   diff and the web audit view before reconciliation runs.
 - **Web:** committed-only (no live LLM call on web requests).
+- **Primary interface is Claude Code.** The skill + CLI are the main surface
+  (extraction is driven by asking Claude Code, which runs `npm run field-qa`);
+  the web tab is a minimal read-only audit view, not the focus. Build order and
+  polish prioritize the CLI/skill; keep the web view lean.
 
 ## Components
 
