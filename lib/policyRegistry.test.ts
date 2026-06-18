@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeObligations, OBLIGATIONS, type Obligation } from "./policyRegistry";
+import { activeObligations, type Obligation } from "./policyRegistry";
 
 const ob = (over: Partial<Obligation>): Obligation => ({
   id: "x",
