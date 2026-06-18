@@ -172,6 +172,10 @@ unrecorded-video/-dataset explanations. Stored with `cadence: { type:
 - Per-event obligations are not scheduled — see Cadence model.
 - Public holidays are not modeled in working-day grace math.
 - Calendar math is UTC (matches Jira/GitHub), not Kyiv.
+- On the **live refresh** path, evidence is only fetched within `[start, end]`, so
+  an occurrence due on the final day(s) of the period whose grace window extends
+  past `end` can't see a fulfilling post made after `end` (it shows PENDING/MISSING
+  until the committed full-month run, which captures the whole window).
 - No opus `--classify` convenience path in v1 (the subagent `--verdicts-file`
   flow is the classification path); can be added later mirroring Jira's
   `--summarize` + `lib/summarize.ts` if a one-command path is wanted.
