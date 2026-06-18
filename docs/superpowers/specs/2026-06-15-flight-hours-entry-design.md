@@ -1,7 +1,8 @@
 # Design: Flight-hours entry & persistence (web + CLI)
 
 Date: 2026-06-15
-Status: Approved (pending spec review)
+Status: SUPERSEDED by docs/superpowers/specs/2026-06-18-field-qa-flight-hours-design.md
+— flight hours are extracted from #field-qa Slack reports via an LLM, not hand-entered.
 
 ## Goal
 
