@@ -12,7 +12,7 @@ import type { Period } from "./period";
 /** How often an obligation comes due. */
 export type Cadence =
   | { type: "weekly"; weekday: number } // ISO weekday: 1=Mon … 7=Sun
-  | { type: "monthly"; dueDay: number } // due by the Nth calendar day (≤ 28); window is the 1st → dueDay
+  | { type: "monthly"; dueDay: number } // due by the Nth day (clamped to month end); match window is 1st → dueDay + grace
   | { type: "per-event" }; // triggered by an external event — not scheduled in v1
 
 export interface Obligation {

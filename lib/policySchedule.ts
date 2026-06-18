@@ -119,13 +119,19 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-interface Window {
+/** Last calendar day (1–31) of a YYYY-MM month, UTC. */
+function lastDayOfMonth(month: string): number {
+  const [year, mon] = month.split("-").map(Number);
+  return new Date(Date.UTC(year, mon, 0)).getUTCDate();
+}
+
+interface OccurrenceWindow {
   dueDate: string;
   windowStart: string;
 }
 
 /** Expected occurrence windows (dueDate + windowStart) for an obligation in the period. */
-function occurrenceWindows(ob: Obligation, period: Period): Window[] {
+function occurrenceWindows(ob: Obligation, period: Period): OccurrenceWindow[] {
   const within = (day: string): boolean =>
     day >= period.start &&
     day <= period.end &&
@@ -142,7 +148,10 @@ function occurrenceWindows(ob: Obligation, period: Period): Window[] {
   if (ob.cadence.type === "monthly") {
     const day = ob.cadence.dueDay;
     return monthsInPeriod(period)
-      .map((month) => ({ dueDate: `${month}-${pad2(day)}`, windowStart: `${month}-01` }))
+      .map((month) => {
+        const clamped = Math.min(day, lastDayOfMonth(month));
+        return { dueDate: `${month}-${pad2(clamped)}`, windowStart: `${month}-01` };
+      })
       .filter((w) => within(w.dueDate));
   }
 
@@ -180,11 +189,12 @@ export function buildSchedule(
       continue;
     }
     for (const w of occurrenceWindows(ob, period)) {
+      const windowStart = w.windowStart > ob.effectiveFrom ? w.windowStart : ob.effectiveFrom;
       const windowEnd = addWorkingDays(w.dueDate, ob.gracePeriodWorkingDays);
       const candidates = messages
         .filter((m) => {
           const day = m.isoTime.slice(0, 10);
-          return m.channel === ob.channel && day >= w.windowStart && day <= windowEnd;
+          return m.channel === ob.channel && day >= windowStart && day <= windowEnd;
         })
         .map(toCandidate);
       const status: OccurrenceStatus =
@@ -195,7 +205,7 @@ export function buildSchedule(
         title: ob.title,
         channel: ob.channel,
         dueDate: w.dueDate,
-        windowStart: w.windowStart,
+        windowStart,
         windowEnd,
         status,
         candidates,

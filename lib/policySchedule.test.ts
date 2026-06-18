@@ -104,4 +104,29 @@ describe("buildSchedule", () => {
     expect(schedule.occurrences.map((o) => o.dueDate)).toEqual(["2026-05-05"]);
     expect(schedule.occurrences[0].windowStart).toBe("2026-05-01");
   });
+
+  it("clamps a monthly dueDay beyond the month length to the last day", () => {
+    const monthly: Obligation = { ...weekly, id: "m", cadence: { type: "monthly", dueDay: 31 } };
+    const schedule = buildSchedule([monthly], [], { start: "2026-02-01", end: "2026-02-28" }, "2026-06-16");
+    expect(schedule.occurrences.map((o) => o.dueDate)).toEqual(["2026-02-28"]);
+  });
+
+  it("does not count a message posted before effectiveFrom as evidence", () => {
+    const monthly: Obligation = {
+      ...weekly,
+      id: "m",
+      cadence: { type: "monthly", dueDay: 15 },
+      effectiveFrom: "2026-05-10",
+    };
+    const schedule = buildSchedule(
+      [monthly],
+      [msg({ isoTime: "2026-05-03T09:00:00.000Z" })], // before effectiveFrom
+      { start: "2026-05-01", end: "2026-05-31" },
+      "2026-06-16",
+    );
+    const occ = schedule.occurrences.find((o) => o.dueDate === "2026-05-15");
+    expect(occ?.windowStart).toBe("2026-05-10");
+    expect(occ?.candidates).toHaveLength(0);
+    expect(occ?.status).toBe("MISSING");
+  });
 });
