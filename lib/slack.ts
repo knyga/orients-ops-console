@@ -11,8 +11,8 @@
  */
 import "server-only";
 import type { Period } from "./period";
-import { TRACKED_CHANNELS } from "./slackChannels";
-import type { SlackMessage } from "./policySchedule";
+import { TRACKED_CHANNELS, type SlackChannel } from "./slackChannels";
+import type { SlackFile, SlackMessage } from "./policySchedule";
 import { toSlackFiles, type RawFile } from "./slackFiles";
 
 const API = "https://slack.com/api";
@@ -40,21 +40,28 @@ interface SlackOk {
   response_metadata?: { next_cursor?: string };
 }
 
-/** GET a Slack Web API method with bearer auth; throws SlackError on transport or API error. */
+/** GET a Slack Web API method with bearer auth; retries on 429, throws SlackError otherwise. */
 async function call<T extends SlackOk>(method: string, params: URLSearchParams): Promise<T> {
-  const res = await fetch(`${API}/${method}?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${token()}` },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new SlackError(`Slack ${method} returned ${res.status} ${res.statusText}`, res.status);
+  for (let attempt = 0; ; attempt += 1) {
+    const res = await fetch(`${API}/${method}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token()}` },
+      cache: "no-store",
+    });
+    if (res.status === 429 && attempt < 5) {
+      const retryAfter = Number(res.headers.get("retry-after")) || 1;
+      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+      continue;
+    }
+    if (!res.ok) {
+      throw new SlackError(`Slack ${method} returned ${res.status} ${res.statusText}`, res.status);
+    }
+    const body = (await res.json()) as T;
+    if (!body.ok) {
+      // 502: the request reached Slack but it rejected it (auth/scope/etc.).
+      throw new SlackError(`Slack ${method} error: ${body.error ?? "unknown"}`, 502);
+    }
+    return body;
   }
-  const body = (await res.json()) as T;
-  if (!body.ok) {
-    // 502: the request reached Slack but it rejected it (auth/scope/etc.).
-    throw new SlackError(`Slack ${method} error: ${body.error ?? "unknown"}`, 502);
-  }
-  return body;
 }
 
 interface UsersListResponse extends SlackOk {
@@ -162,6 +169,113 @@ export async function fetchMessages(period: Period): Promise<SlackMessage[]> {
   }
 
   return collected;
+}
+
+/** A mirror-bound message: SlackMessage fields + thread/edit markers from Slack. */
+export interface RawSlackMessage {
+  channel: string;
+  ts: string;
+  authorId: string;
+  author: string;
+  isoTime: string;
+  text: string;
+  permalink: string;
+  files?: SlackFile[];
+  thread_ts?: string;
+  reply_count?: number;
+  edited?: string;
+}
+
+interface RawHistoryMessage {
+  user?: string;
+  bot_id?: string;
+  ts: string;
+  text?: string;
+  files?: RawFile[];
+  thread_ts?: string;
+  reply_count?: number;
+  edited?: { ts?: string };
+}
+
+interface RawHistoryResponse extends SlackOk {
+  messages: RawHistoryMessage[];
+}
+
+/**
+ * Fetch raw messages for [period] from the given channels (default: all tracked),
+ * INCLUDING thread replies and `edited` markers — the input the local mirror
+ * (lib/slackMirror) stores. Pages conversations.history, then for each parent with
+ * replies pages conversations.replies. Additive: does not touch fetchMessages.
+ */
+export async function fetchRawMessages(
+  period: Period,
+  channels: SlackChannel[] = TRACKED_CHANNELS,
+): Promise<RawSlackMessage[]> {
+  if (!DATE_RE.test(period.start) || !DATE_RE.test(period.end)) {
+    throw new SlackError(`Period bounds must be YYYY-MM-DD: start=${period.start} end=${period.end}`);
+  }
+  token();
+  const users = await userMap();
+  const oldest = epoch(period.start);
+  const latest = epoch(period.end, true);
+  const out: RawSlackMessage[] = [];
+
+  const normalize = (channel: SlackChannel, m: RawHistoryMessage): RawSlackMessage | null => {
+    if (!m.user && !m.bot_id) return null;
+    return {
+      channel: channel.name,
+      ts: m.ts,
+      authorId: m.user ?? m.bot_id ?? "",
+      author: m.user ? (users.get(m.user) ?? m.user) : (m.bot_id ?? "bot"),
+      isoTime: new Date(Number(m.ts) * 1000).toISOString(),
+      text: m.text ?? "",
+      permalink: permalink(channel.id, m.ts),
+      files: toSlackFiles(m.files),
+      thread_ts: m.thread_ts,
+      reply_count: m.reply_count,
+      edited: m.edited?.ts,
+    };
+  };
+
+  for (const channel of channels) {
+    const parents: RawHistoryMessage[] = [];
+    let cursor: string | undefined;
+    do {
+      const params = new URLSearchParams({
+        channel: channel.id,
+        oldest,
+        latest,
+        inclusive: "true",
+        limit: "200",
+      });
+      if (cursor) params.set("cursor", cursor);
+      const page = await call<RawHistoryResponse>("conversations.history", params);
+      for (const m of page.messages ?? []) {
+        const n = normalize(channel, m);
+        if (n) out.push(n);
+        if ((m.reply_count ?? 0) > 0) parents.push(m);
+      }
+      cursor = page.response_metadata?.next_cursor || undefined;
+    } while (cursor);
+
+    // conversations.history returns thread parents only — page each parent's replies.
+    for (const parent of parents) {
+      let rcursor: string | undefined;
+      do {
+        const params = new URLSearchParams({ channel: channel.id, ts: parent.ts, limit: "200" });
+        if (rcursor) params.set("cursor", rcursor);
+        const page = await call<RawHistoryResponse>("conversations.replies", params);
+        for (const m of page.messages ?? []) {
+          if (m.ts === parent.ts) continue; // replies echoes the parent first — skip it
+          const n = normalize(channel, m);
+          if (n) out.push(n);
+        }
+        rcursor = page.response_metadata?.next_cursor || undefined;
+      } while (rcursor);
+    }
+  }
+
+  return out;
 }
 
 /** Download a Slack file (e.g. the stats-bot image) as base64. Needs files:read. */
