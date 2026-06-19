@@ -13,6 +13,7 @@ import "server-only";
 import type { Period } from "./period";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import type { SlackMessage } from "./policySchedule";
+import { toSlackFiles, type RawFile } from "./slackFiles";
 
 const API = "https://slack.com/api";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -82,7 +83,7 @@ async function userMap(): Promise<Map<string, string>> {
 }
 
 interface HistoryResponse extends SlackOk {
-  messages: { user?: string; bot_id?: string; ts: string; text?: string }[];
+  messages: { user?: string; bot_id?: string; ts: string; text?: string; files?: RawFile[] }[];
 }
 
 function permalink(channelId: string, ts: string): string {
@@ -140,15 +141,20 @@ export async function fetchMessages(period: Period): Promise<SlackMessage[]> {
       if (cursor) params.set("cursor", cursor);
       const page = await call<HistoryResponse>("conversations.history", params);
       for (const m of page.messages ?? []) {
-        if (!m.user) continue; // skip bot/system messages with no human author
+        // Include human messages and bot messages that carry text+files (e.g. the
+        // stats-bot daily summary). Pure system messages (no user AND no bot_id)
+        // are skipped to avoid noise.
+        if (!m.user && !m.bot_id) continue;
+        const authorId = m.user ?? m.bot_id ?? "";
         collected.push({
           channel: channel.name,
-          authorId: m.user,
-          author: users.get(m.user) ?? m.user,
+          authorId,
+          author: m.user ? (users.get(m.user) ?? m.user) : (m.bot_id ?? "bot"),
           ts: m.ts,
           isoTime: new Date(Number(m.ts) * 1000).toISOString(),
           text: m.text ?? "",
           permalink: permalink(channel.id, m.ts),
+          files: toSlackFiles(m.files),
         });
       }
       cursor = page.response_metadata?.next_cursor || undefined;
@@ -156,4 +162,20 @@ export async function fetchMessages(period: Period): Promise<SlackMessage[]> {
   }
 
   return collected;
+}
+
+/** Download a Slack file (e.g. the stats-bot image) as base64. Needs files:read. */
+export async function downloadFileBase64(
+  urlPrivate: string,
+): Promise<{ base64: string; mediaType: string }> {
+  const res = await fetch(urlPrivate, { headers: { Authorization: `Bearer ${token()}` }, cache: "no-store" });
+  if (!res.ok) {
+    throw new SlackError(`Slack file download returned ${res.status} ${res.statusText}`, res.status);
+  }
+  const mediaType = res.headers.get("content-type") ?? "";
+  if (!mediaType.startsWith("image/")) {
+    throw new SlackError(`Expected an image but got "${mediaType}" — is the files:read scope granted?`);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { base64: buf.toString("base64"), mediaType };
 }

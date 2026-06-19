@@ -1,5 +1,4 @@
 import { FIELD_TIMEZONE } from "../lib/reconcile";
-import type { ExtractedDay, FlightWindow } from "../lib/flightExtractPrompt";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -18,11 +17,18 @@ export interface Period {
   timezone: string;
 }
 
+export interface ExtractedDay {
+  date: string;
+  airborneSeconds: number;
+  flights: number;
+  sourceTs: string;
+}
+
 export interface ReportDay {
   date: string;
   flightHours: number;
-  windows: FlightWindow[];
-  crew: string | null;
+  airborneMinutes: number;
+  flights: number;
   permalink: string;
 }
 
@@ -75,39 +81,30 @@ export function resolvePeriod(args: ParsedArgs, today: string): Period {
 
 /**
  * Validate LLM-extracted days: drop rows with a non-YYYY-MM-DD date or a
- * non-finite/non-positive flightHours, sum duplicate dates (merging windows,
- * keeping the first non-null crew and the lexicographically smallest sourceTs
- * for determinism), and sort ascending by date.
+ * non-finite/non-positive airborneSeconds, dedupe by date keeping the first
+ * occurrence (and, on a tie, the lexicographically smallest sourceTs), and sort
+ * ascending by date. Does NOT sum airborne across duplicates — keeps one reading
+ * per day.
  */
 export function validateDays(days: ExtractedDay[]): ExtractedDay[] {
   const byDate = new Map<string, ExtractedDay>();
   for (const d of days) {
-    if (!DATE_RE.test(d.date) || !Number.isFinite(d.flightHours) || d.flightHours <= 0) continue;
+    if (!DATE_RE.test(d.date) || !Number.isFinite(d.airborneSeconds) || d.airborneSeconds <= 0) continue;
     const existing = byDate.get(d.date);
     if (!existing) {
-      byDate.set(d.date, {
-        date: d.date,
-        flightHours: d.flightHours,
-        windows: [...(d.windows ?? [])],
-        crew: d.crew ?? null,
-        sourceTs: d.sourceTs,
-      });
+      byDate.set(d.date, { ...d });
     } else {
-      existing.flightHours += d.flightHours;
-      existing.windows.push(...(d.windows ?? []));
-      existing.crew = existing.crew ?? d.crew ?? null;
+      // On duplicate date keep existing entry but take the smaller sourceTs
       if (d.sourceTs < existing.sourceTs) existing.sourceTs = d.sourceTs;
     }
   }
-  return [...byDate.values()]
-    .map((d) => ({ ...d, flightHours: round2(d.flightHours) }))
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
 /** The fieldops input contract: `date,flight_hours` header + one row per day. */
 export function toInputsCsv(days: ExtractedDay[]): string {
   const lines = ["date,flight_hours"];
-  for (const d of days) lines.push(`${d.date},${d.flightHours}`);
+  for (const d of days) lines.push(`${d.date},${round2(d.airborneSeconds / 3600)}`);
   return `${lines.join("\n")}\n`;
 }
 
@@ -119,9 +116,9 @@ export function buildReport(
 ): FieldQaReport {
   const reportDays: ReportDay[] = days.map((d) => ({
     date: d.date,
-    flightHours: d.flightHours,
-    windows: d.windows,
-    crew: d.crew,
+    flightHours: round2(d.airborneSeconds / 3600),
+    airborneMinutes: round2(d.airborneSeconds / 60),
+    flights: d.flights,
     permalink: permalinkByTs.get(d.sourceTs) ?? "",
   }));
   const flightHours = round2(reportDays.reduce((sum, d) => sum + d.flightHours, 0));
@@ -139,12 +136,12 @@ export function formatTable(report: FieldQaReport): string {
   const lines: string[] = [];
   lines.push(`Field-QA flight hours: ${period.start} … ${period.end} (${period.timezone})`);
   lines.push("");
-  lines.push("Date         Hours   Crew");
-  lines.push("-----------  -----   ----");
+  lines.push("Date         Airborne(min)   Flights");
+  lines.push("-----------  -------------   -------");
   for (const d of days) {
-    lines.push(`${d.date}   ${String(d.flightHours).padStart(5)}   ${d.crew ?? ""}`);
+    lines.push(`${d.date}   ${String(d.airborneMinutes).padStart(13)}   ${d.flights}`);
   }
-  lines.push("-----------  -----   ----");
-  lines.push(`TOTAL        ${String(totals.flightHours).padStart(5)}   (${totals.days} days)`);
+  lines.push("-----------  -------------   -------");
+  lines.push(`TOTAL        ${String(totals.flightHours).padStart(13)} h   (${totals.days} days)`);
   return lines.join("\n");
 }

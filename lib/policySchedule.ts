@@ -13,6 +13,14 @@
 import { activeObligations, type Obligation } from "./policyRegistry";
 import type { Period } from "./period";
 
+/** A file attached to a Slack message (subset of fields we use). */
+export interface SlackFile {
+  name: string;
+  mimetype: string;
+  /** Authenticated download URL (needs the bot token + files:read). */
+  urlPrivate: string;
+}
+
 /** A Slack message normalized for scheduling. */
 export interface SlackMessage {
   /** Tracked channel NAME (resolved from the channel id by lib/slack). */
@@ -26,6 +34,8 @@ export interface SlackMessage {
   text: string;
   /** Permalink, or "" when SLACK_WORKSPACE is unset. */
   permalink: string;
+  /** Attached files (e.g. the stats-bot summary image), when present. */
+  files?: SlackFile[];
 }
 
 export type OccurrenceStatus = "MISSING" | "PENDING" | "NEEDS_REVIEW";

@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 interface ReportDay {
   date: string;
   flightHours: number;
-  windows: { start: string; end: string }[];
-  crew: string | null;
+  airborneMinutes: number;
+  flights: number;
   permalink: string;
 }
 interface FieldQaReport {
@@ -55,8 +55,7 @@ export default function FieldQaPage() {
           Field QA — Flight Hours
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Flight hours extracted from #field-qa by Claude (committed artifacts).
-          Review here before they feed reconciliation. Generate with{" "}
+          Flight time = the stats-bot airborne time (Час в повітрі) read from the daily summary image in #field-qa. Review before it feeds reconciliation. Generate with{" "}
           <code className="text-slate-600">npm run field-qa -- --write</code>.
         </p>
       </div>
@@ -99,8 +98,8 @@ export default function FieldQaPage() {
               <tr>
                 <th className="py-1">Date</th>
                 <th className="py-1">Hours</th>
-                <th className="py-1">Crew</th>
-                <th className="py-1">Windows</th>
+                <th className="py-1">Airborne (min)</th>
+                <th className="py-1">Flights</th>
                 <th className="py-1">Source</th>
               </tr>
             </thead>
@@ -109,10 +108,8 @@ export default function FieldQaPage() {
                 <tr key={d.date} className="border-t border-slate-100">
                   <td className="py-1 tabular-nums">{d.date}</td>
                   <td className="py-1 tabular-nums">{d.flightHours}</td>
-                  <td className="py-1">{d.crew ?? ""}</td>
-                  <td className="py-1 text-slate-500">
-                    {d.windows.map((w) => `${w.start}-${w.end}`).join(", ")}
-                  </td>
+                  <td className="py-1 tabular-nums">{d.airborneMinutes}</td>
+                  <td className="py-1 tabular-nums">{d.flights}</td>
                   <td className="py-1">
                     {d.permalink ? (
                       <a href={d.permalink} className="text-sky-600 hover:underline" target="_blank" rel="noreferrer">
