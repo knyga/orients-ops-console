@@ -53,17 +53,30 @@ A "flight day" = a day the stats bot reports airborne flight (`Сьогодні 
   date based, surfaced with the message permalink as evidence (a human/LLM
   confirms ambiguous cases — same posture as policy verdicts).
 
-### OPEN MODELING QUESTION — video↔flight-day attribution
+### RESOLVED — video↔flight-day attribution (by date in the video name)
 
-`reconcile.ts` groups Vimeo by **upload date**. With a 3-working-day grace,
-videos for flight day D can be uploaded on D…D+3wd, and windows for consecutive
-flight days overlap. We must attribute each video to exactly one flight day to
-avoid double counting. **Proposed default (to confirm):** a video is attributed
-to the **most recent flight day on or before its Kyiv upload date** (so a video
-uploaded 2 days after a flight counts for that flight, not a later one); only
-days the bot marks as flight days are attribution targets. This needs your
-confirmation before implementation — it materially changes verdicts. The May
-`Статистика` sheet may already imply a rule; if so we adopt that instead.
+`reconcile.ts` groups Vimeo by **upload date**, but uploads lag the flight by up
+to the grace window, so upload date is the wrong key. **Decision (confirmed by
+user + verified live 2026-06-19):** the flight date is encoded in the video
+**name**. Attribute each video by `videoFlightDate(video)`:
+
+1. Parse a date from `video.name`. Two observed formats:
+   - `Recording YYYY-MM-DD HHMMSS` → e.g. `Recording 2026-06-16 195102`
+   - `WIN_YYYYMMDD_HH_MM_SS_Pro` → e.g. `WIN_20260616_17_39_24_Pro`
+2. Fallback to the **Kyiv upload date** (`videoUploadDate(created_time)`) only when
+   the name has no parseable date.
+
+Live proof: videos uploaded 2026-06-18 included `WIN_20260616_…` and
+`Recording 2026-06-16 …` (recorded 06-16). Name-date attribution credits them to
+06-16; upload-date attribution would wrongly credit 06-18.
+
+This makes `videoMinutes(D)` a clean per-day sum (videos whose `videoFlightDate`
+== D) with **no overlapping-window heuristic and no double-counting** — the name
+states the day directly. New pure helper `videoFlightDate` lives in
+`lib/reconcile.ts` (next to `videoUploadDate`), unit-tested on both name formats
+plus the fallback. (Migrating the existing reconcile grouping to name-date is a
+follow-up; S3 verdict uses name-date from the start.) See memory
+`video-name-carries-flight-date`.
 
 ### Where it lives
 

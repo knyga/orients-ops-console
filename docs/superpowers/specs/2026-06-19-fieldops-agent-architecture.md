@@ -87,9 +87,14 @@ auditable/reversible; final human (Oleksandr/Bogdan) confirmation per policy.
 S1 (mirror) → S2 (flight time) → S3 (verdict + resolutions) → then the guarded
 outward layer S4/S5/S6 together (shared posting infra). Each ships independently.
 
-## Open decisions (to confirm before the relevant phase)
+## Open decisions
 
-1. Mirror git policy: raw git-ignored + derived/resolutions committed (proposed).
-2. Video↔flight-day attribution under the 3-wd grace (from the B spec).
-3. Outward posting: a dedicated test channel first (proposed); `chat:write` add.
-4. Build order / what to start now.
+1. ~~Mirror git policy~~ — RESOLVED: raw git-ignored + derived/resolutions
+   committed. Shipped in S1.
+2. ~~Video↔flight-day attribution~~ — RESOLVED (2026-06-19): attribute by the
+   **date in the video name** (`videoFlightDate`), fallback to Kyiv upload date.
+   See the B spec + memory `video-name-carries-flight-date`.
+3. Outward posting (S4–S6): build now in **dry-run-only** (user-approved
+   2026-06-19); real `--publish` still needs the `chat:write` scope added +
+   reinstall, and a dedicated test channel before #field-qa.
+4. ~~Build order~~ — RESOLVED: S1 ✓ → S2 ✓ → S3 → S4/S5/S6 (dry-run).
