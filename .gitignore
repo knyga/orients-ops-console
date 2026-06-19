@@ -13,3 +13,9 @@ node_modules
 
 # slack raw mirror (re-syncable from Slack; PII + volume)
 data/slack/
+
+# personal field metrics export (financial PII — never commit)
+docs/Personal Field Metrics */
+
+# macOS junk
+.DS_Store
