@@ -8,6 +8,7 @@
  * Fetches conversations.history for every tracked channel over [start, end],
  * resolving author ids → display names via one users.list call. Mirrors the
  * shape/discipline of lib/jira.ts.
+ * Also exposes fetchRawMessages — history PLUS thread replies and edit markers — the input the local Slack mirror (lib/slackMirror) stores.
  */
 import "server-only";
 import type { Period } from "./period";
@@ -17,6 +18,7 @@ import { toSlackFiles, type RawFile } from "./slackFiles";
 
 const API = "https://slack.com/api";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_RETRIES = 5;
 
 export class SlackError extends Error {
   constructor(
@@ -47,7 +49,7 @@ async function call<T extends SlackOk>(method: string, params: URLSearchParams):
       headers: { Authorization: `Bearer ${token()}` },
       cache: "no-store",
     });
-    if (res.status === 429 && attempt < 5) {
+    if (res.status === 429 && attempt < MAX_RETRIES) {
       const retryAfter = Number(res.headers.get("retry-after")) || 1;
       await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
       continue;
@@ -111,6 +113,16 @@ function epoch(day: string, endOfDay = false): string {
   return String(ms / 1000);
 }
 
+/** Throw if any channel id is still a lib/slackChannels placeholder. */
+function assertChannelsConfigured(channels: SlackChannel[]): void {
+  const unconfigured = channels.filter((c) => c.id.includes("REPLACE_ME"));
+  if (unconfigured.length > 0) {
+    throw new SlackError(
+      `Tracked channel ids not configured — replace the *_REPLACE_ME placeholders in lib/slackChannels.ts (${unconfigured.map((c) => c.name).join(", ")}).`,
+    );
+  }
+}
+
 /**
  * Fetch messages from every tracked channel within [period.start, period.end]
  * (inclusive), normalized to SlackMessage with the channel NAME and resolved
@@ -123,12 +135,7 @@ export async function fetchMessages(period: Period): Promise<SlackMessage[]> {
   // Assert the token is present before any network work (clear config error).
   token();
   // Fail loud if the committed channel ids are still placeholders.
-  const unconfigured = TRACKED_CHANNELS.filter((c) => c.id.includes("REPLACE_ME"));
-  if (unconfigured.length > 0) {
-    throw new SlackError(
-      `Tracked channel ids not configured — replace the *_REPLACE_ME placeholders in lib/slackChannels.ts (${unconfigured.map((c) => c.name).join(", ")}).`,
-    );
-  }
+  assertChannelsConfigured(TRACKED_CHANNELS);
 
   const users = await userMap();
   const oldest = epoch(period.start);
@@ -215,6 +222,7 @@ export async function fetchRawMessages(
     throw new SlackError(`Period bounds must be YYYY-MM-DD: start=${period.start} end=${period.end}`);
   }
   token();
+  assertChannelsConfigured(channels);
   const users = await userMap();
   const oldest = epoch(period.start);
   const latest = epoch(period.end, true);
@@ -252,8 +260,10 @@ export async function fetchRawMessages(
       const page = await call<RawHistoryResponse>("conversations.history", params);
       for (const m of page.messages ?? []) {
         const n = normalize(channel, m);
-        if (n) out.push(n);
-        if ((m.reply_count ?? 0) > 0) parents.push(m);
+        if (n) {
+          out.push(n);
+          if ((m.reply_count ?? 0) > 0) parents.push(m);
+        }
       }
       cursor = page.response_metadata?.next_cursor || undefined;
     } while (cursor);
