@@ -23,8 +23,8 @@ duplicate. It exposes a read API (`readChannelMessages`) for downstream features
   pure merge/upsert/tombstone function.
 - A thin, non-breaking addition to `lib/slack.ts` that returns *raw* messages
   including thread replies and edited/deleted flags.
-- A `scripts/slack-sync.ts` CLI with incremental + backfill modes, plus an
-  `npm run slack-sync` entry under the `--conditions=react-server` runner.
+- A `scripts/slack-sync.ts` CLI with **init**, incremental, and backfill modes,
+  plus an `npm run slack-sync` entry under the `--conditions=react-server` runner.
 - A `.gitignore` entry for the raw mirror directory.
 - Unit tests for the pure store logic.
 
@@ -190,18 +190,32 @@ these. The model:
   messages older than the window (we didn't ask Slack about them, so absence
   proves nothing).
 
-- **Backfill mode (`--backfill [--since YYYY-MM-DD]`).** A one-time / occasional
-  full historical pull: fetch from `--since` (default: a sensible floor, e.g. the
-  earliest tracked-policy date) up to `now`, upserting every message and walking
-  every thread. Backfill does **not** tombstone (it's additive — absence over a
-  huge range is not reliable deletion signal). It sets `lastSync = now` per
-  channel on success so the next incremental run takes over.
+- **Init mode (`init`).** The first-run / reset command. Equivalent to a backfill
+  whose floor is the **first day of the current calendar month** (Europe/Kyiv —
+  matches S2's field-day boundaries; month-*file bucketing* stays UTC, the floor
+  is only a fetch start). It fetches `[<this-month>-01, now]` for every tracked
+  channel, walks threads, upserts, does **not** tombstone (additive), and sets
+  `lastSync = now` per channel so the next plain run is incremental. Re-running
+  `init` when a cursor already exists is safe (upsert converges) but prints a
+  notice that plain `slack-sync` is the incremental path. This makes the very
+  first `npm run slack-sync init` produce a usable current-month mirror with zero
+  ceremony, and resolves the "what floor?" question for the common case.
+
+- **Backfill mode (`--backfill [--since YYYY-MM-DD]`).** The "reach further back
+  into history" escape hatch beyond what `init` pulls: fetch from `--since`
+  (default: the start of the current calendar month, same floor as `init`) up to
+  `now`, upserting every message and walking every thread. Backfill does **not**
+  tombstone (it's additive — absence over a huge range is not reliable deletion
+  signal). It sets `lastSync = now` per channel on success so the next incremental
+  run takes over.
 
 ### Incremental sync algorithm (per channel, concrete)
 
-1. Read `_sync.json` → `lastSync` (or treat as "never synced" → behave like a
-   small backfill from a recent floor, or require `--backfill` first; CLI prints
-   guidance).
+1. Read `_sync.json` → `lastSync`. If absent ("never synced"), **auto-run init**
+   for this channel (floor = first of the current calendar month) and print a
+   one-line notice, rather than erroring — so a bare `npm run slack-sync` works on
+   a fresh checkout. Explicit `init` always uses the current-month floor
+   regardless of cursor state.
 2. `windowStart = max(lastSync − WINDOW_DAYS, floor)`; `windowEnd = now`.
 3. Fetch raw history for `[windowStart, windowEnd]` (paged, `cache:"no-store"`).
 4. For each parent with `reply_count > 0` / a `thread_ts`, fetch
@@ -334,16 +348,18 @@ messages simply don't appear); the `deleted` tombstone is derived by
 ### `scripts/slack-sync.ts` (CLI)
 
 ```
+npm run slack-sync -- init                  # first run / reset: backfill from start of current month
 npm run slack-sync                          # incremental, all tracked channels, default window
+                                            #   (auto-runs init per channel if it has no cursor yet)
 npm run slack-sync -- --window 14           # widen the trailing re-fetch window
-npm run slack-sync -- --backfill            # full historical pull (default --since floor)
-npm run slack-sync -- --backfill --since 2026-02-01
-npm run slack-sync -- --channel field-qa    # restrict to one channel (optional)
+npm run slack-sync -- --backfill --since 2026-02-01   # reach further back into history
+npm run slack-sync -- --channel field-qa    # restrict to one channel (combinable with any mode)
 ```
 
 Behavior (mirrors `scripts/policy.ts` structure):
 - `process.loadEnvFile()` in a try/catch; `parseArgs(process.argv.slice(2))`.
-- Resolve mode (incremental vs `--backfill`) and per-channel windows.
+- Resolve mode (`init` / incremental / `--backfill`) and per-channel windows;
+  `init` and `--backfill` share the current-month floor as their default `--since`.
 - For each channel: compute window, `fetchRawMessages`, map to `StoredMessage`,
   `mergeMessages` into each affected month-file, write atomically, advance the
   cursor — all wrapped so one channel's failure doesn't abort the others.
@@ -429,9 +445,9 @@ Open questions to confirm before/with implementation:
 1. **Trailing window size** — default `WINDOW_DAYS = 7`. Big enough to catch
    typical late edits? (Edits to messages older than a week are rare but not
    impossible; backfill re-checks everything.)
-2. **Backfill floor / `--since` default** — pick the earliest date worth
-   mirroring (e.g. the earliest tracked-policy effective date) vs. requiring an
-   explicit `--since`.
+2. **Backfill floor / `--since` default** — *resolved:* both `init` and a
+   `--since`-less `--backfill` floor at the **first day of the current calendar
+   month** (Europe/Kyiv). Going further back is an explicit `--backfill --since`.
 3. **Local file cache** (`data/slack-files/`) — worth it given most files are
    read at most once? (Deferred; metadata-only for S1.)
 4. **Retention / pruning** of very old month-files — none in S1 (volume is small);
