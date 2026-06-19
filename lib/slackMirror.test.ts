@@ -83,6 +83,15 @@ describe("upsertMessages", () => {
     const result = upsertMessages(existing, [stored({ ts: "1.1", firstSeen: now, lastSeen: now })], now);
     expect(result["1.1"].deleted).toBeUndefined();
   });
+
+  it("omits absent optional fields rather than setting them to undefined", () => {
+    const now = "2026-06-11T00:00:00.000Z";
+    // stored() helper sets no files/thread_ts/edited by default
+    const result = upsertMessages({}, [stored({ ts: "1.1", firstSeen: now, lastSeen: now })], now);
+    expect("files" in result["1.1"]).toBe(false);
+    expect("thread_ts" in result["1.1"]).toBe(false);
+    expect("edited" in result["1.1"]).toBe(false);
+  });
 });
 
 describe("mergeMessages (upsert + tombstone)", () => {
@@ -108,6 +117,16 @@ describe("mergeMessages (upsert + tombstone)", () => {
     expect(result["1.1"].deleted).toBeUndefined();
     expect(result["1.2"].thread_ts).toBe("1.1");
     expect(Object.keys(result)).toHaveLength(2);
+  });
+
+  it("tombstones a message exactly at windowStart and exactly at now (inclusive bounds)", () => {
+    const existing = {
+      "a": stored({ ts: "a", isoTime: windowStart }),
+      "b": stored({ ts: "b", isoTime: now }),
+    };
+    const result = mergeMessages(existing, [], windowStart, now);
+    expect(result["a"].deleted).toBe(true);
+    expect(result["b"].deleted).toBe(true);
   });
 });
 
@@ -194,5 +213,41 @@ describe("readChannelMessages", () => {
 
   it("returns [] when the channel has no month files", () => {
     expect(readChannelMessages("datasets", { start: "2026-06-01", end: "2026-06-30" }, { baseDir })).toEqual([]);
+  });
+
+  it("includes tombstoned (deleted) messages in results", () => {
+    writeMonthFile(
+      "field-qa",
+      "2026-06",
+      {
+        version: 1,
+        channel: "field-qa",
+        month: "2026-06",
+        messages: { "1.0": stored({ ts: "1.0", isoTime: "2026-06-10T09:00:00.000Z", deleted: true }) },
+      },
+      { baseDir },
+    );
+    const msgs = readChannelMessages("field-qa", { start: "2026-06-01", end: "2026-06-30" }, { baseDir });
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].deleted).toBe(true);
+  });
+
+  it("sorts by realistic Slack ts ascending", () => {
+    writeMonthFile(
+      "field-qa",
+      "2026-06",
+      {
+        version: 1,
+        channel: "field-qa",
+        month: "2026-06",
+        messages: {
+          "1716200001.000000": stored({ ts: "1716200001.000000", isoTime: "2026-06-10T09:00:01.000Z" }),
+          "1716200000.000100": stored({ ts: "1716200000.000100", isoTime: "2026-06-10T09:00:00.000Z" }),
+        },
+      },
+      { baseDir },
+    );
+    const msgs = readChannelMessages("field-qa", { start: "2026-06-01", end: "2026-06-30" }, { baseDir });
+    expect(msgs.map((m) => m.ts)).toEqual(["1716200000.000100", "1716200001.000000"]);
   });
 });
