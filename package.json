@@ -15,7 +15,8 @@
     "fieldops": "node --conditions=react-server --import tsx scripts/fieldops.ts",
     "field-qa": "node --conditions=react-server --import tsx scripts/fieldQa.ts",
     "policy": "node --conditions=react-server --import tsx scripts/policy.ts",
-    "slack-sync": "node --conditions=react-server --import tsx scripts/slack-sync.ts"
+    "slack-sync": "node --conditions=react-server --import tsx scripts/slack-sync.ts",
+    "field-verdict": "node --conditions=react-server --import tsx scripts/field-verdict.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",
