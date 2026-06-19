@@ -74,11 +74,11 @@ async function main(): Promise<void> {
     videoMinutesByDate.set(d, (videoMinutesByDate.get(d) ?? 0) + v.duration / 60);
   }
 
-  // 3. #datasets notices — from the local Slack mirror (read-only).
-  const datasetMessages = readChannelMessages(DATASETS_CHANNEL, period).map((m) => ({
-    isoTime: m.isoTime,
-    text: m.text,
-  }));
+  // 3. #datasets notices — from the local Slack mirror (read-only). Drop
+  // tombstoned records: a retracted (deleted) notice must not count as posted.
+  const datasetMessages = readChannelMessages(DATASETS_CHANNEL, period)
+    .filter((m) => !m.deleted)
+    .map((m) => ({ isoTime: m.isoTime, text: m.text }));
 
   // 4. Resolutions (exceptions).
   const resolutions = readResolutions();
