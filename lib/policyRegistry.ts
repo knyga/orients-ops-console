@@ -6,6 +6,12 @@
  * Each obligation says who must post what, in which channel, on what cadence,
  * with how much grace, and over which effective date range. Effective ranges are
  * load-bearing because policies evolve over time.
+ *
+ * Source of truth: docs/operational-policies-changelog.md. Cadences, responsible
+ * parties and effective dates are derived from it; `channel` values are the real
+ * Orients channels (lib/slackChannels) where each post actually appears — budget
+ * status / inventory statistics in #order_writeoff, drone-remainder and datasets
+ * tied to field days in #field-qa / #datasets.
  */
 import type { Period } from "./period";
 
@@ -38,7 +44,7 @@ export const OBLIGATIONS: Obligation[] = [
     title: "Weekly budget status report",
     description:
       "Maryna publishes the weekly budget status every Monday for the prior week.",
-    channel: "budgets",
+    channel: "order_writeoff",
     responsible: ["Maryna"],
     cadence: { type: "weekly", weekday: 1 },
     gracePeriodWorkingDays: 1,
@@ -50,7 +56,7 @@ export const OBLIGATIONS: Obligation[] = [
     title: "Monthly budget status report",
     description:
       "Maryna publishes the monthly budget status by the 5th calendar day for the prior month.",
-    channel: "budgets",
+    channel: "order_writeoff",
     responsible: ["Maryna"],
     cadence: { type: "monthly", dueDay: 5 },
     gracePeriodWorkingDays: 1,
@@ -61,7 +67,7 @@ export const OBLIGATIONS: Obligation[] = [
     id: "stats-publication",
     title: "Tuesday statistics publication",
     description: "Khrystyna and Maryna publish the statistics every Tuesday.",
-    channel: "stats",
+    channel: "order_writeoff",
     responsible: ["Khrystyna", "Maryna"],
     cadence: { type: "weekly", weekday: 2 },
     gracePeriodWorkingDays: 1,
@@ -73,7 +79,7 @@ export const OBLIGATIONS: Obligation[] = [
     title: "Dynamic budget publication",
     description:
       "Maryna publishes the dynamic monthly budgets in the first half of each month (by the 15th).",
-    channel: "budgets",
+    channel: "order_writeoff",
     responsible: ["Maryna"],
     cadence: { type: "monthly", dueDay: 15 },
     gracePeriodWorkingDays: 1,
@@ -85,12 +91,24 @@ export const OBLIGATIONS: Obligation[] = [
     title: "Drone-remainder report",
     description:
       "Vlad (or delegate) posts the drone-remainder report within 1 working day of a flight day; without it the day's bonuses are not accrued.",
-    channel: "field-reports",
+    channel: "field-qa",
     responsible: ["Vlad"],
     cadence: { type: "per-event" },
     gracePeriodWorkingDays: 1,
     effectiveFrom: "2026-04-01",
-    keywords: ["drone", "дрон", "remainder", "залишок"],
+    keywords: ["drone", "дрон", "remainder", "залишок", "готові"],
+  },
+  {
+    id: "dataset-publication",
+    title: "Dataset publication",
+    description:
+      "Datasets are part of the recording-completeness requirement: published to Google Drive with a notice in #datasets within one working day of the flight day.",
+    channel: "datasets",
+    responsible: ["Field team"],
+    cadence: { type: "per-event" },
+    gracePeriodWorkingDays: 1,
+    effectiveFrom: "2026-04-01",
+    keywords: ["dataset", "датасет"],
   },
 ];
 
