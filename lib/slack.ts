@@ -141,11 +141,15 @@ export async function fetchMessages(period: Period): Promise<SlackMessage[]> {
       if (cursor) params.set("cursor", cursor);
       const page = await call<HistoryResponse>("conversations.history", params);
       for (const m of page.messages ?? []) {
-        if (!m.user) continue; // skip bot/system messages with no human author
+        // Include human messages and bot messages that carry text+files (e.g. the
+        // stats-bot daily summary). Pure system messages (no user AND no bot_id)
+        // are skipped to avoid noise.
+        if (!m.user && !m.bot_id) continue;
+        const authorId = m.user ?? m.bot_id ?? "";
         collected.push({
           channel: channel.name,
-          authorId: m.user,
-          author: users.get(m.user) ?? m.user,
+          authorId,
+          author: m.user ? (users.get(m.user) ?? m.user) : (m.bot_id ?? "bot"),
           ts: m.ts,
           isoTime: new Date(Number(m.ts) * 1000).toISOString(),
           text: m.text ?? "",

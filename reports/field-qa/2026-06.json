@@ -8,151 +8,119 @@
   "days": [
     {
       "date": "2026-06-01",
-      "flightHours": 3.67,
-      "windows": [
-        {
-          "start": "14:20",
-          "end": "18:00"
-        }
-      ],
-      "crew": "Л+Т",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780582897496689"
+      "flightHours": 0.61,
+      "airborneMinutes": 36.82,
+      "flights": 26,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780344008783869"
     },
     {
       "date": "2026-06-02",
-      "flightHours": 4.5,
-      "windows": [
-        {
-          "start": "12:30",
-          "end": "17:00"
-        }
-      ],
-      "crew": "А+Н",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780520781301069"
+      "flightHours": 0.92,
+      "airborneMinutes": 55.02,
+      "flights": 8,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780430409021629"
     },
     {
       "date": "2026-06-03",
-      "flightHours": 3,
-      "windows": [
-        {
-          "start": "15:30",
-          "end": "18:30"
-        }
-      ],
-      "crew": "Л+Т",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780582897496689"
+      "flightHours": 0.71,
+      "airborneMinutes": 42.75,
+      "flights": 16,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780516811815719"
     },
     {
       "date": "2026-06-04",
-      "flightHours": 4,
-      "windows": [
-        {
-          "start": "12:00",
-          "end": "16:00"
-        }
-      ],
-      "crew": "Л+В+Х",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780582897496689"
+      "flightHours": 0.54,
+      "airborneMinutes": 32.33,
+      "flights": 9,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780603208358109"
     },
     {
       "date": "2026-06-05",
-      "flightHours": 4.5,
-      "windows": [
-        {
-          "start": "12:30",
-          "end": "17:00"
-        }
-      ],
-      "crew": "А+Н",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780672214016099"
+      "flightHours": 0.97,
+      "airborneMinutes": 58.17,
+      "flights": 17,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780689608479089"
     },
     {
       "date": "2026-06-06",
-      "flightHours": 3.5,
-      "windows": [
-        {
-          "start": "14:30",
-          "end": "18:00"
-        }
-      ],
-      "crew": null,
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780762901345859"
+      "flightHours": 0.78,
+      "airborneMinutes": 46.95,
+      "flights": 5,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780776010082669"
+    },
+    {
+      "date": "2026-06-08",
+      "flightHours": 1.41,
+      "airborneMinutes": 84.7,
+      "flights": 9,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1780948811992399"
     },
     {
       "date": "2026-06-09",
-      "flightHours": 4.75,
-      "windows": [
-        {
-          "start": "14:00",
-          "end": "18:45"
-        }
-      ],
-      "crew": "Л+Н",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781259135290459"
+      "flightHours": 1.74,
+      "airborneMinutes": 104.42,
+      "flights": 14,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781035212427639"
     },
     {
       "date": "2026-06-10",
-      "flightHours": 5.33,
-      "windows": [
-        {
-          "start": "13:00",
-          "end": "18:20"
-        }
-      ],
-      "crew": "А+Д",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781107283192949"
+      "flightHours": 1.49,
+      "airborneMinutes": 89.43,
+      "flights": 15,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781121610550329"
+    },
+    {
+      "date": "2026-06-11",
+      "flightHours": 0.3,
+      "airborneMinutes": 17.9,
+      "flights": 1,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781208008024719"
+    },
+    {
+      "date": "2026-06-12",
+      "flightHours": 0.57,
+      "airborneMinutes": 34.12,
+      "flights": 19,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781294409086779"
     },
     {
       "date": "2026-06-13",
-      "flightHours": 7,
-      "windows": [
-        {
-          "start": "14:00",
-          "end": "21:00"
-        }
-      ],
-      "crew": "А+Серж",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781378992140129"
+      "flightHours": 0.34,
+      "airborneMinutes": 20.28,
+      "flights": 6,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781380807730499"
     },
     {
       "date": "2026-06-15",
-      "flightHours": 3,
-      "windows": [
-        {
-          "start": "18:20",
-          "end": "21:20"
-        }
-      ],
-      "crew": "А+Д",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781628250553239"
+      "flightHours": 0.36,
+      "airborneMinutes": 21.35,
+      "flights": 6,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781553610197199"
+    },
+    {
+      "date": "2026-06-16",
+      "flightHours": 0.61,
+      "airborneMinutes": 36.48,
+      "flights": 5,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781640011604529"
     },
     {
       "date": "2026-06-17",
-      "flightHours": 4,
-      "windows": [
-        {
-          "start": "14:20",
-          "end": "18:20"
-        }
-      ],
-      "crew": "А+Т",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781717278649729"
+      "flightHours": 0.34,
+      "airborneMinutes": 20.3,
+      "flights": 6,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781726409890369"
     },
     {
       "date": "2026-06-18",
-      "flightHours": 3.17,
-      "windows": [
-        {
-          "start": "15:20",
-          "end": "18:30"
-        }
-      ],
-      "crew": "А+Д",
-      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781798204640689"
+      "flightHours": 0.31,
+      "airborneMinutes": 18.5,
+      "flights": 7,
+      "permalink": "https://orientsai.slack.com/archives/C08GY2NKF9D/p1781812808880809"
     }
   ],
   "totals": {
-    "days": 12,
-    "flightHours": 50.42
+    "days": 16,
+    "flightHours": 12
   }
 }
