@@ -28,6 +28,10 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["--window", "-1"])).toThrow(/--window/);
     expect(() => parseArgs(["--window", "abc"])).toThrow(/--window/);
   });
+
+  it("accepts --window 0 (non-negative; disables the trailing re-fetch window)", () => {
+    expect(parseArgs(["--window", "0"]).window).toBe(0);
+  });
 });
 
 describe("firstOfMonth", () => {

@@ -51,7 +51,7 @@ export function firstOfMonth(today: string): string {
   return `${today.slice(0, 7)}-01`;
 }
 
-/** ISO timestamp `days` whole days before `iso`. */
+/** ISO timestamp `days` whole days before `iso`. Assumes a UTC ISO input (no DST math). */
 export function subtractDaysIso(iso: string, days: number): string {
   return new Date(new Date(iso).getTime() - days * 86_400_000).toISOString();
 }

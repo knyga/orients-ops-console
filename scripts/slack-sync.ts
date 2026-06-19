@@ -17,7 +17,7 @@
  * Runs only under Node with `--conditions=react-server` (see package.json) so the
  * `server-only` import in ../lib/slack resolves to its empty module.
  */
-import { fetchRawMessages, type RawSlackMessage } from "../lib/slack";
+import { fetchRawMessages } from "../lib/slack";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
 import { TRACKED_CHANNELS, type SlackChannel } from "../lib/slackChannels";
 import {
@@ -65,9 +65,11 @@ async function syncChannel(
   let tombstone: boolean;
   if (isInit) {
     if (autoInit) {
-      process.stderr.write(`slack-sync: ${channel.name} — no cursor, initializing from ${firstOfMonth(today)}\n`);
-    } else if (cursor) {
-      process.stderr.write(`slack-sync: ${channel.name} — re-initializing (use plain slack-sync for incremental)\n`);
+      process.stderr.write(`slack-sync: ${channel.name} — no cursor, auto-initializing from ${firstOfMonth(today)}\n`);
+    } else if (!cursor) {
+      process.stderr.write(`slack-sync: ${channel.name} — initializing from ${firstOfMonth(today)}\n`);
+    } else {
+      process.stderr.write(`slack-sync: ${channel.name} — re-initializing from ${firstOfMonth(today)} (use plain slack-sync for incremental)\n`);
     }
     windowStartIso = `${firstOfMonth(today)}T00:00:00.000Z`;
     tombstone = false;
@@ -82,7 +84,7 @@ async function syncChannel(
 
   const startDate = windowStartIso.slice(0, 10);
   const raw = await fetchRawMessages({ start: startDate, end: today }, [channel]);
-  const fetched: StoredMessage[] = raw.map((r: RawSlackMessage) => ({
+  const fetched: StoredMessage[] = raw.map((r) => ({
     ...r,
     firstSeen: now,
     lastSeen: now,
