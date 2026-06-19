@@ -85,6 +85,40 @@ export function videoUploadDate(createdTime: string): string {
   return dayFormatter.format(parsed);
 }
 
+// Match YYYY-MM-DD or YYYYMMDD anywhere in the name. Capture the parts so we can
+// validate the calendar date (a real date, not e.g. WIN_20261399).
+const NAME_DATE_RE = /(\d{4})-(\d{2})-(\d{2})|(\d{4})(\d{2})(\d{2})/;
+
+function validDate(y: number, m: number, d: number): string | null {
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  // Reject impossible day-of-month (e.g. 2026-02-31) via round-trip.
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) {
+    return null;
+  }
+  const mm = String(m).padStart(2, "0");
+  const dd = String(d).padStart(2, "0");
+  return `${y}-${mm}-${dd}`;
+}
+
+/**
+ * The flight day a video belongs to. Uploads lag the flight by up to the grace
+ * window, so the flight date is taken from the video NAME — two observed formats,
+ * `Recording YYYY-MM-DD …` and `WIN_YYYYMMDD_…`. Falls back to the Kyiv upload
+ * date only when the name carries no parseable calendar date.
+ * See docs/.../field-day-acceptance spec + memory video-name-carries-flight-date.
+ */
+export function videoFlightDate(name: string, createdTime: string): string {
+  const m = NAME_DATE_RE.exec(name ?? "");
+  if (m) {
+    const iso = m[1]
+      ? validDate(Number(m[1]), Number(m[2]), Number(m[3]))
+      : validDate(Number(m[4]), Number(m[5]), Number(m[6]));
+    if (iso) return iso;
+  }
+  return videoUploadDate(createdTime);
+}
+
 interface DayAccumulator {
   videoCount: number;
   recordedSeconds: number;
