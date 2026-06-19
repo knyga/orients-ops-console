@@ -6,6 +6,7 @@ import {
   mergeMessages,
   monthFilePath,
   monthsInPeriod,
+  readChannelMessages,
   readMonthFile,
   readSyncCursor,
   syncFilePath,
@@ -141,5 +142,57 @@ describe("month-file + cursor I/O", () => {
       version: 1,
       lastSync: "2026-06-12T00:00:00.000Z",
     });
+  });
+});
+
+describe("readChannelMessages", () => {
+  let baseDir: string;
+  beforeEach(() => {
+    baseDir = mkdtempSync(join(tmpdir(), "slack-mirror-"));
+  });
+  afterEach(() => {
+    rmSync(baseDir, { recursive: true, force: true });
+  });
+
+  it("reads across month boundaries, filters by [start,end], sorts by ts", () => {
+    writeMonthFile(
+      "field-qa",
+      "2026-05",
+      {
+        version: 1,
+        channel: "field-qa",
+        month: "2026-05",
+        messages: {
+          "1.0": stored({ ts: "1.0", isoTime: "2026-05-30T09:00:00.000Z" }),
+        },
+      },
+      { baseDir },
+    );
+    writeMonthFile(
+      "field-qa",
+      "2026-06",
+      {
+        version: 1,
+        channel: "field-qa",
+        month: "2026-06",
+        messages: {
+          "3.0": stored({ ts: "3.0", isoTime: "2026-06-02T09:00:00.000Z" }),
+          "2.0": stored({ ts: "2.0", isoTime: "2026-06-01T09:00:00.000Z" }),
+          "9.0": stored({ ts: "9.0", isoTime: "2026-06-25T09:00:00.000Z" }), // outside end
+        },
+      },
+      { baseDir },
+    );
+
+    const msgs = readChannelMessages(
+      "field-qa",
+      { start: "2026-05-31", end: "2026-06-15" },
+      { baseDir },
+    );
+    expect(msgs.map((m) => m.ts)).toEqual(["2.0", "3.0"]); // 1.0 before start, 9.0 after end
+  });
+
+  it("returns [] when the channel has no month files", () => {
+    expect(readChannelMessages("datasets", { start: "2026-06-01", end: "2026-06-30" }, { baseDir })).toEqual([]);
   });
 });
