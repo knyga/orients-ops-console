@@ -149,4 +149,8 @@ describe("videoFlightDate", () => {
   it("ignores an out-of-range fake date in the name and falls back", () => {
     expect(videoFlightDate("project_20261399_x", "2026-06-18T09:00:00Z")).toBe("2026-06-18");
   });
+
+  it("skips a leading invalid date-run and uses a later valid one in the name", () => {
+    expect(videoFlightDate("20261399_WIN_20260616_17_39", "2026-06-18T09:00:00Z")).toBe("2026-06-16");
+  });
 });

@@ -37,4 +37,9 @@ describe("hasDatasetNotice", () => {
     const msgs = [msg({ text: "що там по 2026-06-16?", isoTime: "2026-06-16T10:00:00Z" })];
     expect(hasDatasetNotice(msgs, "2026-06-16", "2026-06-19")).toBe(false);
   });
+
+  it("does not let a longer number satisfy the DD.MM form (116.069 ≠ 16.06)", () => {
+    const msgs = [msg({ text: "датасет на 116.069 точок завантажено", isoTime: "2026-06-16T10:00:00Z" })];
+    expect(hasDatasetNotice(msgs, "2026-06-16", "2026-06-19")).toBe(false);
+  });
 });

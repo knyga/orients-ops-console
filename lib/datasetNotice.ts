@@ -14,9 +14,9 @@ export interface NoticeMessage {
   text: string;
 }
 
-// "датасет"/"dataset" (incl. Ukrainian cases), or an explicit "немає датасету".
-const DATASET_KEYWORD = /датасет|dataset|немає\s+датасет/i;
-const NO_DATASET = /немає\s+датасет|no\s+dataset/i;
+// "датасет"/"dataset" (incl. the Ukrainian "немає датасету" / English "no
+// dataset" negative notice — both already contain the keyword stem).
+const DATASET_KEYWORD = /датасет|dataset/i;
 
 /** All written forms of `date` (YYYY-MM-DD) a human might use. */
 function dateNeedles(date: string): string[] {
@@ -28,8 +28,18 @@ function dateNeedles(date: string): string[] {
   ];
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * True when `text` contains the date as a standalone token — bounded by
+ * non-digits — so a longer number like `116.069` cannot satisfy `16.06`.
+ */
 function referencesDate(text: string, date: string): boolean {
-  return dateNeedles(date).some((needle) => text.includes(needle));
+  return dateNeedles(date).some((needle) =>
+    new RegExp(`(?<!\\d)${escapeRegExp(needle)}(?!\\d)`).test(text),
+  );
 }
 
 /**
@@ -46,7 +56,7 @@ export function hasDatasetNotice(
     const day = m.isoTime.slice(0, 10);
     if (day < date || day > windowEnd) continue;
     if (!referencesDate(m.text, date)) continue;
-    if (DATASET_KEYWORD.test(m.text) || NO_DATASET.test(m.text)) return true;
+    if (DATASET_KEYWORD.test(m.text)) return true;
   }
   return false;
 }

@@ -86,8 +86,9 @@ export function videoUploadDate(createdTime: string): string {
 }
 
 // Match YYYY-MM-DD or YYYYMMDD anywhere in the name. Capture the parts so we can
-// validate the calendar date (a real date, not e.g. WIN_20261399).
-const NAME_DATE_RE = /(\d{4})-(\d{2})-(\d{2})|(\d{4})(\d{2})(\d{2})/;
+// validate the calendar date (a real date, not e.g. WIN_20261399). Global so we
+// can try every date-like run and take the first that is a real calendar date.
+const NAME_DATE_RE = /(\d{4})-(\d{2})-(\d{2})|(\d{4})(\d{2})(\d{2})/g;
 
 function validDate(y: number, m: number, d: number): string | null {
   if (m < 1 || m > 12 || d < 1 || d > 31) return null;
@@ -109,8 +110,9 @@ function validDate(y: number, m: number, d: number): string | null {
  * See docs/.../field-day-acceptance spec + memory video-name-carries-flight-date.
  */
 export function videoFlightDate(name: string, createdTime: string): string {
-  const m = NAME_DATE_RE.exec(name ?? "");
-  if (m) {
+  // Try every date-like run; return the first that is a real calendar date, so a
+  // spurious leading digit run before the true date doesn't force the fallback.
+  for (const m of (name ?? "").matchAll(NAME_DATE_RE)) {
     const iso = m[1]
       ? validDate(Number(m[1]), Number(m[2]), Number(m[3]))
       : validDate(Number(m[4]), Number(m[5]), Number(m[6]));
