@@ -6,8 +6,13 @@ import {
   mergeMessages,
   monthFilePath,
   monthsInPeriod,
+  readMonthFile,
+  readSyncCursor,
   syncFilePath,
   upsertMessages,
+  writeMonthFile,
+  writeSyncCursor,
+  type MonthFile,
   type StoredMessage,
 } from "./slackMirror";
 
@@ -102,5 +107,39 @@ describe("mergeMessages (upsert + tombstone)", () => {
     expect(result["1.1"].deleted).toBeUndefined();
     expect(result["1.2"].thread_ts).toBe("1.1");
     expect(Object.keys(result)).toHaveLength(2);
+  });
+});
+
+describe("month-file + cursor I/O", () => {
+  let baseDir: string;
+  beforeEach(() => {
+    baseDir = mkdtempSync(join(tmpdir(), "slack-mirror-"));
+  });
+  afterEach(() => {
+    rmSync(baseDir, { recursive: true, force: true });
+  });
+
+  it("writeMonthFile then readMonthFile round-trips (creating dirs)", () => {
+    const file: MonthFile = {
+      version: 1,
+      channel: "field-qa",
+      month: "2026-06",
+      messages: { "1.1": stored({ ts: "1.1" }) },
+    };
+    writeMonthFile("field-qa", "2026-06", file, { baseDir });
+    expect(readMonthFile("field-qa", "2026-06", { baseDir })).toEqual(file);
+  });
+
+  it("readMonthFile returns null for an absent file", () => {
+    expect(readMonthFile("field-qa", "1999-01", { baseDir })).toBeNull();
+  });
+
+  it("sync cursor round-trips; missing cursor → null", () => {
+    expect(readSyncCursor("field-qa", { baseDir })).toBeNull();
+    writeSyncCursor("field-qa", "2026-06-12T00:00:00.000Z", { baseDir });
+    expect(readSyncCursor("field-qa", { baseDir })).toEqual({
+      version: 1,
+      lastSync: "2026-06-12T00:00:00.000Z",
+    });
   });
 });
