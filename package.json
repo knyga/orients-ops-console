@@ -16,7 +16,8 @@
     "field-qa": "node --conditions=react-server --import tsx scripts/fieldQa.ts",
     "policy": "node --conditions=react-server --import tsx scripts/policy.ts",
     "slack-sync": "node --conditions=react-server --import tsx scripts/slack-sync.ts",
-    "field-verdict": "node --conditions=react-server --import tsx scripts/field-verdict.ts"
+    "field-verdict": "node --conditions=react-server --import tsx scripts/field-verdict.ts",
+    "field-publish": "node --conditions=react-server --import tsx scripts/field-publish.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",

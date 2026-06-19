@@ -303,3 +303,33 @@ export async function downloadFileBase64(
   const buf = Buffer.from(await res.arrayBuffer());
   return { base64: buf.toString("base64"), mediaType };
 }
+
+/**
+ * Post a message to a channel via chat.postMessage. SERVER-ONLY; needs the
+ * `chat:write` scope (the bot must be a member of the channel). This is the ONLY
+ * outward-facing write in the console — callers gate it behind an explicit
+ * --publish flag (dry-run is the default). Throws SlackError (e.g. missing_scope
+ * → "not_in_channel"/"missing_scope") on failure; returns the posted ts.
+ */
+export async function postMessage(channelId: string, text: string): Promise<string> {
+  const res = await fetch(`${API}/chat.postMessage`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token()}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    cache: "no-store",
+    body: JSON.stringify({ channel: channelId, text }),
+  });
+  if (!res.ok) {
+    throw new SlackError(`Slack chat.postMessage returned ${res.status} ${res.statusText}`, res.status);
+  }
+  const body = (await res.json()) as SlackOk & { ts?: string };
+  if (!body.ok) {
+    throw new SlackError(
+      `Slack chat.postMessage error: ${body.error ?? "unknown"} (is the chat:write scope granted and the bot in the channel?)`,
+      502,
+    );
+  }
+  return body.ts ?? "";
+}
