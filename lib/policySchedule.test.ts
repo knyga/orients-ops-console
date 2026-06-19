@@ -4,6 +4,7 @@ import {
   addWorkingDays,
   buildSchedule,
   isWorkingDay,
+  unconfiguredObligations,
   type SlackMessage,
 } from "./policySchedule";
 
@@ -128,5 +129,19 @@ describe("buildSchedule", () => {
     expect(occ?.windowStart).toBe("2026-05-10");
     expect(occ?.candidates).toHaveLength(0);
     expect(occ?.status).toBe("MISSING");
+  });
+});
+
+describe("unconfiguredObligations", () => {
+  it("flags obligations whose channel is not in the tracked set", () => {
+    const tracked: Obligation = { ...weekly, id: "ok", channel: "field-qa" };
+    const orphan: Obligation = { ...weekly, id: "orphan", channel: "budgets" };
+    expect(
+      unconfiguredObligations([tracked, orphan], ["field-qa", "datasets"]),
+    ).toEqual([{ obligationId: "orphan", channel: "budgets" }]);
+  });
+
+  it("returns empty when every obligation channel is tracked", () => {
+    expect(unconfiguredObligations([weekly], ["budgets"])).toEqual([]);
   });
 });

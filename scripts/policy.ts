@@ -19,8 +19,9 @@
  */
 import { readFileSync } from "node:fs";
 import { fetchMessages } from "../lib/slack";
-import { buildSchedule } from "../lib/policySchedule";
+import { buildSchedule, unconfiguredObligations } from "../lib/policySchedule";
 import { OBLIGATIONS } from "../lib/policyRegistry";
+import { TRACKED_CHANNELS } from "../lib/slackChannels";
 import { writeReport } from "../lib/reports";
 import {
   applyVerdicts,
@@ -49,6 +50,20 @@ async function main(): Promise<void> {
 
   const args = parseArgs(process.argv.slice(2));
   const period = resolvePeriod(args, todayUtc());
+
+  // Loud guard: an obligation pointing at an untracked channel can never gather
+  // evidence, so its occurrences would silently read MISSING/PENDING. Surface it.
+  const unconfigured = unconfiguredObligations(
+    OBLIGATIONS,
+    TRACKED_CHANNELS.map((c) => c.name),
+  );
+  if (unconfigured.length > 0) {
+    process.stderr.write(
+      `policy: WARNING — ${unconfigured.length} obligation(s) reference channels not in lib/slackChannels; ` +
+        `their occurrences are NOT real (no message can match):\n` +
+        unconfigured.map((u) => `  - ${u.obligationId} → #${u.channel}\n`).join(""),
+    );
+  }
 
   const messages = await fetchMessages(period);
   const schedule = buildSchedule(OBLIGATIONS, messages, period, todayUtc());
