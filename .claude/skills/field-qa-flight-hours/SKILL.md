@@ -1,21 +1,22 @@
 ---
 name: field-qa-flight-hours
-description: Use when answering questions about field drone flight hours, or when asked to extract/refresh flight hours from the #field-qa Slack channel for a date range (e.g. "how many flight hours in June?", "pull May's flight hours from field-qa", "update the flight-hours input for last month"). Extracts hours from Ukrainian "Звіт" reports via Claude and writes the input the field-ops reconciliation consumes.
+description: Use when answering questions about field drone flight hours, or when asked to extract/refresh flight hours from the #field-qa Slack channel for a date range (e.g. "how many flight hours in June?", "pull May's flight hours from field-qa", "update the flight-hours input for last month"). Reads airborne time from the stats-bot daily summary image via Claude vision and writes the input the field-ops reconciliation consumes.
 ---
 
 # Field-QA flight hours
 
-Extract per-day drone flight hours from #field-qa Slack reports and feed the
-field-ops reconciliation.
+Extract per-day drone flight hours from #field-qa Slack stats-bot summary images
+and feed the field-ops reconciliation.
 
 ## Domain (must-know)
 
-- Flight hours live in #field-qa daily reports that begin with `Звіт <DD.MM.YYYY>`
-  (Ukrainian). Hours = the sum of the `HH:MM-HH:MM` window(s) on the crew line
-  (e.g. `А+Д 15:20-18:30` = 3.17h). Multiple windows in a day are summed.
+- Flight hours come from the stats-bot's daily `Статистика польотів за <date>`
+  summary **image** posted in #field-qa. The relevant field is `Час в повітрі`
+  (airborne time). The image is downloaded via the Slack `files:read` scope and
+  read with Claude vision.
 - Extraction is **LLM-based** (claude-sonnet-4-6), so it is non-deterministic —
   always review before the numbers feed the gate.
-- The flight day is the report's stated date, not the Slack post time.
+- The flight day is the date stated in the bot image caption, not the Slack post time.
 
 ## When to use
 
@@ -36,9 +37,11 @@ npm run field-qa -- --start 2026-06-01 --end 2026-06-18 --write
 `--write` produces:
 - `reports/field-ops/inputs/<period>.csv` — `date,flight_hours`, consumed by
   `npm run fieldops`.
-- `reports/field-qa/<period>.json` — provenance: per-day hours, windows, crew,
-  and a permalink back to the source Slack message (also shown on the Field QA
-  web tab).
+- `reports/field-qa/<period>.json` — provenance: per-day hours, airborne minutes,
+  flight count, and a permalink back to the source Slack message (also shown on
+  the Field QA web tab). Shape: `{ period, sourceChannel, days: [{ date,
+  flightHours, airborneMinutes, flights, permalink }], totals: { days,
+  flightHours } }`.
 
 Workflow: `field-qa --write` → review the git diff / web tab → `npm run fieldops
 -- … --write` to reconcile against Vimeo.
