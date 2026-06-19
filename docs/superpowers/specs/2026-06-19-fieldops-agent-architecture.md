@@ -87,6 +87,14 @@ auditable/reversible; final human (Oleksandr/Bogdan) confirmation per policy.
 S1 (mirror) → S2 (flight time) → S3 (verdict + resolutions) → then the guarded
 outward layer S4/S5/S6 together (shared posting infra). Each ships independently.
 
+**Status (2026-06-19): ALL SHIPPED to `main`.** S1 ✓ (`slack-sync`), S2 ✓
+(`field-qa`), S3 ✓ (`field-verdict` + resolutions store), S4 ✓ (`field-publish`,
+dry-run), S5 ✓ (`field-ask`, dry-run), S6 ✓ (`field-remember`, dry-run). The full
+loop SYNC→DERIVE→VERDICT→PUBLISH→ASK→INGEST→REMEMBER runs end-to-end in dry-run.
+**Remaining to go live:** add the bot's `chat:write` scope (+ reinstall), review
+the dry-run output, then run the outward CLIs with `--publish`/`--write` (start in
+a private test channel before #field-qa).
+
 ## Open decisions
 
 1. ~~Mirror git policy~~ — RESOLVED: raw git-ignored + derived/resolutions
