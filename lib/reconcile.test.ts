@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateByDay,
   summarize,
+  videoFlightDate,
   videoUploadDate,
   type FlightDay,
   type ReconVideo,
@@ -128,5 +129,28 @@ describe("aggregateByDay — multi-day aggregation", () => {
       "2026-04-03",
       "2026-04-05",
     ]);
+  });
+});
+
+describe("videoFlightDate", () => {
+  it("parses the `Recording YYYY-MM-DD …` name format", () => {
+    expect(videoFlightDate("Recording 2026-06-16 195102", "2026-06-18T09:00:00Z")).toBe("2026-06-16");
+  });
+
+  it("parses the `WIN_YYYYMMDD_…` name format", () => {
+    expect(videoFlightDate("WIN_20260616_17_39_24_Pro", "2026-06-18T09:00:00Z")).toBe("2026-06-16");
+  });
+
+  it("falls back to the Kyiv upload date when the name has no date", () => {
+    // 2026-06-18T22:30:00Z is 2026-06-19 01:30 in Kyiv (UTC+3)
+    expect(videoFlightDate("clip-final", "2026-06-18T22:30:00Z")).toBe("2026-06-19");
+  });
+
+  it("ignores an out-of-range fake date in the name and falls back", () => {
+    expect(videoFlightDate("project_20261399_x", "2026-06-18T09:00:00Z")).toBe("2026-06-18");
+  });
+
+  it("skips a leading invalid date-run and uses a later valid one in the name", () => {
+    expect(videoFlightDate("20261399_WIN_20260616_17_39", "2026-06-18T09:00:00Z")).toBe("2026-06-16");
   });
 });

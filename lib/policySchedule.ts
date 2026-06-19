@@ -12,6 +12,9 @@
  */
 import { activeObligations, type Obligation } from "./policyRegistry";
 import type { Period } from "./period";
+import { addWorkingDays, isoWeekday } from "./workdays";
+
+export { addWorkingDays, isWorkingDay } from "./workdays";
 
 /** A file attached to a Slack message (subset of fields we use). */
 export interface SlackFile {
@@ -82,28 +85,6 @@ function parseDay(day: string): Date {
 
 function fmtDay(date: Date): string {
   return date.toISOString().slice(0, 10);
-}
-
-/** ISO weekday: 1=Mon … 7=Sun. */
-function isoWeekday(day: string): number {
-  const dow = parseDay(day).getUTCDay(); // 0=Sun … 6=Sat
-  return dow === 0 ? 7 : dow;
-}
-
-export function isWorkingDay(day: string): boolean {
-  const wd = isoWeekday(day);
-  return wd >= 1 && wd <= 5;
-}
-
-/** Add `n` working days (Mon–Fri) to a YYYY-MM-DD date; n=0 returns the input. */
-export function addWorkingDays(day: string, n: number): string {
-  const date = parseDay(day);
-  let added = 0;
-  while (added < n) {
-    date.setUTCDate(date.getUTCDate() + 1);
-    if (isWorkingDay(fmtDay(date))) added += 1;
-  }
-  return fmtDay(date);
 }
 
 /** Inclusive list of YYYY-MM-DD dates from start to end. */
