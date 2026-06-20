@@ -15,6 +15,8 @@ export interface PublishedEntry {
   channel: string;    // tracked channel NAME the verdict was posted to
   text: string;       // the exact message posted
   postedAt: string;   // ISO
+  /** Slack ts of the posted verdict — the thread root approvers reply under. */
+  ts: string;
 }
 
 /** date → entry. */

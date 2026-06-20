@@ -97,6 +97,7 @@ async function main(): Promise<void> {
       channel: channel.name,
       text: item.text,
       postedAt: new Date().toISOString(),
+      ts,
     });
     writePublished(period, nextLog); // persist after each post so a mid-run failure is not lost
     posted += 1;

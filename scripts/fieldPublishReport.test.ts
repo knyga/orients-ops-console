@@ -33,7 +33,7 @@ describe("parseArgs / resolvePeriod", () => {
 describe("buildPlan / pendingItems", () => {
   it("includes settled days, marks already-published, excludes PENDING", () => {
     const days = [day({ date: "2026-06-18", status: "ACCEPTED" }), day({ date: "2026-06-17", status: "PENDING" }), day({ date: "2026-06-13", status: "NEEDS_REVIEW", reasons: ["x"] })];
-    const log: PublishedLog = { "2026-06-18": { date: "2026-06-18", channel: "field-qa", text: "...", postedAt: "2026-06-20T00:00:00Z" } };
+    const log: PublishedLog = { "2026-06-18": { date: "2026-06-18", channel: "field-qa", text: "...", postedAt: "2026-06-20T00:00:00Z", ts: "1.1" } };
     const plan = buildPlan(days, log);
     expect(plan.map((p) => p.date)).toEqual(["2026-06-18", "2026-06-13"]); // no PENDING
     expect(plan.find((p) => p.date === "2026-06-18")?.alreadyPublished).toBe(true);

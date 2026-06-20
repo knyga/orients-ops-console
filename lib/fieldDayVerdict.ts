@@ -11,7 +11,7 @@
 import { MIN_RATIO } from "./reconcile";
 import { addWorkingDays } from "./workdays";
 
-export type VerdictStatus = "ACCEPTED" | "PENDING" | "NEEDS_REVIEW" | "ACCEPTED_EXCEPTION";
+export type VerdictStatus = "ACCEPTED" | "PENDING" | "NEEDS_REVIEW" | "ACCEPTED_EXCEPTION" | "REJECTED";
 
 export interface VerdictInput {
   flightDate: string;        // YYYY-MM-DD
