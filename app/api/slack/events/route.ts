@@ -42,10 +42,12 @@ interface SlackEventBody {
 
 export async function POST(req: Request): Promise<Response> {
   const raw = await req.text(); // raw body is required for signature verification
+  console.log("slack events: POST received");
 
   const signingSecret = process.env.SLACK_SIGNING_SECRET;
   if (!signingSecret) {
     // Misconfiguration, not a client error — fail closed.
+    console.error("slack events: SLACK_SIGNING_SECRET not set");
     return new Response("server not configured", { status: 500 });
   }
   const ok = verifySlackSignature({
@@ -55,7 +57,10 @@ export async function POST(req: Request): Promise<Response> {
     rawBody: raw,
     nowSec: Math.floor(Date.now() / 1000),
   });
-  if (!ok) return new Response("bad signature", { status: 401 });
+  if (!ok) {
+    console.warn("slack events: signature verification FAILED");
+    return new Response("bad signature", { status: 401 });
+  }
 
   let body: SlackEventBody;
   try {
@@ -71,6 +76,9 @@ export async function POST(req: Request): Promise<Response> {
   if (body.type !== "event_callback") return new Response("ok");
 
   const e = body.event;
+  console.log(
+    `slack events: event type=${e?.type} subtype=${e?.subtype ?? "-"} bot=${e?.bot_id ?? "-"} user=${e?.user ?? "-"} ch=${e?.channel ?? "-"} thread_ts=${e?.thread_ts ?? "-"} ts=${e?.ts ?? "-"}`,
+  );
   // Only human thread REPLIES in a tracked channel: a message with a thread_ts
   // pointing at a different (parent) ts, authored by a user, no edit/delete
   // subtype, and not the bot's own post (avoid reacting to our own acks).
@@ -85,8 +93,11 @@ export async function POST(req: Request): Promise<Response> {
     e.channel
   ) {
     const channel = TRACKED_CHANNELS.find((c) => c.id === e.channel);
-    if (channel) {
+    if (!channel) {
+      console.log(`slack events: channel ${e.channel} not tracked — ignoring`);
+    } else {
       const channelId = channel.id;
+      const channelName = channel.name;
       const replyPermalink = permalinkFor(channelId, e.ts);
       const replyText = e.text ?? "";
       const userId = e.user;
@@ -99,12 +110,14 @@ export async function POST(req: Request): Promise<Response> {
       // The effect is idempotent, so the lost-on-error retry guarantee isn't
       // needed (the field-approvals/field-remember CLIs remain a backstop).
       after(async () => {
+        console.log(`slack events: after() handling thread_ts=${threadTs} user=${userId} #${channelName}`);
         try {
           // S7: an authorized approver overriding a published verdict.
           const pub = await findPublishedByTs(threadTs);
+          console.log(`slack events: findPublishedByTs → ${pub ? pub.entry.date : "null"}; isApprover(${userId})=${isApprover(userId)}`);
           if (pub && isApprover(userId)) {
             const approver = approverFor(userId)!;
-            await applyApproverReply({
+            const result = await applyApproverReply({
               entry: pub.entry,
               period: pub.period,
               replyText,
@@ -112,6 +125,7 @@ export async function POST(req: Request): Promise<Response> {
               replyPermalink,
               replyTs,
             });
+            console.log(`slack events: applyApproverReply → applied=${result.applied} alreadyAcked=${result.alreadyAcked}`);
             return;
           }
           // S6: a reply to one of the bot's S5 questions.
@@ -123,19 +137,22 @@ export async function POST(req: Request): Promise<Response> {
               replyText,
               replyPermalink,
             });
+            console.log(`slack events: applyAnswerReply done for ${ask.record.date}`);
             return;
           }
           // Reached only for a thread reply in a tracked channel that matches
           // neither a published verdict nor a bot question — log it (low volume;
           // e.g. a verdict published before the Postgres migration has no row).
           console.log(
-            `slack events: no published verdict or ask for thread_ts=${threadTs} (reply by ${userId} in #${channel.name}) — ignoring`,
+            `slack events: no published verdict or ask for thread_ts=${threadTs} (reply by ${userId} in #${channelName}) — ignoring`,
           );
         } catch (err) {
           console.error("slack events handler failed:", err);
         }
       });
     }
+  } else {
+    console.log("slack events: event did not match the thread-reply filter — ignoring");
   }
 
   return new Response("ok"); // ack immediately; the work runs in after()
