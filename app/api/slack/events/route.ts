@@ -11,6 +11,7 @@
  * Idempotent: the override marker / ask-state guards make Slack's at-least-once
  * re-delivery a no-op. SERVER-ONLY route (token + Claude live here, never browser).
  */
+import { after } from "next/server";
 import { verifySlackSignature } from "@/lib/slackSignature";
 import { TRACKED_CHANNELS } from "@/lib/slackChannels";
 import { findPublishedByTs } from "@/lib/published";
@@ -85,35 +86,50 @@ export async function POST(req: Request): Promise<Response> {
   ) {
     const channel = TRACKED_CHANNELS.find((c) => c.id === e.channel);
     if (channel) {
-      const replyPermalink = permalinkFor(channel.id, e.ts);
+      const channelId = channel.id;
+      const replyPermalink = permalinkFor(channelId, e.ts);
       const replyText = e.text ?? "";
+      const userId = e.user;
+      const threadTs = e.thread_ts;
+      const replyTs = e.ts;
 
-      // S7: an authorized approver overriding a published verdict.
-      const pub = await findPublishedByTs(e.thread_ts);
-      if (pub && isApprover(e.user)) {
-        const approver = approverFor(e.user)!;
-        await applyApproverReply({
-          entry: pub.entry,
-          period: pub.period,
-          replyText,
-          approverName: approver.name,
-          replyPermalink,
-          replyTs: e.ts,
-        });
-      } else {
-        // S6: a reply to one of the bot's S5 questions.
-        const ask = await findAskByTs(e.thread_ts);
-        if (ask) {
-          await applyAnswerReply({
-            record: ask.record,
-            period: ask.period,
-            replyText,
-            replyPermalink,
-          });
+      // Defer the slow work (Neon lookup + Claude classify + Slack edit/ack) so
+      // we ack Slack within its 3s window — otherwise Slack retries and can
+      // disable delivery. `after` runs the callback once the response is sent.
+      // The effect is idempotent, so the lost-on-error retry guarantee isn't
+      // needed (the field-approvals/field-remember CLIs remain a backstop).
+      after(async () => {
+        try {
+          // S7: an authorized approver overriding a published verdict.
+          const pub = await findPublishedByTs(threadTs);
+          if (pub && isApprover(userId)) {
+            const approver = approverFor(userId)!;
+            await applyApproverReply({
+              entry: pub.entry,
+              period: pub.period,
+              replyText,
+              approverName: approver.name,
+              replyPermalink,
+              replyTs,
+            });
+            return;
+          }
+          // S6: a reply to one of the bot's S5 questions.
+          const ask = await findAskByTs(threadTs);
+          if (ask) {
+            await applyAnswerReply({
+              record: ask.record,
+              period: ask.period,
+              replyText,
+              replyPermalink,
+            });
+          }
+        } catch (err) {
+          console.error("slack events handler failed:", err);
         }
-      }
+      });
     }
   }
 
-  return new Response("ok"); // ack fast; the work above is one Claude call (~1–2s)
+  return new Response("ok"); // ack immediately; the work runs in after()
 }
