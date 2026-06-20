@@ -43,7 +43,7 @@ async function main(): Promise<void> {
   const today = todayInFieldTz();
   const period: Period = resolvePeriod(args, today);
 
-  let log = readAsks(period);
+  let log = await readAsks(period);
   const askedKeys = Object.keys(log).filter((k) => log[k].state === "ASKED");
   if (askedKeys.length === 0) {
     process.stderr.write(`field-remember: no ASKED questions for ${period.start}…${period.end} (run \`npm run field-ask\` first).\n`);
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   for (const key of askedKeys) {
     const record = log[key];
     // Threaded replies to the bot's question (exclude the question itself + tombstones).
-    const replies = readChannelMessages(record.channel, readWindow).filter(
+    const replies = (await readChannelMessages(record.channel, readWindow)).filter(
       (m) => m.thread_ts === record.askedTs && m.ts !== record.askedTs && !m.deleted,
     );
 
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
 
     if (args.write) {
       if (outcome.writeException) {
-        upsertResolution({
+        await upsertResolution({
           date: record.date,
           decision: "accepted_exception",
           note: outcome.note,
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
   }
 
   if (args.write) {
-    writeAsks(period, log);
+    await writeAsks(period, log);
     process.stderr.write(`field-remember: applied ${transitions} state change(s), wrote ${resolutionsWritten} exception(s).\n`);
   } else {
     process.stderr.write("field-remember: DRY RUN — no resolutions or ask states were written. Re-run with --write to apply.\n");

@@ -94,12 +94,12 @@ async function main(): Promise<void> {
   }
 
   if (args.write || args.verdictsFile) {
-    const { jsonPath, csvPath } = writeReport("policy", period, {
+    const { key } = await writeReport("policy", period, {
       json: JSON.stringify(report, null, 2),
       csv: toCsv(report),
     });
     process.stderr.write(
-      `policy: wrote ${jsonPath} and ${csvPath} (${report.occurrences.length} occurrences, ${report.skipped.length} skipped)\n`,
+      `policy: wrote policy/${key} (${report.occurrences.length} occurrences, ${report.skipped.length} skipped)\n`,
     );
   }
 }

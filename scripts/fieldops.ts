@@ -90,12 +90,12 @@ async function main(): Promise<void> {
   }
 
   if (args.write) {
-    const { jsonPath, csvPath } = writeReport("field-ops", period, {
+    const { key } = await writeReport("field-ops", period, {
       json: JSON.stringify(report, null, 2),
       csv: toCsv(report),
     });
     process.stderr.write(
-      `fieldops: wrote ${jsonPath} and ${csvPath} (${report.daily.length} days, ${report.summary.flaggedDays.length} flagged)\n`,
+      `fieldops: wrote field-ops/${key} (${report.daily.length} days, ${report.summary.flaggedDays.length} flagged)\n`,
     );
   }
 }

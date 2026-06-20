@@ -56,7 +56,7 @@ async function main(): Promise<void> {
   const period: Period = resolvePeriod(args, today);
 
   // 1. Airborne minutes per flight day — committed S2 report.
-  const fq = readReportJson<FieldQaReport>("field-qa", periodKey(period));
+  const fq = await readReportJson<FieldQaReport>("field-qa", periodKey(period));
   if (!fq) {
     process.stderr.write(
       `field-verdict: no committed field-qa report for ${periodKey(period)} — run \`npm run field-qa -- --start ${period.start} --end ${period.end} --write\` first.\n`,
@@ -76,12 +76,12 @@ async function main(): Promise<void> {
 
   // 3. #datasets notices — from the local Slack mirror (read-only). Drop
   // tombstoned records: a retracted (deleted) notice must not count as posted.
-  const datasetMessages = readChannelMessages(DATASETS_CHANNEL, period)
+  const datasetMessages = (await readChannelMessages(DATASETS_CHANNEL, period))
     .filter((m) => !m.deleted)
     .map((m) => ({ isoTime: m.isoTime, text: m.text }));
 
   // 4. Resolutions (exceptions).
-  const resolutions = readResolutions();
+  const resolutions = await readResolutions();
 
   // Flight days = days the bot reported airborne time (the field-qa report).
   const flightDates = [...airborneByDate.keys()].sort();
@@ -107,13 +107,13 @@ async function main(): Promise<void> {
   else console.log(JSON.stringify(report, null, 2));
 
   if (args.write) {
-    const { jsonPath, csvPath } = writeReport("field-verdict", period, {
+    const { key } = await writeReport("field-verdict", period, {
       json: JSON.stringify(report, null, 2),
       csv: toCsv(report),
     });
     const s = report.summary;
     process.stderr.write(
-      `field-verdict: wrote ${jsonPath} and ${csvPath} (✅${s.accepted} ⏳${s.pending} ⚠️${s.needsReview} 🟡${s.acceptedException})\n`,
+      `field-verdict: wrote field-verdict/${key} (✅${s.accepted} ⏳${s.pending} ⚠️${s.needsReview} 🟡${s.acceptedException} ⛔${s.rejected})\n`,
     );
   }
 }

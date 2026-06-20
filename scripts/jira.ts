@@ -40,11 +40,11 @@ import {
  * keyed by accountId so the committed view can show them without a live Claude
  * call) and a flat `<period>.csv` human record. Returns the paths written.
  */
-function writeArtifacts(
+async function writeArtifacts(
   period: Period,
   report: JiraReport,
   summaries?: Map<string | null, string>,
-): { jsonPath: string; csvPath: string } {
+): Promise<{ key: string }> {
   const body =
     summaries && summaries.size > 0
       ? {
@@ -60,6 +60,7 @@ function writeArtifacts(
     csv: toCsv(report, summaries),
   });
 }
+
 
 /** Today's date (YYYY-MM-DD) in UTC. */
 function todayUtc(): string {
@@ -121,9 +122,9 @@ async function main(): Promise<void> {
 
   // --summarize / --summaries-file imply --write (so summaries are persisted).
   if (args.write || args.summarize || args.summariesFile) {
-    const { jsonPath, csvPath } = writeArtifacts(period, report, summaries);
+    const { key } = await writeArtifacts(period, report, summaries);
     process.stderr.write(
-      `jira: wrote ${jsonPath} and ${csvPath} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points${summaries ? ", with summaries" : ""})\n`,
+      `jira: wrote jira/${key} (${report.rows.length} users, ${totals.totalResolved} resolved, ${totals.totalStoryPoints} points${summaries ? ", with summaries" : ""})\n`,
     );
   }
 }

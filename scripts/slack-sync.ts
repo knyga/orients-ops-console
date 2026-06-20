@@ -57,7 +57,7 @@ async function syncChannel(
   today: string,
   now: string,
 ): Promise<ChannelSummary> {
-  const cursor = readSyncCursor(channel.name);
+  const cursor = await readSyncCursor(channel.name);
   const autoInit = args.mode === "incremental" && !cursor;
   const isInit = args.mode === "init" || autoInit;
 
@@ -110,7 +110,7 @@ async function syncChannel(
   let updated = 0;
   let tombstoned = 0;
   for (const month of months) {
-    const existing = readMonthFile(channel.name, month)?.messages ?? {};
+    const existing = (await readMonthFile(channel.name, month))?.messages ?? {};
     const forMonth = byMonth.get(month) ?? [];
     for (const m of forMonth) {
       if (existing[m.ts]) updated += 1;
@@ -125,10 +125,10 @@ async function syncChannel(
       }
     }
     const file: MonthFile = { version: 1, channel: channel.name, month, messages };
-    writeMonthFile(channel.name, month, file);
+    await writeMonthFile(channel.name, month, file);
   }
 
-  writeSyncCursor(channel.name, now);
+  await writeSyncCursor(channel.name, now);
   return { channel: channel.name, fetched: fetched.length, created, updated, tombstoned };
 }
 

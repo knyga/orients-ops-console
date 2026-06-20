@@ -106,12 +106,12 @@ async function main(): Promise<void> {
             ),
           }
         : summary;
-    const { jsonPath, csvPath } = writeReport("github", period, {
+    const { key } = await writeReport("github", period, {
       json: JSON.stringify(body, null, 2),
       csv: toCsv(summary, summaries),
     });
     process.stderr.write(
-      `github: wrote ${jsonPath} and ${csvPath} (${summary.totals.contributors} contributors, ${summary.totals.commits} commits${summaries ? ", with summaries" : ""})\n`,
+      `github: wrote github/${key} (${summary.totals.contributors} contributors, ${summary.totals.commits} commits${summaries ? ", with summaries" : ""})\n`,
     );
   }
 }
