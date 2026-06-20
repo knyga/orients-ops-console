@@ -105,9 +105,9 @@ Notes: idempotent (the `override`/ask-state guards make Slack re-delivery a no-o
 
 Cron hits protected GET routes. Vercel injects `Authorization: Bearer <CRON_SECRET>` when `CRON_SECRET` is set; the route checks it.
 
-- [ ] **T6 — extract the sync + verdict orchestration** into callable lib functions (so a route and the CLI share them): `lib/syncChannels.ts` → `syncAllChannels({ mode, windowDays })` (the `scripts/slack-sync.ts` per-channel loop), and `lib/computeVerdicts.ts` → `computeAndWriteVerdicts(period)` (the `scripts/field-verdict.ts` body). Repoint the CLIs to call them.
+- [x] **T6 — extract the sync + verdict orchestration** into callable lib functions (so a route and the CLI share them): `lib/syncChannels.ts` → `syncAllChannels({ mode, windowDays })` (the `scripts/slack-sync.ts` per-channel loop), and `lib/computeVerdicts.ts` → `computeAndWriteVerdicts(period)` (the `scripts/field-verdict.ts` body). Repoint the CLIs to call them. *(Done: `syncAllChannels(opts)` + `computeVerdicts(period, opts)` with an `onLog` sink; both CLIs repointed and re-smoked clean.)*
 
-- [ ] **T7 — cron routes** (`runtime="nodejs"`, guard helper):
+- [x] **T7 — cron routes** (`runtime="nodejs"`, guard helper):
 
 ```ts
 function authorized(req: Request) {
@@ -122,7 +122,7 @@ export async function GET(req: Request) {
 // app/api/cron/verdict/route.ts — recompute current Kyiv month → reports; optional auto-publish (flag-gated, default off)
 ```
 
-- [ ] **T8 — `vercel.json`:**
+- [x] **T8 — `vercel.json`:** *(Done — both crons set DAILY (Hobby-safe): sync at 06:00 UTC, verdict at 06:30 UTC. Bump sync to `*/15`/hourly on Pro.)*
 
 ```json
 {
@@ -134,7 +134,7 @@ export async function GET(req: Request) {
 ```
 (Note: Vercel **Hobby** allows daily crons only; sub-hourly `sync` needs **Pro**. If on Hobby, set both to daily for now.) Add `CRON_SECRET` to Vercel env.
 
-- [ ] **T9 — verify.** tsc/lint/test/build. Locally `curl` each cron route with `Authorization: Bearer $CRON_SECRET` → 200 + state changes in Neon; without it → 401.
+- [x] **T9 — verify.** tsc/lint/test/build. Locally `curl` each cron route with `Authorization: Bearer $CRON_SECRET` → 200 + state changes in Neon; without it → 401. *(Done: 238 tests, tsc/lint/build clean. Smoke: both routes 401 without/with wrong bearer; `/api/cron/sync` → 200 synced all 7 channels into Neon; `/api/cron/verdict` → 200 recomputed + wrote `field-verdict/2026-06`. `CRON_SECRET` still to be set in Vercel at deploy.)*
 
 ---
 
