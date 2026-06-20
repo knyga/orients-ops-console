@@ -53,9 +53,14 @@ async function main(): Promise<void> {
 
   let applied = 0;
 
+  // Verdicts are posted AND replied to after the flight period (the bot posts
+  // "now", approvers reply later), so read the channel through today — not the
+  // flight period — or every reply gets filtered out by date.
+  const readWindow = { start: period.start, end: today > period.end ? today : period.end };
+
   for (const entry of entries) {
     // Threaded replies to the bot's verdict (exclude the verdict itself + tombstones).
-    const replies = readChannelMessages(entry.channel, period).filter(
+    const replies = readChannelMessages(entry.channel, readWindow).filter(
       (m) => m.thread_ts === entry.ts && m.ts !== entry.ts && !m.deleted,
     );
     if (replies.length === 0) continue;

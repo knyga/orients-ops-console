@@ -53,10 +53,14 @@ async function main(): Promise<void> {
   let resolutionsWritten = 0;
   let transitions = 0;
 
+  // Replies arrive after the flight period (the bot asks "now", people answer
+  // later), so read the channel through today — not the flight period.
+  const readWindow = { start: period.start, end: today > period.end ? today : period.end };
+
   for (const key of askedKeys) {
     const record = log[key];
     // Threaded replies to the bot's question (exclude the question itself + tombstones).
-    const replies = readChannelMessages(record.channel, period).filter(
+    const replies = readChannelMessages(record.channel, readWindow).filter(
       (m) => m.thread_ts === record.askedTs && m.ts !== record.askedTs && !m.deleted,
     );
 
