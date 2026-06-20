@@ -8,7 +8,7 @@
  */
 import { eq } from "drizzle-orm";
 import { db, schema } from "./db";
-import { periodKey, type Period } from "./period";
+import { parsePeriodKey, periodKey, type Period } from "./period";
 
 export interface PublishedEntry {
   date: string;       // YYYY-MM-DD flight day
@@ -46,6 +46,22 @@ export async function readPublished(period: Period): Promise<PublishedLog> {
   const log: PublishedLog = {};
   for (const r of rows) log[r.date] = toEntry(r);
   return log;
+}
+
+/**
+ * Find a published verdict by its Slack ts (the thread root approvers reply
+ * under), across all periods. Used by the events webhook, which only has the
+ * reply's `thread_ts` — not the period. Returns the entry + its period, or null.
+ */
+export async function findPublishedByTs(
+  ts: string,
+): Promise<{ period: Period; entry: PublishedEntry } | null> {
+  const rows = await db.select().from(schema.published).where(eq(schema.published.ts, ts)).limit(1);
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  const period = parsePeriodKey(row.period);
+  if (!period) return null;
+  return { period, entry: toEntry(row) };
 }
 
 /** Upsert every entry of the period's published log by (period, date). */

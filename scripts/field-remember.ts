@@ -15,9 +15,9 @@
  * Runs under `--conditions=react-server` so the server-only imports resolve.
  */
 import { classifyAnswer } from "../lib/answerClassify";
+import { applyAnswerDecision } from "../lib/applyAnswer";
 import { readChannelMessages } from "../lib/slackMirror";
-import { readAsks, setAskState, writeAsks } from "../lib/asks";
-import { upsertResolution } from "../lib/resolutions";
+import { readAsks } from "../lib/asks";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
 import {
   decideOutcome,
@@ -43,7 +43,7 @@ async function main(): Promise<void> {
   const today = todayInFieldTz();
   const period: Period = resolvePeriod(args, today);
 
-  let log = await readAsks(period);
+  const log = await readAsks(period);
   const askedKeys = Object.keys(log).filter((k) => log[k].state === "ASKED");
   if (askedKeys.length === 0) {
     process.stderr.write(`field-remember: no ASKED questions for ${period.start}…${period.end} (run \`npm run field-ask\` first).\n`);
@@ -86,23 +86,15 @@ async function main(): Promise<void> {
     );
 
     if (args.write) {
-      if (outcome.writeException) {
-        await upsertResolution({
-          date: record.date,
-          decision: "accepted_exception",
-          note: outcome.note,
-          source: outcome.evidencePermalink || "slack",
-          recordedAt: new Date().toISOString(),
-        });
-        resolutionsWritten += 1;
-      }
-      log = setAskState(log, key, outcome.state, outcome.note);
+      // The answer effect (resolution + ask-state advance) is shared with the
+      // events webhook — one source of truth in lib/applyAnswer.
+      await applyAnswerDecision({ record, period, outcome });
+      if (outcome.writeException) resolutionsWritten += 1;
       transitions += 1;
     }
   }
 
   if (args.write) {
-    await writeAsks(period, log);
     process.stderr.write(`field-remember: applied ${transitions} state change(s), wrote ${resolutionsWritten} exception(s).\n`);
   } else {
     process.stderr.write("field-remember: DRY RUN — no resolutions or ask states were written. Re-run with --write to apply.\n");

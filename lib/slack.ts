@@ -95,11 +95,20 @@ interface HistoryResponse extends SlackOk {
   messages: { user?: string; bot_id?: string; ts: string; text?: string; files?: RawFile[] }[];
 }
 
-function permalink(channelId: string, ts: string): string {
+/**
+ * A Slack message permalink for a (channel id, ts). Exported for the events
+ * webhook, which builds an evidence link for a reply it receives. Pure string
+ * build (no token), but lives here next to the workspace-subdomain convention.
+ */
+export function permalinkFor(channelId: string, ts: string): string {
   // This bot is built only for the Orients workspace; default the subdomain so
   // permalinks work without SLACK_WORKSPACE, while still allowing an override.
   const workspace = process.env.SLACK_WORKSPACE || "orientsai";
   return `https://${workspace}.slack.com/archives/${channelId}/p${ts.replace(".", "")}`;
+}
+
+function permalink(channelId: string, ts: string): string {
+  return permalinkFor(channelId, ts);
 }
 
 /**

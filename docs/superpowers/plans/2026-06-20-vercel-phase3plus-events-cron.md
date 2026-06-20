@@ -30,7 +30,7 @@ Slack POSTs every subscribed event to one route. The handler must: verify the re
 
 ### Tasks
 
-- [ ] **T1 — signature verification (pure, tested).** `lib/slackSignature.ts`:
+- [x] **T1 — signature verification (pure, tested).** `lib/slackSignature.ts`:
 
 ```ts
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -51,11 +51,11 @@ export function verifySlackSignature(args: {
 ```
 Unit-test: good signature passes; bad signature, stale timestamp, missing headers fail.
 
-- [ ] **T2 — by-ts lookups.** Add `findPublishedByTs` / `findAskByTs` (above) + a tiny live-smoke. (IO, not unit-tested per D2.)
+- [x] **T2 — by-ts lookups.** Add `findPublishedByTs` / `findAskByTs` (above) + a tiny live-smoke. (IO, not unit-tested per D2.)
 
-- [ ] **T3 — extract shared effect fns** (`lib/applyApproval.ts`, `lib/applyAnswer.ts`) from the two CLIs; repoint the CLIs to them. `npm test` stays green; live re-smoke an approval via CLI to confirm no regression.
+- [x] **T3 — extract shared effect fns** (`lib/applyApproval.ts`, `lib/applyAnswer.ts`) from the two CLIs; repoint the CLIs to them. `npm test` stays green; live re-smoke an approval via CLI to confirm no regression. *(Done: the effect is `applyApproverDecision`/`applyAnswerDecision` (shared by CLI + route); the single-reply webhook path is `applyApproverReply`/`applyAnswerReply`. CLIs run clean in dry-run; 238 tests green.)*
 
-- [ ] **T4 — the route** `app/api/slack/events/route.ts` (`runtime="nodejs"`, `dynamic="force-dynamic"`):
+- [x] **T4 — the route** `app/api/slack/events/route.ts` (`runtime="nodejs"`, `dynamic="force-dynamic"`):
 
 ```ts
 export async function POST(req: Request) {
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
 ```
 Notes: idempotent (the `override`/ask-state guards make Slack re-delivery a no-op). If the inline Claude call ever risks the 3s window, defer it (write a "pending reply" row; the verdict cron finalizes) — start inline.
 
-- [ ] **T5 — env + verify.** Add `SLACK_SIGNING_SECRET` to `.env.example` + Vercel. `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build`. Local smoke: POST a crafted `url_verification` body with a valid signature → returns the challenge; an `event_callback` reply → applies (against a test thread).
+- [x] **T5 — env + verify.** Add `SLACK_SIGNING_SECRET` to `.env.example` + Vercel. `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build`. Local smoke: POST a crafted `url_verification` body with a valid signature → returns the challenge; an `event_callback` reply → applies (against a test thread). *(Done: tsc/lint/build clean, 238 tests; smoke confirmed valid sig → challenge, bad sig → 401, stale ts → 401, event_callback → 200 ok via live Neon lookup. `SLACK_SIGNING_SECRET` still to be added to Vercel env at deploy.)*
 
 ### Slack app config (you, after first deploy)
 - Basic Information → copy **Signing Secret** → `SLACK_SIGNING_SECRET` in Vercel.
