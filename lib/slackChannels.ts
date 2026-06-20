@@ -22,4 +22,7 @@ export const TRACKED_CHANNELS: SlackChannel[] = [
   { id: "C08GY2NKF9D", name: "field-qa" },
   { id: "C08KG802THU", name: "datasets" },
   { id: "C09ETTREPCY", name: "order_writeoff" },
+  // The bot's own channels: its home (where it posts verdicts) + a test channel.
+  { id: "C0BC38K9LUC", name: "orients-ops-console" },
+  { id: "C0BC1GT1G4R", name: "orients-ops-console-test" },
 ];
