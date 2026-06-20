@@ -11,7 +11,7 @@
  */
 import { eq } from "drizzle-orm";
 import { db, schema } from "./db";
-import { periodKey, type Period } from "./period";
+import { parsePeriodKey, periodKey, type Period } from "./period";
 import type { GapType } from "./askGaps";
 
 export type AskState = "ASKED" | "ANSWERED" | "RESOLVED" | "ESCALATED";
@@ -50,6 +50,22 @@ export async function readAsks(period: Period): Promise<AskLog> {
   const log: AskLog = {};
   for (const r of rows) log[r.gapKey] = toRecord(r);
   return log;
+}
+
+/**
+ * Find an asked question by the bot's question ts (the thread root replies arrive
+ * under), across all periods. Used by the events webhook, which only has the
+ * reply's `thread_ts`. Returns the record + its period + gapKey, or null.
+ */
+export async function findAskByTs(
+  askedTs: string,
+): Promise<{ period: Period; gapKey: string; record: AskRecord } | null> {
+  const rows = await db.select().from(schema.asks).where(eq(schema.asks.askedTs, askedTs)).limit(1);
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  const period = parsePeriodKey(row.period);
+  if (!period) return null;
+  return { period, gapKey: row.gapKey, record: toRecord(row) };
 }
 
 export async function writeAsks(period: Period, log: AskLog): Promise<void> {
