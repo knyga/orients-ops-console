@@ -123,7 +123,14 @@ export async function POST(req: Request): Promise<Response> {
               replyText,
               replyPermalink,
             });
+            return;
           }
+          // Reached only for a thread reply in a tracked channel that matches
+          // neither a published verdict nor a bot question — log it (low volume;
+          // e.g. a verdict published before the Postgres migration has no row).
+          console.log(
+            `slack events: no published verdict or ask for thread_ts=${threadTs} (reply by ${userId} in #${channel.name}) — ignoring`,
+          );
         } catch (err) {
           console.error("slack events handler failed:", err);
         }
