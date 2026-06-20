@@ -140,11 +140,11 @@ export async function GET(req: Request) {
 
 ## Phase 6 — Deploy
 
-- [ ] Push `main`; Vercel auto-builds. Confirm env vars present (POSTGRES_*, SLACK_TOKEN, SLACK_SIGNING_SECRET, ANTHROPIC_API_KEY, VIMEO_TOKEN, JIRA_*, GH_ACCESS_TOKEN, CRON_SECRET).
-- [ ] Build runs `db:migrate`? No — keep migrations manual (`npm run db:migrate` against Neon from local/CI) to avoid surprising schema changes on deploy. Document running it before deploying a schema change.
-- [ ] Open the deployed URL → verify the dashboard reads Neon (the imported reports show).
-- [ ] Wire Slack Event Subscriptions (Phase 3 config) → post a test verdict (`field-publish` to `#orients-ops-console-test`) → reply as an approver → confirm the bot reacts **with no CLI run** (the webhook did it).
-- [ ] Watch the first cron fires (Vercel dashboard → Cron logs).
+- [x] Push `main`; Vercel auto-builds. *(Pushed: origin/main @ 3b65024.)* Confirm env vars present (POSTGRES_*, SLACK_TOKEN, SLACK_SIGNING_SECRET, ANTHROPIC_API_KEY, VIMEO_TOKEN, JIRA_*, GH_ACCESS_TOKEN, CRON_SECRET). ← **user, Vercel dashboard** (add the two new ones: SLACK_SIGNING_SECRET, CRON_SECRET).
+- [x] Build runs `db:migrate`? No — keep migrations manual. *Confirmed no migration needed this deploy: lib/schema.ts unchanged since Phase 1; the live Neon tables already exist (cron smoke wrote to them).* Run `npm run db:migrate` against Neon only before deploying a future schema change.
+- [ ] Open the deployed URL → verify the dashboard reads Neon (the imported reports show). ← **user / share the URL and I'll check the public pages**
+- [ ] Wire Slack Event Subscriptions (Phase 3 config) → post a test verdict (`field-publish` to `#orients-ops-console-test`) → reply as an approver → confirm the bot reacts **with no CLI run** (the webhook did it). ← **user, Slack app dashboard**
+- [ ] Watch the first cron fires (Vercel dashboard → Cron logs). ← **user, Vercel dashboard**
 
 ---
 
