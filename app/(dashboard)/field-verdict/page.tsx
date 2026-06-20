@@ -14,6 +14,7 @@ interface VerdictReport {
     pending: number;
     needsReview: number;
     acceptedException: number;
+    rejected: number;
   };
 }
 
@@ -22,6 +23,7 @@ const STATUS_STYLE: Record<VerdictStatus, { icon: string; label: string; cls: st
   PENDING: { icon: "⏳", label: "Pending", cls: "bg-slate-100 text-slate-700" },
   NEEDS_REVIEW: { icon: "⚠️", label: "Needs review", cls: "bg-amber-100 text-amber-800" },
   ACCEPTED_EXCEPTION: { icon: "🟡", label: "Accepted (exception)", cls: "bg-yellow-100 text-yellow-800" },
+  REJECTED: { icon: "⛔", label: "Rejected", cls: "bg-red-100 text-red-800" },
 };
 
 function fmt(n: number): string {
@@ -128,11 +130,12 @@ export default function FieldVerdictPage() {
 
       {/* Summary cards */}
       {s && (
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <SummaryCard label="Accepted" value={String(s.accepted)} accent="text-emerald-700" />
           <SummaryCard label="Pending" value={String(s.pending)} accent="text-slate-700" />
           <SummaryCard label="Needs review" value={String(s.needsReview)} accent="text-amber-700" />
           <SummaryCard label="Accepted (exception)" value={String(s.acceptedException)} accent="text-yellow-700" />
+          <SummaryCard label="Rejected" value={String(s.rejected)} accent="text-red-700" />
         </div>
       )}
 

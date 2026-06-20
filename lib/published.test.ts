@@ -17,6 +17,7 @@ const entry = (over: Partial<PublishedEntry>): PublishedEntry => ({
   channel: "field-qa",
   text: "✅ 2026-06-18 — accepted",
   postedAt: "2026-06-20T00:00:00.000Z",
+  ts: "1781969559.000100",
   ...over,
 });
 

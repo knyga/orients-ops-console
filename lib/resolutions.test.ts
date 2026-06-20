@@ -44,9 +44,22 @@ describe("resolutionFor / applyResolution", () => {
     expect(out.status).toBe("NEEDS_REVIEW");
   });
 
-  it("does not override a non-NEEDS_REVIEW verdict", () => {
+  it("does not let accepted_exception override a non-NEEDS_REVIEW verdict", () => {
     const accepted = { ...needsReview, status: "ACCEPTED" as const };
     expect(applyResolution(accepted, [res({})]).status).toBe("ACCEPTED");
+  });
+
+  it("folds the approver name into the exception reason", () => {
+    const out = applyResolution(needsReview, [res({ by: "Oleksandr K" })]);
+    expect(out.reasons.join(" ")).toMatch(/exception \(Oleksandr K\)/);
+  });
+
+  it("a rejected resolution vetoes from ANY status → REJECTED", () => {
+    expect(applyResolution(needsReview, [res({ decision: "rejected", note: "redo it", by: "Bohdan Forostianyi" })]).status).toBe("REJECTED");
+    const accepted = { ...needsReview, status: "ACCEPTED" as const };
+    const out = applyResolution(accepted, [res({ decision: "rejected", note: "not acceptable" })]);
+    expect(out.status).toBe("REJECTED");
+    expect(out.reasons.join(" ")).toMatch(/rejected.*not acceptable/);
   });
 
   it("resolutionFor returns the matching resolution or undefined", () => {

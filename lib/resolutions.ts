@@ -12,12 +12,16 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { DayVerdict } from "./fieldDayVerdict";
 
+export type ResolutionDecision = "accepted_exception" | "rejected";
+
 export interface Resolution {
   date: string;                     // YYYY-MM-DD flight day
-  decision: "accepted_exception";   // S3 scope; S6 may add more
+  decision: ResolutionDecision;     // accepted_exception (forgive a miss) | rejected (human veto)
   note: string;
   source: string;                   // permalink or "manual"
   recordedAt: string;               // ISO
+  /** Who decided (e.g. an approver's name), when applicable. */
+  by?: string;
 }
 
 export interface ResolutionsOpts {
@@ -67,17 +71,23 @@ export function resolutionFor(date: string, resolutions: Resolution[]): Resoluti
 }
 
 /**
- * Apply a remembered exception: a NEEDS_REVIEW verdict with a matching resolution
- * becomes ACCEPTED_EXCEPTION (note appended to reasons). Other statuses untouched.
- * Pure.
+ * Apply a human resolution to a verdict (pure):
+ *  - `rejected` is an authoritative human veto → REJECTED from ANY status.
+ *  - `accepted_exception` forgives a flagged miss → ACCEPTED_EXCEPTION, but only
+ *    from NEEDS_REVIEW (it never "upgrades" an already-good day).
+ * The decider's name (if any) is folded into the appended reason. Other cases
+ * leave the verdict untouched.
  */
 export function applyResolution(verdict: DayVerdict, resolutions: Resolution[]): DayVerdict {
-  if (verdict.status !== "NEEDS_REVIEW") return verdict;
   const match = resolutionFor(verdict.date, resolutions);
   if (!match) return verdict;
-  return {
-    ...verdict,
-    status: "ACCEPTED_EXCEPTION",
-    reasons: [...verdict.reasons, `exception: ${match.note}`],
-  };
+  const who = match.by ? ` (${match.by})` : "";
+
+  if (match.decision === "rejected") {
+    return { ...verdict, status: "REJECTED", reasons: [...verdict.reasons, `rejected${who}: ${match.note}`] };
+  }
+  if (match.decision === "accepted_exception" && verdict.status === "NEEDS_REVIEW") {
+    return { ...verdict, status: "ACCEPTED_EXCEPTION", reasons: [...verdict.reasons, `exception${who}: ${match.note}`] };
+  }
+  return verdict;
 }

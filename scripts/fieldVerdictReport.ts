@@ -26,6 +26,7 @@ export interface VerdictSummary {
   pending: number;
   needsReview: number;
   acceptedException: number;
+  rejected: number;
 }
 
 export interface VerdictReport {
@@ -64,11 +65,12 @@ export function resolvePeriod(args: ParsedArgs, today: string): Period {
 }
 
 export function summarize(days: DayVerdict[]): VerdictSummary {
-  const s: VerdictSummary = { accepted: 0, pending: 0, needsReview: 0, acceptedException: 0 };
+  const s: VerdictSummary = { accepted: 0, pending: 0, needsReview: 0, acceptedException: 0, rejected: 0 };
   for (const d of days) {
     if (d.status === "ACCEPTED") s.accepted += 1;
     else if (d.status === "PENDING") s.pending += 1;
     else if (d.status === "NEEDS_REVIEW") s.needsReview += 1;
+    else if (d.status === "REJECTED") s.rejected += 1;
     else s.acceptedException += 1;
   }
   return s;
@@ -103,6 +105,7 @@ const STATUS_ICON: Record<string, string> = {
   PENDING: "⏳",
   NEEDS_REVIEW: "⚠️",
   ACCEPTED_EXCEPTION: "🟡",
+  REJECTED: "⛔",
 };
 
 export function formatTable(report: VerdictReport): string {
@@ -122,6 +125,6 @@ export function formatTable(report: VerdictReport): string {
   }
   const s = report.summary;
   lines.push("");
-  lines.push(`Totals: ✅ ${s.accepted}  ⏳ ${s.pending}  ⚠️ ${s.needsReview}  🟡 ${s.acceptedException}`);
+  lines.push(`Totals: ✅ ${s.accepted}  ⏳ ${s.pending}  ⚠️ ${s.needsReview}  🟡 ${s.acceptedException}  ⛔ ${s.rejected}`);
   return lines.join("\n");
 }

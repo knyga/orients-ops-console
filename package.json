@@ -19,7 +19,8 @@
     "field-verdict": "node --conditions=react-server --import tsx scripts/field-verdict.ts",
     "field-publish": "node --conditions=react-server --import tsx scripts/field-publish.ts",
     "field-ask": "node --conditions=react-server --import tsx scripts/field-ask.ts",
-    "field-remember": "node --conditions=react-server --import tsx scripts/field-remember.ts"
+    "field-remember": "node --conditions=react-server --import tsx scripts/field-remember.ts",
+    "field-approvals": "node --conditions=react-server --import tsx scripts/field-approvals.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",

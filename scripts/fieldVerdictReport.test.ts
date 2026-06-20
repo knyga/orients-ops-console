@@ -27,8 +27,8 @@ describe("parseArgs / resolvePeriod", () => {
 
 describe("summarize / buildReport / toCsv", () => {
   it("counts each status", () => {
-    const s = summarize([day({}), day({ status: "PENDING" }), day({ status: "NEEDS_REVIEW" }), day({ status: "ACCEPTED_EXCEPTION" })]);
-    expect(s).toEqual({ accepted: 1, pending: 1, needsReview: 1, acceptedException: 1 });
+    const s = summarize([day({}), day({ status: "PENDING" }), day({ status: "NEEDS_REVIEW" }), day({ status: "ACCEPTED_EXCEPTION" }), day({ status: "REJECTED" })]);
+    expect(s).toEqual({ accepted: 1, pending: 1, needsReview: 1, acceptedException: 1, rejected: 1 });
   });
 
   it("buildReport assembles period + summary", () => {
