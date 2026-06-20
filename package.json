@@ -22,7 +22,8 @@
     "field-remember": "node --conditions=react-server --import tsx scripts/field-remember.ts",
     "field-approvals": "node --conditions=react-server --import tsx scripts/field-approvals.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:import": "node --conditions=react-server --import tsx scripts/db-import.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",
