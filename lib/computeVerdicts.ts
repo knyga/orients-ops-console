@@ -1,0 +1,110 @@
+/**
+ * Shared field-day verdict computation. SERVER-ONLY (fetches live Vimeo). One
+ * source of truth for the verdict pass, called by BOTH the `field-verdict` CLI
+ * and the `/api/cron/verdict` route. Inputs: airborne minutes ← committed
+ * field-qa report (S2), video minutes ← live Vimeo attributed by name date,
+ * #datasets notices ← the Slack mirror, exceptions ← the resolutions store.
+ * With `write`, persists reports/field-verdict/<period>.{json,csv}.
+ */
+import "server-only";
+import { fetchVideosInPeriod } from "./vimeo";
+import { videoFlightDate } from "./reconcile";
+import { readReportJson, writeReport, periodKey } from "./reports";
+import { readChannelMessages } from "./slackMirror";
+import { hasDatasetNotice } from "./datasetNotice";
+import { verdictForDay, type DayVerdict } from "./fieldDayVerdict";
+import { applyResolution, readResolutions } from "./resolutions";
+import { addWorkingDays } from "./workdays";
+import { buildReport, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
+import { todayInFieldTz } from "./syncChannels";
+
+export const GRACE_WORKING_DAYS = 3;
+const DATASETS_CHANNEL = "datasets";
+
+/** Shape of the committed field-qa report we read airborne minutes from (S2). */
+interface FieldQaReport {
+  days: { date: string; airborneMinutes: number }[];
+}
+
+export interface ComputeVerdictsOptions {
+  /** The "now" calendar day (field tz). Defaults to today. */
+  today?: string;
+  /** Persist the committed reports/field-verdict/<period>.{json,csv}. */
+  write?: boolean;
+  /** Optional progress sink (the CLI passes stderr; the cron route omits it). */
+  onLog?: (message: string) => void;
+}
+
+export { todayInFieldTz };
+
+/**
+ * Compute the per-flight-day verdict report for a period. Pure-ish orchestration
+ * over the live + committed inputs; the per-day decision lives in
+ * lib/fieldDayVerdict and the resolution overlay in lib/resolutions.
+ */
+export async function computeVerdicts(
+  period: Period,
+  opts: ComputeVerdictsOptions = {},
+): Promise<VerdictReport> {
+  const log = opts.onLog ?? (() => {});
+  const today = opts.today ?? todayInFieldTz();
+
+  // 1. Airborne minutes per flight day — committed S2 report.
+  const fq = await readReportJson<FieldQaReport>("field-qa", periodKey(period));
+  if (!fq) {
+    log(
+      `field-verdict: no committed field-qa report for ${periodKey(period)} — run \`npm run field-qa -- --start ${period.start} --end ${period.end} --write\` first.`,
+    );
+  }
+  const airborneByDate = new Map<string, number>((fq?.days ?? []).map((d) => [d.date, d.airborneMinutes]));
+
+  // 2. Video minutes per flight day — live Vimeo, attributed by name date.
+  const videos = await fetchVideosInPeriod(period.start, period.end);
+  const videoMinutesByDate = new Map<string, number>();
+  for (const v of videos) {
+    const d = videoFlightDate(v.name, v.created_time);
+    videoMinutesByDate.set(d, (videoMinutesByDate.get(d) ?? 0) + v.duration / 60);
+  }
+
+  // 3. #datasets notices — from the local Slack mirror (read-only). Drop
+  // tombstoned records: a retracted (deleted) notice must not count as posted.
+  const datasetMessages = (await readChannelMessages(DATASETS_CHANNEL, period))
+    .filter((m) => !m.deleted)
+    .map((m) => ({ isoTime: m.isoTime, text: m.text }));
+
+  // 4. Resolutions (exceptions).
+  const resolutions = await readResolutions();
+
+  // Flight days = days the bot reported airborne time (the field-qa report).
+  const flightDates = [...airborneByDate.keys()].sort();
+  const days: DayVerdict[] = flightDates.map((date) => {
+    const airborneMinutes = airborneByDate.get(date) ?? 0;
+    const videoMinutes = Math.round((videoMinutesByDate.get(date) ?? 0) * 10) / 10;
+    const windowEnd = addWorkingDays(date, GRACE_WORKING_DAYS);
+    const datasetPosted = hasDatasetNotice(datasetMessages, date, windowEnd);
+    const base = verdictForDay({
+      flightDate: date,
+      airborneMinutes,
+      videoMinutes,
+      datasetPosted,
+      today,
+      graceWorkingDays: GRACE_WORKING_DAYS,
+    });
+    return applyResolution(base, resolutions);
+  });
+
+  const report = buildReport(days, period, today, GRACE_WORKING_DAYS);
+
+  if (opts.write) {
+    await writeReport("field-verdict", period, {
+      json: JSON.stringify(report, null, 2),
+      csv: toCsv(report),
+    });
+    const s = report.summary;
+    log(
+      `field-verdict: wrote field-verdict/${periodKey(period)} (✅${s.accepted} ⏳${s.pending} ⚠️${s.needsReview} 🟡${s.acceptedException} ⛔${s.rejected})`,
+    );
+  }
+
+  return report;
+}
