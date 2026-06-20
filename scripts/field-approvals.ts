@@ -16,9 +16,12 @@
  */
 import { classifyApproval } from "../lib/approvalClassify";
 import { approverFor } from "../lib/approvers";
+import { postMessage, updateMessage } from "../lib/slack";
+import { TRACKED_CHANNELS } from "../lib/slackChannels";
 import { readChannelMessages } from "../lib/slackMirror";
-import { readPublished } from "../lib/published";
+import { readPublished, recordPublished, writePublished } from "../lib/published";
 import { upsertResolution } from "../lib/resolutions";
+import { formatOverride } from "../lib/verdictPublish";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
 import {
   decideApproval,
@@ -44,7 +47,7 @@ async function main(): Promise<void> {
   const today = todayInFieldTz();
   const period: Period = resolvePeriod(args, today);
 
-  const published = readPublished(period);
+  let published = readPublished(period); // mutated as overrides are acknowledged
   const entries = Object.values(published);
   if (entries.length === 0) {
     process.stderr.write(`field-approvals: no published verdicts for ${period.start}…${period.end} (run \`npm run field-publish --publish\` first).\n`);
@@ -81,9 +84,15 @@ async function main(): Promise<void> {
     if (!outcome) continue;
 
     const decision = outcome.decision === "approve" ? "accepted_exception" : "rejected";
+
+    // Idempotent ack: skip if this same decision was already acknowledged (edited
+    // + replied). A changed decision re-acks (striking the ORIGINAL text again).
+    const alreadyAcked = entry.override?.decision === decision;
     console.log(
-      `  ⇒ ${args.write ? "applying" : "would apply"}: ${entry.date} → ${decision} by ${outcome.by} — ${outcome.reason}`,
+      `  ⇒ ${args.write ? "applying" : "would apply"}: ${entry.date} → ${decision} by ${outcome.by} — ${outcome.reason}` +
+        (alreadyAcked ? "  (already acknowledged — skipping)" : ""),
     );
+    if (alreadyAcked) continue;
 
     if (args.write) {
       upsertResolution({
@@ -94,14 +103,31 @@ async function main(): Promise<void> {
         recordedAt: new Date().toISOString(),
         by: outcome.by,
       });
+
+      // Acknowledge in Slack: amend the original verdict (strike + new state) and
+      // post a threaded confirmation. entry.text is the ORIGINAL posted verdict.
+      const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
+      if (channel) {
+        const { updatedText, replyText } = formatOverride(entry.text, decision, outcome.by, outcome.reason);
+        await updateMessage(channel.id, entry.ts, updatedText);
+        await postMessage(channel.id, replyText, entry.ts);
+        published = recordPublished(published, {
+          ...entry,
+          override: { decision, by: outcome.by, ackedAt: new Date().toISOString() },
+        });
+        process.stderr.write(`field-approvals: amended + acknowledged ${entry.date} in #${channel.name}.\n`);
+      } else {
+        process.stderr.write(`field-approvals: channel "${entry.channel}" not tracked — wrote resolution but could not edit/reply.\n`);
+      }
       applied += 1;
     }
   }
 
   if (args.write) {
-    process.stderr.write(`field-approvals: wrote ${applied} resolution(s). Re-run \`npm run field-verdict -- --write\` to reflect them.\n`);
+    writePublished(period, published);
+    process.stderr.write(`field-approvals: applied ${applied} override(s). Re-run \`npm run field-verdict -- --write\` to reflect them.\n`);
   } else {
-    process.stderr.write("field-approvals: DRY RUN — no resolutions written. Re-run with --write to apply.\n");
+    process.stderr.write("field-approvals: DRY RUN — no resolutions written, no messages edited. Re-run with --write to apply.\n");
   }
 }
 

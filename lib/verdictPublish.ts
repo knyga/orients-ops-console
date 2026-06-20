@@ -27,6 +27,34 @@ export function publishableDays(days: DayVerdict[]): DayVerdict[] {
   );
 }
 
+export interface OverrideMessages {
+  /** New text for the original verdict message: old struck through + amendment. */
+  updatedText: string;
+  /** The threaded acknowledgement reply. */
+  replyText: string;
+}
+
+/**
+ * Render the two messages for an approver override of a published verdict:
+ * the edited original (Slack mrkdwn `~strike~` over the old text + an amendment
+ * line) and a short threaded acknowledgement. `originalText` is always the
+ * FIRST-posted verdict text, so re-applying after a decision change strikes the
+ * original once (never double-strikes). Pure.
+ */
+export function formatOverride(
+  originalText: string,
+  decision: "accepted_exception" | "rejected",
+  by: string,
+  reason: string,
+): OverrideMessages {
+  const icon = decision === "accepted_exception" ? "🟡" : "⛔";
+  const label = decision === "accepted_exception" ? "accepted (exception)" : "rejected";
+  return {
+    updatedText: `~${originalText}~\n${icon} Updated → ${label} by ${by}: ${reason}`,
+    replyText: `${icon} Recorded: ${label} by ${by}. Reason: ${reason}`,
+  };
+}
+
 /** The Slack message text the bot would post for a single day's verdict. */
 export function formatDayMessage(day: DayVerdict): string {
   const icon = ICON[day.status] ?? "";

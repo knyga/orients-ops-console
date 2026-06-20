@@ -311,7 +311,7 @@ export async function downloadFileBase64(
  * --publish flag (dry-run is the default). Throws SlackError (e.g. missing_scope
  * → "not_in_channel"/"missing_scope") on failure; returns the posted ts.
  */
-export async function postMessage(channelId: string, text: string): Promise<string> {
+export async function postMessage(channelId: string, text: string, threadTs?: string): Promise<string> {
   const res = await fetch(`${API}/chat.postMessage`, {
     method: "POST",
     headers: {
@@ -319,7 +319,7 @@ export async function postMessage(channelId: string, text: string): Promise<stri
       "Content-Type": "application/json; charset=utf-8",
     },
     cache: "no-store",
-    body: JSON.stringify({ channel: channelId, text }),
+    body: JSON.stringify({ channel: channelId, text, ...(threadTs ? { thread_ts: threadTs } : {}) }),
   });
   if (!res.ok) {
     throw new SlackError(`Slack chat.postMessage returned ${res.status} ${res.statusText}`, res.status);
@@ -332,4 +332,28 @@ export async function postMessage(channelId: string, text: string): Promise<stri
     );
   }
   return body.ts ?? "";
+}
+
+/**
+ * Edit one of the bot's own messages via chat.update. SERVER-ONLY; needs
+ * `chat:write`. Used to amend a published verdict in place (strike-through the
+ * old text + append the override). Throws SlackError on failure.
+ */
+export async function updateMessage(channelId: string, ts: string, text: string): Promise<void> {
+  const res = await fetch(`${API}/chat.update`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token()}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    cache: "no-store",
+    body: JSON.stringify({ channel: channelId, ts, text }),
+  });
+  if (!res.ok) {
+    throw new SlackError(`Slack chat.update returned ${res.status} ${res.statusText}`, res.status);
+  }
+  const body = (await res.json()) as SlackOk;
+  if (!body.ok) {
+    throw new SlackError(`Slack chat.update error: ${body.error ?? "unknown"}`, 502);
+  }
 }

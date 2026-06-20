@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDayMessage, publishableDays } from "./verdictPublish";
+import { formatDayMessage, formatOverride, publishableDays } from "./verdictPublish";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
@@ -52,5 +52,20 @@ describe("formatDayMessage", () => {
       day({ date: "2026-06-13", status: "ACCEPTED_EXCEPTION", reasons: ["exception: force majeure"] }),
     );
     expect(msg).toMatch(/^🟡 2026-06-13 — accepted \(exception\): exception: force majeure/);
+  });
+});
+
+describe("formatOverride", () => {
+  it("strikes the original and amends for an approve", () => {
+    const o = formatOverride("⚠️ 2026-06-04 — needs review: …", "accepted_exception", "Oleksandr K", "we were testing");
+    expect(o.updatedText).toBe("~⚠️ 2026-06-04 — needs review: …~\n🟡 Updated → accepted (exception) by Oleksandr K: we were testing");
+    expect(o.replyText).toMatch(/^🟡 Recorded: accepted \(exception\) by Oleksandr K\. Reason: we were testing/);
+  });
+
+  it("uses the rejected icon/label for a disapprove", () => {
+    const o = formatOverride("✅ 2026-06-05 — accepted …", "rejected", "Bohdan Forostianyi", "not acceptable");
+    expect(o.updatedText).toContain("~✅ 2026-06-05 — accepted …~");
+    expect(o.updatedText).toContain("⛔ Updated → rejected by Bohdan Forostianyi: not acceptable");
+    expect(o.replyText).toMatch(/^⛔ Recorded: rejected/);
   });
 });

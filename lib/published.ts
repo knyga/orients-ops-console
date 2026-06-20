@@ -17,6 +17,12 @@ export interface PublishedEntry {
   postedAt: string;   // ISO
   /** Slack ts of the posted verdict — the thread root approvers reply under. */
   ts: string;
+  /** Set once an approver override has been acknowledged (edit + thread reply). */
+  override?: {
+    decision: "accepted_exception" | "rejected";
+    by: string;
+    ackedAt: string;
+  };
 }
 
 /** date → entry. */
