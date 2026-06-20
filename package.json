@@ -20,10 +20,14 @@
     "field-publish": "node --conditions=react-server --import tsx scripts/field-publish.ts",
     "field-ask": "node --conditions=react-server --import tsx scripts/field-ask.ts",
     "field-remember": "node --conditions=react-server --import tsx scripts/field-remember.ts",
-    "field-approvals": "node --conditions=react-server --import tsx scripts/field-approvals.ts"
+    "field-approvals": "node --conditions=react-server --import tsx scripts/field-approvals.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",
+    "@vercel/postgres": "^0.10.0",
+    "drizzle-orm": "^0.45.2",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -34,6 +38,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
