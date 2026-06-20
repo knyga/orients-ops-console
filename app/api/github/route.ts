@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   if (searchParams.get("periods")) {
-    return NextResponse.json({ periods: listPeriods(FEATURE) });
+    return NextResponse.json({ periods: await listPeriods(FEATURE) });
   }
 
   const period = searchParams.get("period");
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
         { status: 400 },
       );
     }
-    const report = readReportJson(FEATURE, period);
+    const report = await readReportJson(FEATURE, period);
     if (!report) {
       return NextResponse.json(
         { error: `No committed report for ${period}.` },

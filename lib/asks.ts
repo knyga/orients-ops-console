@@ -9,8 +9,8 @@
  * NOT server-only: fs-only, no secret (same precedent as lib/reports.ts). The
  * merge/transition logic is pure; writes are atomic (temp + rename).
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { eq } from "drizzle-orm";
+import { db, schema } from "./db";
 import { periodKey, type Period } from "./period";
 import type { GapType } from "./askGaps";
 
@@ -31,35 +31,47 @@ export interface AskRecord {
 /** key (`${gapType}:${date}`) → record. */
 export type AskLog = Record<string, AskRecord>;
 
-export interface AsksOpts {
-  baseDir?: string;
+function toRecord(r: typeof schema.asks.$inferSelect): AskRecord {
+  return {
+    gapType: r.gapType as GapType,
+    date: r.date,
+    channel: r.channel,
+    question: r.question,
+    state: r.state as AskState,
+    askedTs: r.askedTs,
+    askedAt: r.askedAt,
+    ...(r.note != null ? { note: r.note } : {}),
+  };
 }
 
-export function defaultBaseDir(): string {
-  return join(process.cwd(), "reports");
+export async function readAsks(period: Period): Promise<AskLog> {
+  const key = periodKey(period);
+  const rows = await db.select().from(schema.asks).where(eq(schema.asks.period, key));
+  const log: AskLog = {};
+  for (const r of rows) log[r.gapKey] = toRecord(r);
+  return log;
 }
 
-function logPath(period: Period, opts?: AsksOpts): string {
-  return join(opts?.baseDir ?? defaultBaseDir(), "asks", `${periodKey(period)}.json`);
-}
-
-export function readAsks(period: Period, opts?: AsksOpts): AskLog {
-  let raw: string;
-  try {
-    raw = readFileSync(logPath(period, opts), "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-    throw error;
+export async function writeAsks(period: Period, log: AskLog): Promise<void> {
+  const key = periodKey(period);
+  for (const [gapKey, rec] of Object.entries(log)) {
+    const values = {
+      period: key,
+      gapKey,
+      gapType: rec.gapType,
+      date: rec.date,
+      channel: rec.channel,
+      question: rec.question,
+      state: rec.state,
+      askedTs: rec.askedTs,
+      askedAt: rec.askedAt,
+      note: rec.note ?? null,
+    };
+    await db
+      .insert(schema.asks)
+      .values(values)
+      .onConflictDoUpdate({ target: [schema.asks.period, schema.asks.gapKey], set: values });
   }
-  return JSON.parse(raw) as AskLog;
-}
-
-export function writeAsks(period: Period, log: AskLog, opts?: AsksOpts): void {
-  const path = logPath(period, opts);
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(log, null, 2));
-  renameSync(tmp, path);
 }
 
 /** Pure: has this gap already been asked (any state present)? */

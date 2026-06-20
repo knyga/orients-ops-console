@@ -1,20 +1,14 @@
 /**
- * Local Slack mirror store — the on-disk, re-syncable copy of the tracked
- * channels. NOT `server-only`: it uses node:fs but holds no secret, so both the
- * CLI and (future) server components can import it; node:fs's absence in the
- * browser bundle is the guard. Same precedent as ../lib/reports.
- *
- * Layout: data/slack/<channel-name>/<YYYY-MM>.json (messages keyed by ts) plus a
- * per-channel _sync.json cursor. The pure merge/tombstone core (upsertMessages,
- * mergeMessages) is unit-tested; the fs wrappers take an injectable baseDir.
+ * Slack mirror store — the re-syncable copy of the tracked channels, backed by
+ * the `slack_messages` + `slack_sync` Postgres tables (Vercel/Neon). NOT
+ * server-only (the CLIs import it; browser never does). The pure merge/tombstone
+ * core (upsertMessages, mergeMessages) is unit-tested and unchanged; the DB
+ * adapter does read-month → merge → bulk-upsert, so the merge logic stays one
+ * place. A "month" (YYYY-MM) is the read/write unit, matching mergeMessages'
+ * whole-window semantics.
  */
-import {
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join } from "node:path";
+import { and, eq, gte, like, lte } from "drizzle-orm";
+import { db, schema } from "./db";
 import type { Period } from "./period";
 import type { SlackFile } from "./policySchedule";
 
@@ -45,32 +39,6 @@ export interface MonthFile {
 export interface SyncCursor {
   version: 1;
   lastSync: string;
-}
-
-export interface MirrorOpts {
-  baseDir?: string;
-}
-
-/**
- * Repo-root data/slack directory. Resolved from process.cwd() (the npm CLIs and
- * next both launch from the repo root) — same rationale as reports.defaultBaseDir.
- */
-export function defaultBaseDir(): string {
-  return join(process.cwd(), "data", "slack");
-}
-
-function channelDir(channel: string, opts?: MirrorOpts): string {
-  return join(opts?.baseDir ?? defaultBaseDir(), channel);
-}
-
-/** Absolute path to a channel's month file (data/slack/<channel>/<YYYY-MM>.json). */
-export function monthFilePath(channel: string, month: string, opts?: MirrorOpts): string {
-  return join(channelDir(channel, opts), `${month}.json`);
-}
-
-/** Absolute path to a channel's sync cursor (data/slack/<channel>/_sync.json). */
-export function syncFilePath(channel: string, opts?: MirrorOpts): string {
-  return join(channelDir(channel, opts), "_sync.json");
 }
 
 /** Distinct YYYY-MM month prefixes a period spans, in ascending order. */
@@ -142,61 +110,95 @@ export function mergeMessages(
   return result;
 }
 
-function readJson<T>(path: string): T | null {
-  let raw: string;
-  try {
-    raw = readFileSync(path, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
+function toStored(r: typeof schema.slackMessages.$inferSelect): StoredMessage {
+  return {
+    ts: r.ts,
+    channel: r.channel,
+    authorId: r.authorId,
+    author: r.author,
+    isoTime: r.isoTime,
+    text: r.text,
+    permalink: r.permalink,
+    firstSeen: r.firstSeen,
+    lastSeen: r.lastSeen,
+    ...(r.files != null ? { files: r.files as SlackFile[] } : {}),
+    ...(r.threadTs != null ? { thread_ts: r.threadTs } : {}),
+    ...(r.replyCount != null ? { reply_count: r.replyCount } : {}),
+    ...(r.edited != null ? { edited: r.edited } : {}),
+    ...(r.deleted != null ? { deleted: r.deleted } : {}),
+  };
+}
+
+/** A channel+month (YYYY-MM) of stored messages as a MonthFile, or null if none. */
+export async function readMonthFile(channel: string, month: string): Promise<MonthFile | null> {
+  const rows = await db
+    .select()
+    .from(schema.slackMessages)
+    .where(and(eq(schema.slackMessages.channel, channel), like(schema.slackMessages.isoTime, `${month}%`)));
+  if (rows.length === 0) return null;
+  const messages: Record<string, StoredMessage> = {};
+  for (const r of rows) messages[r.ts] = toStored(r);
+  return { version: 1, channel, month, messages };
+}
+
+/** Bulk-upsert a month's merged messages by (channel, ts). */
+export async function writeMonthFile(channel: string, month: string, file: MonthFile): Promise<void> {
+  for (const m of Object.values(file.messages)) {
+    const values = {
+      channel,
+      ts: m.ts,
+      authorId: m.authorId,
+      author: m.author,
+      isoTime: m.isoTime,
+      text: m.text,
+      permalink: m.permalink,
+      files: m.files ?? null,
+      threadTs: m.thread_ts ?? null,
+      replyCount: m.reply_count ?? null,
+      edited: m.edited ?? null,
+      deleted: m.deleted ?? false,
+      firstSeen: m.firstSeen,
+      lastSeen: m.lastSeen,
+    };
+    await db
+      .insert(schema.slackMessages)
+      .values(values)
+      .onConflictDoUpdate({ target: [schema.slackMessages.channel, schema.slackMessages.ts], set: values });
   }
-  return JSON.parse(raw) as T;
 }
 
-/** Write JSON atomically: temp file in the same dir, then rename. mkdir -p. */
-function writeJsonAtomic(path: string, value: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2));
-  renameSync(tmp, path);
+export async function readSyncCursor(channel: string): Promise<SyncCursor | null> {
+  const rows = await db
+    .select()
+    .from(schema.slackSync)
+    .where(eq(schema.slackSync.channel, channel))
+    .limit(1);
+  return rows.length ? { version: 1, lastSync: rows[0].lastSync } : null;
 }
 
-export function readMonthFile(channel: string, month: string, opts?: MirrorOpts): MonthFile | null {
-  return readJson<MonthFile>(monthFilePath(channel, month, opts));
-}
-
-export function writeMonthFile(channel: string, month: string, file: MonthFile, opts?: MirrorOpts): void {
-  writeJsonAtomic(monthFilePath(channel, month, opts), file);
-}
-
-export function readSyncCursor(channel: string, opts?: MirrorOpts): SyncCursor | null {
-  return readJson<SyncCursor>(syncFilePath(channel, opts));
-}
-
-export function writeSyncCursor(channel: string, lastSync: string, opts?: MirrorOpts): void {
-  writeJsonAtomic(syncFilePath(channel, opts), { version: 1, lastSync } satisfies SyncCursor);
+export async function writeSyncCursor(channel: string, lastSync: string): Promise<void> {
+  await db
+    .insert(schema.slackSync)
+    .values({ channel, lastSync })
+    .onConflictDoUpdate({ target: schema.slackSync.channel, set: { lastSync } });
 }
 
 /**
  * All mirrored messages for a channel within [period.start, period.end]
- * inclusive (by each message's calendar day), sorted by ts ascending. Reads only
- * the month files the period spans. Tombstoned (deleted) records are INCLUDED —
- * consumers filter them where appropriate.
+ * inclusive (by day), sorted by ts ascending. Tombstoned (deleted) records are
+ * INCLUDED — consumers filter them where appropriate. The day-range filter is
+ * done in SQL on the full ISO bounds.
  */
-export function readChannelMessages(
-  channel: string,
-  period: Period,
-  opts?: MirrorOpts,
-): StoredMessage[] {
-  const out: StoredMessage[] = [];
-  for (const month of monthsInPeriod(period)) {
-    const file = readMonthFile(channel, month, opts);
-    if (!file) continue;
-    for (const msg of Object.values(file.messages)) {
-      const day = msg.isoTime.slice(0, 10);
-      if (day >= period.start && day <= period.end) out.push(msg);
-    }
-  }
-  out.sort((a, b) => a.ts.localeCompare(b.ts));
-  return out;
+export async function readChannelMessages(channel: string, period: Period): Promise<StoredMessage[]> {
+  const rows = await db
+    .select()
+    .from(schema.slackMessages)
+    .where(
+      and(
+        eq(schema.slackMessages.channel, channel),
+        gte(schema.slackMessages.isoTime, `${period.start}T00:00:00.000Z`),
+        lte(schema.slackMessages.isoTime, `${period.end}T23:59:59.999Z`),
+      ),
+    );
+  return rows.map(toStored).sort((a, b) => a.ts.localeCompare(b.ts));
 }

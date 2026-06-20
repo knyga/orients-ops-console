@@ -54,12 +54,12 @@ async function main(): Promise<void> {
   }
 
   if (args.write) {
-    const { jsonPath, csvPath } = writeReport("vimeo", period, {
+    const { key } = await writeReport("vimeo", period, {
       json: JSON.stringify(stats, null, 2),
       csv: toCsv(stats),
     });
     process.stderr.write(
-      `vimeo: wrote ${jsonPath} and ${csvPath} (${stats.totals.videoCount} videos, ${stats.totals.recordedMinutes} min)\n`,
+      `vimeo: wrote vimeo/${key} (${stats.totals.videoCount} videos, ${stats.totals.recordedMinutes} min)\n`,
     );
   }
 }

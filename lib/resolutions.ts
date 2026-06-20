@@ -1,15 +1,14 @@
 /**
- * Durable, committed resolutions store — the agent's memory of human-confirmed
- * exceptions (e.g. "2026-06-13 force-majeure, accepted"). Consulted by the verdict
- * so a remembered exception flips NEEDS_REVIEW → ACCEPTED_EXCEPTION. Decisions are
- * auditable and reversible (edit/remove the entry).
+ * Durable resolutions store — the agent's memory of human-confirmed exceptions
+ * (e.g. "2026-06-13 force-majeure, accepted"). Consulted by the verdict so a
+ * remembered exception flips NEEDS_REVIEW → ACCEPTED_EXCEPTION (or a veto →
+ * REJECTED). Decisions are auditable and reversible. Backed by the `resolutions`
+ * Postgres table (keyed by flight date), shared by CLIs, events route, and web.
  *
- * NOT server-only: fs-only, no secret (same precedent as lib/reports.ts). Stored
- * as a single all-time file reports/resolutions/store.json (exceptions persist
- * across periods, so it is not period-sharded). The apply/merge logic is pure.
+ * NOT server-only: the CLIs import it (like lib/reports.ts). The apply/merge
+ * logic is pure; only the read/write hit the DB.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { db, schema } from "./db";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 export type ResolutionDecision = "accepted_exception" | "rejected";
@@ -24,45 +23,37 @@ export interface Resolution {
   by?: string;
 }
 
-export interface ResolutionsOpts {
-  baseDir?: string;
+function toResolution(r: typeof schema.resolutions.$inferSelect): Resolution {
+  return {
+    date: r.date,
+    decision: r.decision as ResolutionDecision,
+    note: r.note,
+    source: r.source,
+    recordedAt: r.recordedAt,
+    ...(r.by != null ? { by: r.by } : {}),
+  };
 }
 
-export function defaultBaseDir(): string {
-  return join(process.cwd(), "reports");
+/** All resolutions (empty when none). */
+export async function readResolutions(): Promise<Resolution[]> {
+  const rows = await db.select().from(schema.resolutions);
+  return rows.map(toResolution);
 }
 
-function storePath(opts?: ResolutionsOpts): string {
-  return join(opts?.baseDir ?? defaultBaseDir(), "resolutions", "store.json");
-}
-
-/** All resolutions (empty when the store is absent). */
-export function readResolutions(opts?: ResolutionsOpts): Resolution[] {
-  let raw: string;
-  try {
-    raw = readFileSync(storePath(opts), "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw error;
-  }
-  return JSON.parse(raw) as Resolution[];
-}
-
-/** Overwrite the store atomically (temp + rename), mkdir -p. */
-export function writeResolutions(resolutions: Resolution[], opts?: ResolutionsOpts): void {
-  const path = storePath(opts);
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(resolutions, null, 2));
-  renameSync(tmp, path);
-}
-
-/** Insert or replace the resolution for its date, preserving the rest. */
-export function upsertResolution(resolution: Resolution, opts?: ResolutionsOpts): void {
-  const all = readResolutions(opts).filter((r) => r.date !== resolution.date);
-  all.push(resolution);
-  all.sort((a, b) => a.date.localeCompare(b.date));
-  writeResolutions(all, opts);
+/** Insert or replace the resolution for its date. */
+export async function upsertResolution(resolution: Resolution): Promise<void> {
+  const values = {
+    date: resolution.date,
+    decision: resolution.decision,
+    note: resolution.note,
+    source: resolution.source,
+    by: resolution.by ?? null,
+    recordedAt: resolution.recordedAt,
+  };
+  await db
+    .insert(schema.resolutions)
+    .values(values)
+    .onConflictDoUpdate({ target: schema.resolutions.date, set: values });
 }
 
 /** The resolution for a flight day, if any. Pure. */

@@ -94,12 +94,12 @@ async function main(): Promise<void> {
     const inputs = inputsPath(period);
     mkdirSync(dirname(inputs), { recursive: true });
     writeFileSync(inputs, csv);
-    const { jsonPath } = writeReport("field-qa", period, {
+    const { key } = await writeReport("field-qa", period, {
       json: JSON.stringify(report, null, 2),
       csv,
     });
     process.stderr.write(
-      `field-qa: wrote ${inputs} + ${jsonPath} (${report.totals.days} days, ${report.totals.flightHours} h)\n`,
+      `field-qa: wrote ${inputs} + field-qa/${key} (${report.totals.days} days, ${report.totals.flightHours} h)\n`,
     );
   }
 }

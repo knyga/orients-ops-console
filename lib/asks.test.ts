@@ -1,18 +1,6 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  isAsked,
-  readAsks,
-  recordAsk,
-  setAskState,
-  writeAsks,
-  type AskLog,
-  type AskRecord,
-} from "./asks";
+import { describe, expect, it } from "vitest";
+import { isAsked, recordAsk, setAskState, type AskLog, type AskRecord } from "./asks";
 
-const period = { start: "2026-06-01", end: "2026-06-30" };
 const rec = (over: Partial<AskRecord>): AskRecord => ({
   gapType: "no_dataset",
   date: "2026-06-13",
@@ -38,22 +26,5 @@ describe("pure log ops", () => {
     expect(next["no_dataset:2026-06-13"].state).toBe("RESOLVED");
     expect(next["no_dataset:2026-06-13"].note).toBe("dataset provided");
     expect(setAskState(log, "missing:key", "RESOLVED")).toBe(log); // no-op returns same ref
-  });
-});
-
-describe("store I/O", () => {
-  let baseDir: string;
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), "asks-"));
-  });
-  afterEach(() => {
-    rmSync(baseDir, { recursive: true, force: true });
-  });
-
-  it("round-trips; missing log → {}", () => {
-    expect(readAsks(period, { baseDir })).toEqual({});
-    const log = recordAsk({}, "no_dataset:2026-06-13", rec({}));
-    writeAsks(period, log, { baseDir });
-    expect(readAsks(period, { baseDir })).toEqual(log);
   });
 });

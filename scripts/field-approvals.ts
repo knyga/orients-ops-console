@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   const today = todayInFieldTz();
   const period: Period = resolvePeriod(args, today);
 
-  let published = readPublished(period); // mutated as overrides are acknowledged
+  let published = await readPublished(period); // mutated as overrides are acknowledged
   const entries = Object.values(published);
   if (entries.length === 0) {
     process.stderr.write(`field-approvals: no published verdicts for ${period.start}…${period.end} (run \`npm run field-publish --publish\` first).\n`);
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
 
   for (const entry of entries) {
     // Threaded replies to the bot's verdict (exclude the verdict itself + tombstones).
-    const replies = readChannelMessages(entry.channel, readWindow).filter(
+    const replies = (await readChannelMessages(entry.channel, readWindow)).filter(
       (m) => m.thread_ts === entry.ts && m.ts !== entry.ts && !m.deleted,
     );
     if (replies.length === 0) continue;
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
     if (alreadyAcked) continue;
 
     if (args.write) {
-      upsertResolution({
+      await upsertResolution({
         date: entry.date,
         decision,
         note: outcome.reason,
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
   }
 
   if (args.write) {
-    writePublished(period, published);
+    await writePublished(period, published);
     process.stderr.write(`field-approvals: applied ${applied} override(s). Re-run \`npm run field-verdict -- --write\` to reflect them.\n`);
   } else {
     process.stderr.write("field-approvals: DRY RUN — no resolutions written, no messages edited. Re-run with --write to apply.\n");

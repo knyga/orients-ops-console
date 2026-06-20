@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   const today = todayInFieldTz();
   const period: Period = resolvePeriod(args, today);
 
-  const report = readReportJson<VerdictReport>("field-verdict", periodKey(period));
+  const report = await readReportJson<VerdictReport>("field-verdict", periodKey(period));
   if (!report) {
     process.stderr.write(
       `field-ask: no committed field-verdict report for ${periodKey(period)} — run \`npm run field-verdict -- --start ${period.start} --end ${period.end} --write\` first.\n`,
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const log = readAsks(period);
+  const log = await readAsks(period);
   const plan = buildAskPlan(report.days, log);
   const pending = pendingAsks(plan);
 
@@ -92,7 +92,7 @@ async function main(): Promise<void> {
       askedTs: ts,
       askedAt: new Date().toISOString(),
     });
-    writeAsks(period, nextLog); // persist after each so a mid-run failure is not lost
+    await writeAsks(period, nextLog); // persist after each so a mid-run failure is not lost
     asked += 1;
     process.stderr.write(`field-ask: asked ${item.key} in #${channel.name} (ts ${ts})\n`);
   }

@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   const today = todayInFieldTz();
   const period: Period = resolvePeriod(args, today);
 
-  const report = readReportJson<VerdictReport>("field-verdict", periodKey(period));
+  const report = await readReportJson<VerdictReport>("field-verdict", periodKey(period));
   if (!report) {
     process.stderr.write(
       `field-publish: no committed field-verdict report for ${periodKey(period)} — run \`npm run field-verdict -- --start ${period.start} --end ${period.end} --write\` first.\n`,
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const log = readPublished(period);
+  const log = await readPublished(period);
   const plan = buildPlan(report.days, log);
   const pending = pendingItems(plan);
 
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
       postedAt: new Date().toISOString(),
       ts,
     });
-    writePublished(period, nextLog); // persist after each post so a mid-run failure is not lost
+    await writePublished(period, nextLog); // persist after each post so a mid-run failure is not lost
     posted += 1;
     process.stderr.write(`field-publish: posted ${item.date} to #${channel.name} (ts ${ts})\n`);
   }

@@ -1,15 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  applyResolution,
-  readResolutions,
-  resolutionFor,
-  upsertResolution,
-  writeResolutions,
-  type Resolution,
-} from "./resolutions";
+import { describe, expect, it } from "vitest";
+import { applyResolution, resolutionFor, type Resolution } from "./resolutions";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const res = (over: Partial<Resolution>): Resolution => ({
@@ -65,30 +55,5 @@ describe("resolutionFor / applyResolution", () => {
   it("resolutionFor returns the matching resolution or undefined", () => {
     expect(resolutionFor("2026-06-13", [res({})])?.note).toMatch(/force majeure/);
     expect(resolutionFor("2026-06-14", [res({})])).toBeUndefined();
-  });
-});
-
-describe("store I/O", () => {
-  let baseDir: string;
-  beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), "resolutions-"));
-  });
-  afterEach(() => {
-    rmSync(baseDir, { recursive: true, force: true });
-  });
-
-  it("round-trips; missing store → []", () => {
-    expect(readResolutions({ baseDir })).toEqual([]);
-    writeResolutions([res({})], { baseDir });
-    expect(readResolutions({ baseDir })).toEqual([res({})]);
-  });
-
-  it("upsertResolution replaces by date, keeps others", () => {
-    writeResolutions([res({ date: "2026-06-01" })], { baseDir });
-    upsertResolution(res({ date: "2026-06-13" }), { baseDir });
-    upsertResolution(res({ date: "2026-06-13", note: "updated" }), { baseDir });
-    const all = readResolutions({ baseDir });
-    expect(all).toHaveLength(2);
-    expect(resolutionFor("2026-06-13", all)?.note).toBe("updated");
   });
 });
