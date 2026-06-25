@@ -1,7 +1,7 @@
 // app/(dashboard)/drive/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface DriveSource {
   id: string;
@@ -31,7 +31,7 @@ export default function DriveSyncPage() {
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
 
-  const load = async (check: boolean) => {
+  const load = useCallback(async (check: boolean) => {
     setError(null);
     if (check) setChecking(true);
     try {
@@ -44,13 +44,12 @@ export default function DriveSyncPage() {
     } finally {
       setChecking(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      await load(false);
-    })();
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load(false);
+  }, [load]);
 
   const checkById = new Map(data?.check?.map((c) => [c.id, c]) ?? []);
 
