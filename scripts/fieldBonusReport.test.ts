@@ -70,8 +70,7 @@ describe("notify flags + plan", () => {
       slackIdByName: new Map([["Андріан", "U1"], ["Тарас", "U2"]]),
       log: { "2026-06-19": { date: "2026-06-19", threadTs: "1.1", dms: [{ slackId: "U1", ts: "2.2", amount: 700 }, { slackId: "U2", ts: "3.3", amount: 700 }] } },
     });
-    expect(plan[0].threadPending).toBe(false);
-    expect(plan[0].pendingDms).toHaveLength(0);
+    expect(plan).toHaveLength(0);
   });
   it("flags an unpublished day (cannot reply in a missing thread)", () => {
     const plan = buildNotifyPlan({

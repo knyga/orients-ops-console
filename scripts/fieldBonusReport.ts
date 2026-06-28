@@ -88,6 +88,7 @@ export function buildNotifyPlan(input: {
         pendingDms.push({ name: amount.name, amount, slackId });
       }
     }
+    if (!threadPending && pendingDms.length === 0 && unmatched.length === 0) continue;
     plan.push({ date: day.date, earned, reason: day.reason, people, threadPending, pendingDms, unmatched, published: publishedDates.has(day.date) });
   }
   return plan;
