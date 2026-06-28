@@ -25,7 +25,8 @@ import { findAskByTs } from "@/lib/asks";
 import { approverFor, isApprover } from "@/lib/approvers";
 import { applyApproverReply } from "@/lib/applyApproval";
 import { applyAnswerReply } from "@/lib/applyAnswer";
-import { permalinkFor } from "@/lib/slack";
+import { permalinkFor, postMessage } from "@/lib/slack";
+import { formatWebhookFailureNotice } from "@/lib/webhookNotice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,32 @@ interface SlackEventBody {
 /** Always a 2xx for Slack; the JSON body is diagnostic (Slack ignores it). */
 function ack(detail: Record<string, unknown>): Response {
   return Response.json({ ok: true, ...detail });
+}
+
+/**
+ * An actionable reply (an approver override / an answer) that we recognised but
+ * could not apply because the effect threw. Surface it instead of swallowing it:
+ * post a visible notice into the thread (best-effort — a failure to post must not
+ * mask the original error) and log it. We still ack 200: a 5xx would make Slack
+ * retry and, on sustained failure, DISABLE the subscription — silently breaking
+ * every future event. A thread notice + log is the right signal for what is
+ * almost always a config error (e.g. a missing server key) a human must fix.
+ */
+async function failVisibly(
+  channelId: string,
+  threadTs: string,
+  kind: string,
+  date: string,
+  err: unknown,
+): Promise<Response> {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`slack events: ${kind} apply failed for ${date}:`, err);
+  try {
+    await postMessage(channelId, formatWebhookFailureNotice(message), threadTs);
+  } catch (postErr) {
+    console.error("slack events: failed to post failure notice:", postErr);
+  }
+  return ack({ handled: kind, date, error: message });
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -120,30 +147,43 @@ export async function POST(req: Request): Promise<Response> {
     console.log(`slack events: findPublishedByTs → ${pub ? pub.entry.date : "null"}; isApprover(${userId})=${isApprover(userId)}`);
     if (pub && isApprover(userId)) {
       const approver = approverFor(userId)!;
-      const result = await applyApproverReply({
-        entry: pub.entry,
-        period: pub.period,
-        replyText,
-        approverName: approver.name,
-        replyPermalink,
-        replyTs,
-      });
-      console.log(`slack events: applyApproverReply → applied=${result.applied} alreadyAcked=${result.alreadyAcked}`);
-      return ack({ handled: "approver", date: pub.entry.date, ...result });
+      try {
+        const result = await applyApproverReply({
+          entry: pub.entry,
+          period: pub.period,
+          replyText,
+          approverName: approver.name,
+          replyPermalink,
+          replyTs,
+        });
+        console.log(`slack events: applyApproverReply → applied=${result.applied} alreadyAcked=${result.alreadyAcked}`);
+        return ack({ handled: "approver", date: pub.entry.date, ...result });
+      } catch (err) {
+        // Recognised an approver override but couldn't apply it — make it visible.
+        return await failVisibly(channel.id, threadTs, "approver", pub.entry.date, err);
+      }
     }
 
     // S6: a reply to one of the bot's S5 questions.
     const ask = await findAskByTs(threadTs);
     if (ask) {
-      await applyAnswerReply({ record: ask.record, period: ask.period, replyText, replyPermalink });
-      console.log(`slack events: applyAnswerReply done for ${ask.record.date}`);
-      return ack({ handled: "answer", date: ask.record.date });
+      try {
+        await applyAnswerReply({ record: ask.record, period: ask.period, replyText, replyPermalink });
+        console.log(`slack events: applyAnswerReply done for ${ask.record.date}`);
+        return ack({ handled: "answer", date: ask.record.date });
+      } catch (err) {
+        return await failVisibly(channel.id, threadTs, "answer", ask.record.date, err);
+      }
     }
 
     // A tracked-channel thread reply matching neither a verdict nor a question.
     console.log(`slack events: no published verdict or ask for thread_ts=${threadTs} (reply by ${userId} in #${channel.name})`);
     return ack({ handled: "none", thread_ts: threadTs });
   } catch (err) {
+    // Backstop for an unexpected failure BEFORE we recognised an actionable reply
+    // (e.g. the verdict/ask lookup itself threw). No thread notice here — we don't
+    // know the reply was for us, and posting into an unrelated conversation would
+    // be noise. Logged + 200; the per-action paths above own the visible notices.
     const message = err instanceof Error ? err.message : String(err);
     console.error("slack events handler failed:", err);
     return ack({ error: message });
