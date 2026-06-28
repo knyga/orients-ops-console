@@ -350,6 +350,26 @@ export async function postMessage(channelId: string, text: string, threadTs?: st
 }
 
 /**
+ * Open (or fetch) the bot↔user DM channel via conversations.open and return its
+ * channel id for postMessage. SERVER-ONLY; needs `im:write` (+ `chat:write` to
+ * post). Throws SlackError on failure.
+ */
+export async function openDm(userId: string): Promise<string> {
+  const res = await fetch(`${API}/conversations.open`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token()}`, "Content-Type": "application/json; charset=utf-8" },
+    cache: "no-store",
+    body: JSON.stringify({ users: userId }),
+  });
+  if (!res.ok) throw new SlackError(`Slack conversations.open returned ${res.status} ${res.statusText}`, res.status);
+  const body = (await res.json()) as SlackOk & { channel?: { id?: string } };
+  if (!body.ok || !body.channel?.id) {
+    throw new SlackError(`Slack conversations.open error: ${body.error ?? "unknown"} (is the im:write scope granted?)`, 502);
+  }
+  return body.channel.id;
+}
+
+/**
  * Edit one of the bot's own messages via chat.update. SERVER-ONLY; needs
  * `chat:write`. Used to amend a published verdict in place (strike-through the
  * old text + append the override). Throws SlackError on failure.
