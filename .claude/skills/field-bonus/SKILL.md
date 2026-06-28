@@ -39,7 +39,7 @@ It prints JSON:
 
 Answer totals from `total`; per-person from `people[]`. Add `--format table` for a human-readable view. Add `--sheet <path>` to reconcile against a normalized CSV export (`person,trips,early,weekend`) and print divergences.
 
-To persist a period as a committed artifact, add `--write`: it writes the lossless stats to `reports/field-bonus/<period>.json` (the web's render source — same shape as above) and a flat `reports/field-bonus/<period>.csv` (`person,trips,early,weekend,loss,subtotal,multiplier,total`), printing both paths to stderr. The web renders the committed JSON via `GET /api/field-bonus?period=<key>` (and lists committed periods via `?periods=1`); the live `?start=&end=` path still recomputes fresh from #field-qa + Vimeo.
+To persist a period as a committed artifact, add `--write`: it writes the lossless stats to `reports/field-bonus/<period>.json` (the web's render source — same shape as above) and a flat `reports/field-bonus/<period>.csv` (`person,trips,early,weekend,gross,penaltyPct,net`), printing both paths to stderr. The web renders the committed JSON via `GET /api/field-bonus?period=<key>` (and lists committed periods via `?periods=1`); the live `?start=&end=` path still recomputes fresh from #field-qa + Vimeo.
 
 Dates are inclusive and must be `YYYY-MM-DD`.
 
