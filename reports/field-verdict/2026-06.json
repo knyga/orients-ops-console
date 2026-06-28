@@ -1,0 +1,193 @@
+{
+  "period": {
+    "start": "2026-06-01",
+    "end": "2026-06-19"
+  },
+  "runDate": "2026-06-20",
+  "graceWorkingDays": 3,
+  "days": [
+    {
+      "date": "2026-06-01",
+      "status": "ACCEPTED",
+      "airborneMinutes": 36.82,
+      "videoMinutes": 44.8,
+      "ratio": 1.2167300380228137,
+      "datasetPosted": true,
+      "withinGrace": false,
+      "reasons": []
+    },
+    {
+      "date": "2026-06-02",
+      "status": "ACCEPTED",
+      "airborneMinutes": 55.02,
+      "videoMinutes": 44.8,
+      "ratio": 0.8142493638676844,
+      "datasetPosted": true,
+      "withinGrace": false,
+      "reasons": []
+    },
+    {
+      "date": "2026-06-03",
+      "status": "ACCEPTED",
+      "airborneMinutes": 42.75,
+      "videoMinutes": 35.7,
+      "ratio": 0.8350877192982457,
+      "datasetPosted": true,
+      "withinGrace": false,
+      "reasons": []
+    },
+    {
+      "date": "2026-06-04",
+      "status": "NEEDS_REVIEW",
+      "airborneMinutes": 32.33,
+      "videoMinutes": 0,
+      "ratio": 0,
+      "datasetPosted": false,
+      "withinGrace": false,
+      "reasons": [
+        "video 0m is 0% of airborne 32m (< 50%)",
+        "no #datasets notice for the day"
+      ]
+    },
+    {
+      "date": "2026-06-05",
+      "status": "ACCEPTED",
+      "airborneMinutes": 58.17,
+      "videoMinutes": 76.8,
+      "ratio": 1.3202681794739555,
+      "datasetPosted": true,
+      "withinGrace": false,
+      "reasons": []
+    },
+    {
+      "date": "2026-06-06",
+      "status": "ACCEPTED",
+      "airborneMinutes": 46.95,
+      "videoMinutes": 50.7,
+      "ratio": 1.0798722044728435,
+      "datasetPosted": true,
+      "withinGrace": false,
+      "reasons": []
+    },
+    {
+      "date": "2026-06-08",
+      "status": "NEEDS_REVIEW",
+      "airborneMinutes": 84.7,
+      "videoMinutes": 0,
+      "ratio": 0,
+      "datasetPosted": false,
+      "withinGrace": false,
+      "reasons": [
+        "video 0m is 0% of airborne 85m (< 50%)",
+        "no #datasets notice for the day"
+      ]
+    },
+    {
+      "date": "2026-06-09",
+      "status": "NEEDS_REVIEW",
+      "airborneMinutes": 104.42,
+      "videoMinutes": 0,
+      "ratio": 0,
+      "datasetPosted": false,
+      "withinGrace": false,
+      "reasons": [
+        "video 0m is 0% of airborne 104m (< 50%)",
+        "no #datasets notice for the day"
+      ]
+    },
+    {
+      "date": "2026-06-10",
+      "status": "NEEDS_REVIEW",
+      "airborneMinutes": 89.43,
+      "videoMinutes": 143.8,
+      "ratio": 1.6079615341607962,
+      "datasetPosted": false,
+      "withinGrace": false,
+      "reasons": [
+        "no #datasets notice for the day"
+      ]
+    },
+    {
+      "date": "2026-06-11",
+      "status": "NEEDS_REVIEW",
+      "airborneMinutes": 17.9,
+      "videoMinutes": 0,
+      "ratio": 0,
+      "datasetPosted": false,
+      "withinGrace": false,
+      "reasons": [
+        "video 0m is 0% of airborne 18m (< 50%)",
+        "no #datasets notice for the day"
+      ]
+    },
+    {
+      "date": "2026-06-12",
+      "status": "NEEDS_REVIEW",
+      "airborneMinutes": 34.12,
+      "videoMinutes": 0,
+      "ratio": 0,
+      "datasetPosted": false,
+      "withinGrace": false,
+      "reasons": [
+        "video 0m is 0% of airborne 34m (< 50%)",
+        "no #datasets notice for the day"
+      ]
+    },
+    {
+      "date": "2026-06-13",
+      "status": "ACCEPTED",
+      "airborneMinutes": 20.28,
+      "videoMinutes": 65.8,
+      "ratio": 3.2445759368836287,
+      "datasetPosted": true,
+      "withinGrace": false,
+      "reasons": []
+    },
+    {
+      "date": "2026-06-15",
+      "status": "ACCEPTED",
+      "airborneMinutes": 21.35,
+      "videoMinutes": 82.5,
+      "ratio": 3.8641686182669788,
+      "datasetPosted": true,
+      "withinGrace": false,
+      "reasons": []
+    },
+    {
+      "date": "2026-06-16",
+      "status": "ACCEPTED",
+      "airborneMinutes": 36.48,
+      "videoMinutes": 93,
+      "ratio": 2.549342105263158,
+      "datasetPosted": true,
+      "withinGrace": false,
+      "reasons": []
+    },
+    {
+      "date": "2026-06-17",
+      "status": "ACCEPTED",
+      "airborneMinutes": 20.3,
+      "videoMinutes": 50.3,
+      "ratio": 2.477832512315271,
+      "datasetPosted": true,
+      "withinGrace": true,
+      "reasons": []
+    },
+    {
+      "date": "2026-06-18",
+      "status": "ACCEPTED",
+      "airborneMinutes": 18.5,
+      "videoMinutes": 113.6,
+      "ratio": 6.14054054054054,
+      "datasetPosted": true,
+      "withinGrace": true,
+      "reasons": []
+    }
+  ],
+  "summary": {
+    "accepted": 10,
+    "pending": 0,
+    "needsReview": 6,
+    "acceptedException": 0
+  }
+}

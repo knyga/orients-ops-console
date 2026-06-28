@@ -1,0 +1,17 @@
+date,status,airborneMinutes,videoMinutes,ratio,datasetPosted,reasons
+2026-06-01,ACCEPTED,36.82,44.8,1.217,true,
+2026-06-02,ACCEPTED,55.02,44.8,0.814,true,
+2026-06-03,ACCEPTED,42.75,35.7,0.835,true,
+2026-06-04,NEEDS_REVIEW,32.33,0,0.000,false,video 0m is 0% of airborne 32m (< 50%); no #datasets notice for the day
+2026-06-05,ACCEPTED,58.17,76.8,1.320,true,
+2026-06-06,ACCEPTED,46.95,50.7,1.080,true,
+2026-06-08,NEEDS_REVIEW,84.7,0,0.000,false,video 0m is 0% of airborne 85m (< 50%); no #datasets notice for the day
+2026-06-09,NEEDS_REVIEW,104.42,0,0.000,false,video 0m is 0% of airborne 104m (< 50%); no #datasets notice for the day
+2026-06-10,NEEDS_REVIEW,89.43,143.8,1.608,false,no #datasets notice for the day
+2026-06-11,NEEDS_REVIEW,17.9,0,0.000,false,video 0m is 0% of airborne 18m (< 50%); no #datasets notice for the day
+2026-06-12,NEEDS_REVIEW,34.12,0,0.000,false,video 0m is 0% of airborne 34m (< 50%); no #datasets notice for the day
+2026-06-13,ACCEPTED,20.28,65.8,3.245,true,
+2026-06-15,ACCEPTED,21.35,82.5,3.864,true,
+2026-06-16,ACCEPTED,36.48,93,2.549,true,
+2026-06-17,ACCEPTED,20.3,50.3,2.478,true,
+2026-06-18,ACCEPTED,18.5,113.6,6.141,true,
