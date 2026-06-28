@@ -12,7 +12,7 @@ Answer per-person bonus questions using this repo's CLI. Recomputes bonuses from
 - A **trip counts** iff deployment ≥ **3 hours** AND recorded video ≥ **2 minutes** (the gate — differs from field-ops 50%-of-airborne reconcile). This is the real bonus gate.
 - Bonuses are: **700** per qualifying trip + **200** early (arrival ≤12:30 Kyiv) + **300** weekend (Sat/Sun) — apply early/weekend stacking per deployment.
 - There is a **drone-loss multiplier** for deployments where the drone was lost; the classifier runs via Claude and scans the #field-qa thread + Vimeo video names for loss evidence.
-- Days are grouped by video **upload date** (`created_time`), not flight date — uploads can lag up to a working day. Day boundaries use **Europe/Kyiv**, not UTC.
+- Videos are attributed to a flight day by the **date encoded in the video name** (via `videoFlightDate`), robust to upload lag. Day boundaries use **Europe/Kyiv**, not UTC. `created_time` is a fallback only.
 - **Team cutoff**: only count people with ≥ 3 qualifying trips in the period (house policy to avoid low-sample noise in bonuses).
 
 ## When to use
@@ -34,7 +34,7 @@ It prints JSON:
 - `summary` — `{ personCount, totalTrips, totalBase, totalEarly, totalWeekend, totalLoss, totalBonus }`
 - (internal) `allPersons[]` — same structure, including sub-3-trip people (for debugging)
 
-Answer totals from `summary`; per-person from `personBonuses`. Add `--format table` for a human-readable view.
+Answer totals from `summary`; per-person from `personBonuses`. Add `--format table` for a human-readable view. Add `--sheet <path>` to reconcile against a normalized CSV export (`person,trips,early,weekend`) and print divergences.
 
 To persist a period as a committed artifact, add `--write`: it writes the lossless stats to `reports/field-bonus/<period>.json` (the web's render source — same shape as above) and a flat `reports/field-bonus/<period>.csv` (`person,trips,early,weekend,loss,subtotal,multiplier,total`), printing both paths to stderr. The web renders the committed JSON via `GET /api/field-bonus?period=<key>` (and lists committed periods via `?periods=1`); the live `?start=&end=` path still recomputes fresh from #field-qa + Vimeo.
 
