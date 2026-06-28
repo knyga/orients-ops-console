@@ -14,6 +14,7 @@ yet, so each one is currently reinvented by hand.
 | 01 | [Ingestion / mirror meta-skill](01-ingestion-mirror-skill.md) | ✅ done — `authoring-ingestion-sources` | `slack-sync` + Drive sync shipped; skill abstracts both backends, RED/GREEN tested |
 | 02 | [Verdict + resolutions pipeline skill](02-field-verdict-pipeline-skill.md) | not started | `field-verdict`→`publish`→`ask`→`remember` (S3–S6) shipped with no skill to extend it |
 | 03 | [Safe outward-publishing skill](03-outward-publishing-skill.md) | not started | First outward-facing writes exist (`field-publish`/`field-ask`); dry-run-default pattern needs guardrails encoded |
+| 04 | [Field-bonus: ask for unknown initials](04-field-bonus-unknown-initial-ask.md) | ⏸ deferred (feature, not a skill) | Field-bonus shipped without its in-thread ask flow (Task 9); needs a self-contained `bonus_asks` store, not the verdict `asks` store |
 
 ## Explicitly NOT worth a skill
 - A spec→plan workflow — already covered by superpowers (`brainstorming`,
