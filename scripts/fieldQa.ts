@@ -1,15 +1,19 @@
 /**
- * CLI: read each #field-qa daily flight-summary image (stats bot), extract the
- * airborne time (Час в повітрі) via Claude vision, and (optionally) persist it as
- * the field-ops reconciliation input.
+ * CLI: read each #field-qa daily flight-summary (stats bot) and extract the
+ * airborne time (Час в повітрі), then (optionally) persist it as the field-ops
+ * reconciliation input.
+ *
+ * The bot posts the same card both as text and as an image. We parse the text
+ * deterministically (lib/flightTextParse) when present, and only fall back to
+ * reading the image via Claude vision for older/image-only days.
  *
  * Usage: npm run field-qa -- --start 2026-06-01 --end 2026-06-18 [--format table]
  *        npm run field-qa -- --start … --end … --write
  * Defaults to the current Europe/Kyiv month when bounds are omitted.
  *
  * `--write` writes reports/field-ops/inputs/<period>.csv (the fieldops input) and
- * reports/field-qa/<period>.{json,csv} (provenance). Needs the Slack files:read
- * scope to download the images.
+ * reports/field-qa/<period>.{json,csv} (provenance). The Slack files:read scope is
+ * only needed for the vision fallback (image-only days).
  *
  * Runs only under Node with `--conditions=react-server` (see package.json) so the
  * `server-only` imports in ../lib/slack and ../lib/flightExtract resolve.
@@ -18,6 +22,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { downloadFileBase64, fetchMessages } from "../lib/slack";
 import { extractAirborne } from "../lib/flightExtract";
+import { parseAirborneFromText } from "../lib/flightTextParse";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
 import { defaultBaseDir, periodKey, writeReport } from "../lib/reports";
 import {
@@ -62,19 +67,22 @@ async function main(): Promise<void> {
 
   const messages = await fetchMessages({ start: period.start, end: period.end });
   const summaries = messages.filter(
-    (m) =>
-      m.channel === FIELD_QA_CHANNEL &&
-      m.text.startsWith(SUMMARY_PREFIX) &&
-      (m.files?.some((f) => f.mimetype.startsWith("image/")) ?? false),
+    (m) => m.channel === FIELD_QA_CHANNEL && m.text.startsWith(SUMMARY_PREFIX),
   );
 
   const days: ExtractedDay[] = [];
   for (const m of summaries) {
     const date = TITLE_DATE.exec(m.text)?.[1];
-    const image = m.files?.find((f) => f.mimetype.startsWith("image/"));
-    if (!date || !image) continue;
-    const { base64, mediaType } = await downloadFileBase64(image.urlPrivate);
-    const a = await extractAirborne(base64, mediaType);
+    if (!date) continue;
+    // The bot now posts the card as text too; parse that deterministically when
+    // present and only fall back to reading the image via Claude vision.
+    let a = parseAirborneFromText(m.text);
+    if (!a) {
+      const image = m.files?.find((f) => f.mimetype.startsWith("image/"));
+      if (!image) continue;
+      const { base64, mediaType } = await downloadFileBase64(image.urlPrivate);
+      a = await extractAirborne(base64, mediaType);
+    }
     if (!a.flew || a.airborneSeconds <= 0) continue;
     days.push({ date, airborneSeconds: a.airborneSeconds, flights: a.flights, sourceTs: m.ts });
   }
