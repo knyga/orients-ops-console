@@ -83,6 +83,14 @@ export const asks = pgTable(
   (t) => [primaryKey({ columns: [t.period, t.gapKey] })],
 );
 
+/** Durable roster initial→name aliases (e.g. resolved "М"→"Максим"). */
+export const rosterAliases = pgTable("roster_aliases", {
+  initial: text("initial").primaryKey(),
+  name: text("name").notNull(),
+  source: text("source").notNull(),
+  recordedAt: text("recorded_at").notNull(),
+});
+
 /** The web's render source — one row per (feature, period). */
 export const reports = pgTable(
   "reports",
