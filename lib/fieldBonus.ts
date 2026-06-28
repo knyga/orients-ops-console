@@ -77,6 +77,9 @@ export function computeBonuses(input: {
   for (const [date, key] of [...groupKeyByDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const arr = tripsByGroup.get(key) ?? []; arr.push(date); tripsByGroup.set(key, arr);
   }
+  // Losses are keyed by flight DATE; the upstream extractor (lib/lossExtract)
+  // produces at most one loss record per report/date, so deduping by date is
+  // intentional and equivalent to counting loss events under that model.
   const lostDates = new Set(losses.filter((l) => !l.found).map((l) => l.date));
   const teamLosses = lostDates.size;
   const teamZeroed = teamLosses > TEAM_LOSS_CUTOFF;

@@ -34,6 +34,8 @@ describe("computeBonuses", () => {
     const r = computeBonuses({ period, reports, videoMinutesByDate: video, losses: [{ date: "2026-05-04", found: false, note: "x" }, { date: "2026-05-05", found: false, note: "y" }] });
     expect(r.people.find((p) => p.name === "Андріан")?.penaltyPct).toBe(0.5);
     expect(r.people.find((p) => p.name === "Андріан")?.net).toBe(700 * 4 * 0.5);
+    expect(r.people.find((p) => p.name === "Данило")?.penaltyPct).toBe(0.5);
+    expect(r.people.find((p) => p.name === "Данило")?.net).toBe(700 * 4 * 0.5);
   });
   it("a found drone is not a loss", () => {
     const reports = [rep({ flightDate: "2026-05-01" }), rep({ flightDate: "2026-05-02" })];
