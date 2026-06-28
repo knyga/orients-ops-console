@@ -7,16 +7,17 @@ describe("formatWebhookFailureNotice", () => {
       "ANTHROPIC_API_KEY is not set on the server (needed for approval classification).",
     );
     expect(msg).toContain("⚠️");
+    // The raw technical error passes through verbatim (not translated).
     expect(msg).toContain("ANTHROPIC_API_KEY is not set");
-    expect(msg.toLowerCase()).toContain("operator");
+    expect(msg).toContain("оператора");
   });
 
   it("trims an overly long reason so it stays a terse notice", () => {
     const msg = formatWebhookFailureNotice("x".repeat(1000));
-    expect(msg.length).toBeLessThan(400);
+    expect(msg.length).toBeLessThan(450);
   });
 
-  it("falls back to 'unknown error' when the reason is blank", () => {
-    expect(formatWebhookFailureNotice("   ")).toContain("unknown error");
+  it("falls back to 'невідома помилка' when the reason is blank", () => {
+    expect(formatWebhookFailureNotice("   ")).toContain("невідома помилка");
   });
 });

@@ -33,39 +33,50 @@ describe("publishableDays", () => {
 describe("formatDayMessage", () => {
   it("formats an ACCEPTED day with ratio and dataset", () => {
     const msg = formatDayMessage(day({}));
-    expect(msg).toMatch(/^✅ 2026-06-18 — accepted/);
-    expect(msg).toContain("dataset ✓");
+    expect(msg).toMatch(/^✅ 2026-06-18 — прийнято/);
+    expect(msg).toContain("датасет ✓");
     expect(msg).toMatch(/1144%|114[0-9]%/); // 206/18 ≈ 1144%
   });
 
-  it("formats a NEEDS_REVIEW day with its reasons and no-dataset note", () => {
+  it("formats a NEEDS_REVIEW day, rebuilding the gap wording in Ukrainian from fields", () => {
     const msg = formatDayMessage(
+      // English reasons in the verdict must NOT leak — the message is rebuilt
+      // from the structured fields (airborne 18m, video 2m, 11%).
       day({ date: "2026-06-13", status: "NEEDS_REVIEW", videoMinutes: 2, ratio: 0.1, datasetPosted: false, reasons: ["video 2m is 10% of airborne 20m (< 50%)", "no #datasets notice for the day"] }),
     );
-    expect(msg).toMatch(/^⚠️ 2026-06-13 — needs review:/);
+    expect(msg).toMatch(/^⚠️ 2026-06-13 — потрібна перевірка:/);
     expect(msg).toContain("< 50%");
-    expect(msg).toContain("no dataset");
+    expect(msg).toContain("немає повідомлення про датасет");
+    expect(msg).toContain("18 хв");
+    expect(msg).not.toContain("airborne");
   });
 
-  it("formats an ACCEPTED_EXCEPTION day with the exception note", () => {
+  it("rebuilds the no-airborne gap in Ukrainian when ratio is null", () => {
     const msg = formatDayMessage(
-      day({ date: "2026-06-13", status: "ACCEPTED_EXCEPTION", reasons: ["exception: force majeure"] }),
+      day({ date: "2026-06-13", status: "NEEDS_REVIEW", airborneMinutes: 0, videoMinutes: 5, ratio: null, datasetPosted: true, reasons: ["no airborne time recorded for the day"] }),
     );
-    expect(msg).toMatch(/^🟡 2026-06-13 — accepted \(exception\): exception: force majeure/);
+    expect(msg).toContain("немає записаного часу в повітрі за день");
+  });
+
+  it("formats an ACCEPTED_EXCEPTION day, passing the human reason through verbatim", () => {
+    const msg = formatDayMessage(
+      day({ date: "2026-06-13", status: "ACCEPTED_EXCEPTION", reasons: ["форс-мажор: гроза"] }),
+    );
+    expect(msg).toMatch(/^🟡 2026-06-13 — прийнято \(виняток\): форс-мажор: гроза/);
   });
 });
 
 describe("formatOverride", () => {
   it("strikes the original and amends for an approve", () => {
-    const o = formatOverride("⚠️ 2026-06-04 — needs review: …", "accepted_exception", "Oleksandr K", "we were testing");
-    expect(o.updatedText).toBe("~⚠️ 2026-06-04 — needs review: …~\n🟡 Updated → accepted (exception) by Oleksandr K: we were testing");
-    expect(o.replyText).toMatch(/^🟡 Recorded: accepted \(exception\) by Oleksandr K\. Reason: we were testing/);
+    const o = formatOverride("⚠️ 2026-06-04 — потрібна перевірка: …", "accepted_exception", "Oleksandr K", "ми тестували");
+    expect(o.updatedText).toBe("~⚠️ 2026-06-04 — потрібна перевірка: …~\n🟡 Оновлено → прийнято (виняток), Oleksandr K: ми тестували");
+    expect(o.replyText).toMatch(/^🟡 Зафіксовано: прийнято \(виняток\), Oleksandr K\. Причина: ми тестували/);
   });
 
   it("uses the rejected icon/label for a disapprove", () => {
-    const o = formatOverride("✅ 2026-06-05 — accepted …", "rejected", "Bohdan Forostianyi", "not acceptable");
-    expect(o.updatedText).toContain("~✅ 2026-06-05 — accepted …~");
-    expect(o.updatedText).toContain("⛔ Updated → rejected by Bohdan Forostianyi: not acceptable");
-    expect(o.replyText).toMatch(/^⛔ Recorded: rejected/);
+    const o = formatOverride("✅ 2026-06-05 — прийнято …", "rejected", "Bohdan Forostianyi", "не приймається");
+    expect(o.updatedText).toContain("~✅ 2026-06-05 — прийнято …~");
+    expect(o.updatedText).toContain("⛔ Оновлено → відхилено, Bohdan Forostianyi: не приймається");
+    expect(o.replyText).toMatch(/^⛔ Зафіксовано: відхилено/);
   });
 });

@@ -15,6 +15,6 @@ const MAX_REASON = 240;
 
 /** The thread reply the bot posts when an actionable reply failed to apply. */
 export function formatWebhookFailureNotice(reason: string): string {
-  const trimmed = reason.trim().slice(0, MAX_REASON) || "unknown error";
-  return `⚠️ I couldn't apply this automatically — server error: ${trimmed}. It's logged for an operator; I won't act on this reply until it's fixed.`;
+  const trimmed = reason.trim().slice(0, MAX_REASON) || "невідома помилка";
+  return `⚠️ Не вдалося застосувати автоматично — помилка сервера: ${trimmed}. Її залоговано для оператора; я не оброблятиму цю відповідь, доки це не виправлять.`;
 }

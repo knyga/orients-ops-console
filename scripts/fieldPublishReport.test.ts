@@ -43,10 +43,10 @@ describe("buildPlan / pendingItems", () => {
 
 describe("formatDryRun", () => {
   it("shows pending count, target channel, and the messages; sends nothing", () => {
-    const plan = buildPlan([day({ date: "2026-06-13", status: "NEEDS_REVIEW", reasons: ["no #datasets notice for the day"] })], {});
+    const plan = buildPlan([day({ date: "2026-06-13", status: "NEEDS_REVIEW", videoMinutes: 2, ratio: 0.1, datasetPosted: false, reasons: ["no #datasets notice for the day"] })], {});
     const out = formatDryRun(plan, "field-qa", { start: "2026-06-01", end: "2026-06-30" });
     expect(out).toMatch(/DRY RUN — would post 1 verdict\(s\) to #field-qa/);
-    expect(out).toContain("needs review");
+    expect(out).toContain("потрібна перевірка");
     expect(out).toContain("No messages were sent");
   });
 

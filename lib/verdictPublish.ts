@@ -8,6 +8,7 @@
  * datasets may yet arrive), so the bot stays quiet about them — posting a
  * "pending" verdict would be noise that flips later.
  */
+import { MIN_RATIO } from "./reconcile";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const ICON: Record<string, string> = {
@@ -48,27 +49,44 @@ export function formatOverride(
   reason: string,
 ): OverrideMessages {
   const icon = decision === "accepted_exception" ? "🟡" : "⛔";
-  const label = decision === "accepted_exception" ? "accepted (exception)" : "rejected";
+  const label = decision === "accepted_exception" ? "прийнято (виняток)" : "відхилено";
   return {
-    updatedText: `~${originalText}~\n${icon} Updated → ${label} by ${by}: ${reason}`,
-    replyText: `${icon} Recorded: ${label} by ${by}. Reason: ${reason}`,
+    updatedText: `~${originalText}~\n${icon} Оновлено → ${label}, ${by}: ${reason}`,
+    replyText: `${icon} Зафіксовано: ${label}, ${by}. Причина: ${reason}`,
   };
 }
 
-/** The Slack message text the bot would post for a single day's verdict. */
+/**
+ * The Slack message text the bot would post for a single day's verdict — in
+ * Ukrainian, the field team's language. For NEEDS_REVIEW the gap wording is
+ * rebuilt here from the verdict's structured fields (mirroring askGaps.ts), so
+ * the English `day.reasons` (kept for the internal web/reports) never leaks to
+ * the channel. ACCEPTED_EXCEPTION passes the human exception reason through.
+ */
 export function formatDayMessage(day: DayVerdict): string {
   const icon = ICON[day.status] ?? "";
   const air = day.airborneMinutes.toFixed(0);
   const vid = day.videoMinutes.toFixed(0);
   const pct = day.ratio === null ? "—" : `${(day.ratio * 100).toFixed(0)}%`;
-  const ds = day.datasetPosted ? "dataset ✓" : "no dataset";
+  const ds = day.datasetPosted ? "датасет ✓" : "без датасету";
 
   if (day.status === "ACCEPTED") {
-    return `✅ ${day.date} — accepted (video ${vid}m is ${pct} of ${air}m airborne; ${ds}).`;
+    return `✅ ${day.date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`;
   }
   if (day.status === "ACCEPTED_EXCEPTION") {
-    return `🟡 ${day.date} — accepted (exception): ${day.reasons.join("; ")}.`;
+    return `🟡 ${day.date} — прийнято (виняток): ${day.reasons.join("; ")}.`;
   }
-  // NEEDS_REVIEW
-  return `${icon} ${day.date} — needs review: ${day.reasons.join("; ")} (video ${vid}m / ${air}m airborne, ${ds}).`;
+  // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
+  const reasons: string[] = [];
+  const videoOk = day.ratio !== null && day.ratio >= MIN_RATIO;
+  if (!videoOk) {
+    reasons.push(
+      day.ratio === null
+        ? "немає записаного часу в повітрі за день"
+        : `відео ${vid} хв — лише ${pct} від ${air} хв у повітрі (< 50%)`,
+    );
+  }
+  if (!day.datasetPosted) reasons.push("немає повідомлення про датасет за цей день");
+
+  return `${icon} ${day.date} — потрібна перевірка: ${reasons.join("; ")} (відео ${vid} хв / ${air} хв у повітрі, ${ds}).`;
 }
