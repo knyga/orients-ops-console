@@ -13,7 +13,7 @@ Answer per-person bonus questions using this repo's CLI. Recomputes bonuses from
 - Bonuses are: **700** per qualifying trip + **200** early (arrival ≤12:30 Kyiv) + **300** weekend (Sat/Sun) — apply early/weekend stacking per deployment.
 - There is a **drone-loss multiplier** for deployments where the drone was lost; the classifier runs via Claude and scans the #field-qa thread + Vimeo video names for loss evidence.
 - Videos are attributed to a flight day by the **date encoded in the video name** (via `videoFlightDate`), robust to upload lag. Day boundaries use **Europe/Kyiv**, not UTC. `created_time` is a fallback only.
-- **Team cutoff**: only count people with ≥ 3 qualifying trips in the period (house policy to avoid low-sample noise in bonuses).
+- **Team cutoff**: if >3 drones are lost (all people in the period), the team is zeroed and all net bonuses become 0. This is the only cutoff — there is NO per-person trip filter.
 
 ## When to use
 
@@ -30,11 +30,14 @@ npm run field-bonus -- --start 2026-05-01 --end 2026-05-31
 It prints JSON:
 
 - `period` — `{ start, end, timezone }`
-- `personBonuses[]` — `{ person, trips, early, weekend, loss, subtotal, multiplier, total }` (only persons with ≥ 3 trips)
-- `summary` — `{ personCount, totalTrips, totalBase, totalEarly, totalWeekend, totalLoss, totalBonus }`
-- (internal) `allPersons[]` — same structure, including sub-3-trip people (for debugging)
+- `people[]` — `{ name, trips, early, weekend, gross, penaltyPct, net }` (all people with ≥1 qualifying trip)
+- `days[]` — per-day breakdown with roster, deployment minutes, video minutes, and reason code
+- `total` — the summed net bonuses (0 if `teamZeroed`)
+- `teamZeroed` — true only if >3 drones were lost (only cutoff — no per-person trip filter)
+- `penalties[]` — drone-loss multipliers by flight group
+- `flags[]` — unknown initials, counted-but-no-video warnings, etc.
 
-Answer totals from `summary`; per-person from `personBonuses`. Add `--format table` for a human-readable view. Add `--sheet <path>` to reconcile against a normalized CSV export (`person,trips,early,weekend`) and print divergences.
+Answer totals from `total`; per-person from `people[]`. Add `--format table` for a human-readable view. Add `--sheet <path>` to reconcile against a normalized CSV export (`person,trips,early,weekend`) and print divergences.
 
 To persist a period as a committed artifact, add `--write`: it writes the lossless stats to `reports/field-bonus/<period>.json` (the web's render source — same shape as above) and a flat `reports/field-bonus/<period>.csv` (`person,trips,early,weekend,loss,subtotal,multiplier,total`), printing both paths to stderr. The web renders the committed JSON via `GET /api/field-bonus?period=<key>` (and lists committed periods via `?periods=1`); the live `?start=&end=` path still recomputes fresh from #field-qa + Vimeo.
 
