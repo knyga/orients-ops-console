@@ -91,6 +91,12 @@ async function userMap(): Promise<Map<string, string>> {
   return map;
 }
 
+/** Public directory snapshot [{ id, name }] from a users.list page-walk. */
+export async function listUsers(): Promise<{ id: string; name: string }[]> {
+  const map = await userMap();
+  return [...map.entries()].map(([id, name]) => ({ id, name }));
+}
+
 interface HistoryResponse extends SlackOk {
   messages: { user?: string; bot_id?: string; ts: string; text?: string; files?: RawFile[] }[];
 }
