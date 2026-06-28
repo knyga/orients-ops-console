@@ -143,9 +143,9 @@ extending their output with the `axis` field, not adding a new ingestion mechani
 2. **Slack** — `formatDayMessage` (`lib/verdictPublish.ts`) replaces the
    `day.datasetPosted ? "dataset ✓" : "no dataset"` marker with:
    - `POSTED` → `dataset ✓`
-   - `WAIVED` → `dataset 📝 waived: <reason>` (reason truncated to one line, ~120 chars)
+   - `WAIVED` → `dataset 📝 waived` (verbatim reason carried in `reasons[]`, not inlined here)
    - `MISSING` → `no dataset`
-   - `DECLINED` → `dataset ⛔ (declined by <admin>)`
+   - `DECLINED` → `dataset ⛔ declined`
 3. **Web** — the field-verdict view renders a dataset-status badge per day, fed by the same
    committed JSON.
 
@@ -167,5 +167,7 @@ extending their output with the `axis` field, not adding a new ingestion mechani
    `dataset 📝 waived: <reason>`. `POSTED` keeps `dataset ✓`.
 2. **DECLINED reach** — `DECLINED` is strictly the bs-filter on *waived reasons*. A
    genuinely posted but low-quality dataset is a separate day-axis rejection, out of scope here.
-3. **Reason capture for WAIVED** — store the verbatim reason text in `Resolution.note`;
-   surface it in the marker, truncated to a single line (~120 chars) for the Slack post.
+3. **Reason capture for WAIVED** — store the verbatim reason text in `Resolution.note`.
+   Surface it in the verdict `reasons[]` (so it shows in the CLI table, CSV, and web view).
+   Keep the Slack marker terse (`dataset 📝 waived`) to avoid a noisy post; the full reason
+   lives in the thread the reason was stated in.
