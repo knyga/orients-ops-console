@@ -53,15 +53,24 @@ describe("notify flags + plan", () => {
     });
     expect(plan).toHaveLength(0);
   });
-  it("marks a non-counted settled day as no-bonus (thread note, no DMs)", () => {
+  it("settled REJECTED day earns nothing (no-bonus note, no DMs) even when counted", () => {
     const plan = buildNotifyPlan({
-      days: [day({ counted: false, reason: "deploy<3h" })],
-      verdictByDate: new Map([["2026-06-19", "NEEDS_REVIEW"]]),
+      days: [day({ counted: true, reason: "counted" })],
+      verdictByDate: new Map([["2026-06-19", "REJECTED"]]),
       publishedDates: new Set(["2026-06-19"]), slackIdByName: new Map(), log: {},
     });
     expect(plan[0].earned).toBe(false);
     expect(plan[0].threadPending).toBe(true);
     expect(plan[0].pendingDms).toHaveLength(0);
+    expect(plan[0].reason).toBe("виїзд відхилено");
+  });
+  it("skips a NEEDS_REVIEW day (not final)", () => {
+    const plan = buildNotifyPlan({
+      days: [day({ counted: true })],
+      verdictByDate: new Map([["2026-06-19", "NEEDS_REVIEW"]]),
+      publishedDates: new Set(["2026-06-19"]), slackIdByName: new Map(), log: {},
+    });
+    expect(plan).toHaveLength(0);
   });
   it("skips an already thread-notified + DMed day", () => {
     const plan = buildNotifyPlan({

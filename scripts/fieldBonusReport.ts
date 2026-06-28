@@ -59,8 +59,10 @@ export interface NotifyPlanItem {
 
 /**
  * Which settled days still need a thread post and/or DMs. A day is in the plan
- * iff its verdict has settled (≠ PENDING). Earned = the bonus DayBonus is
- * counted. PENDING days and fully-notified days are dropped.
+ * iff its verdict is FINAL: ACCEPTED, ACCEPTED_EXCEPTION, or REJECTED.
+ * PENDING and NEEDS_REVIEW are skipped (NEEDS_REVIEW may still flip to an
+ * exception). Earned = verdict is accepted AND the bonus DayBonus is counted.
+ * Fully-notified days are dropped.
  */
 export function buildNotifyPlan(input: {
   days: DayBonus[];
@@ -73,9 +75,11 @@ export function buildNotifyPlan(input: {
   const plan: NotifyPlanItem[] = [];
   for (const day of days) {
     const status = verdictByDate.get(day.date);
-    if (!status || status === "PENDING") continue; // only settled days, rolling
+    if (!status || status === "PENDING" || status === "NEEDS_REVIEW") continue; // only final statuses
     const people = dayPersonBonuses(day);
-    const earned = people.length > 0;
+    const accepted = status === "ACCEPTED" || status === "ACCEPTED_EXCEPTION";
+    const earned = accepted && people.length > 0;
+    const reason = accepted ? day.reason : "виїзд відхилено";
     const threadPending = !isThreadNotified(log, day.date);
 
     const pendingDms: NotifyTarget[] = [];
@@ -89,7 +93,7 @@ export function buildNotifyPlan(input: {
       }
     }
     if (!threadPending && pendingDms.length === 0 && unmatched.length === 0) continue;
-    plan.push({ date: day.date, earned, reason: day.reason, people, threadPending, pendingDms, unmatched, published: publishedDates.has(day.date) });
+    plan.push({ date: day.date, earned, reason, people, threadPending, pendingDms, unmatched, published: publishedDates.has(day.date) });
   }
   return plan;
 }
