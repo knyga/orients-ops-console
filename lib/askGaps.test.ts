@@ -26,7 +26,9 @@ describe("gapsForDay", () => {
     expect(gaps).toHaveLength(1);
     expect(gaps[0].gapType).toBe("no_dataset");
     expect(gaps[0].channel).toBe("datasets");
-    expect(gaps[0].question).toContain("2026-06-13");
+    // Question carries the Ukrainian weekday; the structured `date` stays raw.
+    expect(gaps[0].question).toContain("2026-06-13 (субота)");
+    expect(gaps[0].date).toBe("2026-06-13");
   });
 
   it("emits a low_video gap (to #field-qa) when video < 50%", () => {
