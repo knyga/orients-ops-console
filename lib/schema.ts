@@ -91,6 +91,18 @@ export const rosterAliases = pgTable("roster_aliases", {
   recordedAt: text("recorded_at").notNull(),
 });
 
+/** Rolling field-bonus notifications (idempotency): thread note + per-person DMs. */
+export const bonusNotified = pgTable(
+  "bonus_notified",
+  {
+    period: text("period").notNull(),
+    date: text("date").notNull(),
+    threadTs: text("thread_ts"),
+    dms: jsonb("dms").notNull(), // { slackId, ts, amount }[]
+  },
+  (t) => [primaryKey({ columns: [t.period, t.date] })],
+);
+
 /** The web's render source — one row per (feature, period). */
 export const reports = pgTable(
   "reports",
