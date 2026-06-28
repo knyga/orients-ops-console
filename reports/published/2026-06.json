@@ -1,0 +1,119 @@
+{
+  "2026-06-01": {
+    "date": "2026-06-01",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-01 — accepted (video 45m is 122% of 37m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:29.890Z",
+    "ts": "1781971229.865219"
+  },
+  "2026-06-02": {
+    "date": "2026-06-02",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-02 — accepted (video 45m is 81% of 55m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:30.183Z",
+    "ts": "1781971230.172469"
+  },
+  "2026-06-03": {
+    "date": "2026-06-03",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-03 — accepted (video 36m is 84% of 43m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:30.469Z",
+    "ts": "1781971230.457649"
+  },
+  "2026-06-04": {
+    "date": "2026-06-04",
+    "channel": "orients-ops-console-test",
+    "text": "⚠️ 2026-06-04 — needs review: video 0m is 0% of airborne 32m (< 50%); no #datasets notice for the day (video 0m / 32m airborne, no dataset).",
+    "postedAt": "2026-06-20T16:00:30.765Z",
+    "ts": "1781971230.744959",
+    "override": {
+      "decision": "accepted_exception",
+      "by": "Oleksandr K",
+      "ackedAt": "2026-06-20T16:24:38.710Z"
+    }
+  },
+  "2026-06-05": {
+    "date": "2026-06-05",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-05 — accepted (video 77m is 132% of 58m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:31.055Z",
+    "ts": "1781971231.046609"
+  },
+  "2026-06-06": {
+    "date": "2026-06-06",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-06 — accepted (video 51m is 108% of 47m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:31.352Z",
+    "ts": "1781971231.333579"
+  },
+  "2026-06-08": {
+    "date": "2026-06-08",
+    "channel": "orients-ops-console-test",
+    "text": "⚠️ 2026-06-08 — needs review: video 0m is 0% of airborne 85m (< 50%); no #datasets notice for the day (video 0m / 85m airborne, no dataset).",
+    "postedAt": "2026-06-20T16:00:31.635Z",
+    "ts": "1781971231.624839"
+  },
+  "2026-06-09": {
+    "date": "2026-06-09",
+    "channel": "orients-ops-console-test",
+    "text": "⚠️ 2026-06-09 — needs review: video 0m is 0% of airborne 104m (< 50%); no #datasets notice for the day (video 0m / 104m airborne, no dataset).",
+    "postedAt": "2026-06-20T16:00:31.961Z",
+    "ts": "1781971231.933969"
+  },
+  "2026-06-10": {
+    "date": "2026-06-10",
+    "channel": "orients-ops-console-test",
+    "text": "⚠️ 2026-06-10 — needs review: no #datasets notice for the day (video 144m / 89m airborne, no dataset).",
+    "postedAt": "2026-06-20T16:00:32.581Z",
+    "ts": "1781971232.524619"
+  },
+  "2026-06-11": {
+    "date": "2026-06-11",
+    "channel": "orients-ops-console-test",
+    "text": "⚠️ 2026-06-11 — needs review: video 0m is 0% of airborne 18m (< 50%); no #datasets notice for the day (video 0m / 18m airborne, no dataset).",
+    "postedAt": "2026-06-20T16:00:32.924Z",
+    "ts": "1781971232.875869"
+  },
+  "2026-06-12": {
+    "date": "2026-06-12",
+    "channel": "orients-ops-console-test",
+    "text": "⚠️ 2026-06-12 — needs review: video 0m is 0% of airborne 34m (< 50%); no #datasets notice for the day (video 0m / 34m airborne, no dataset).",
+    "postedAt": "2026-06-20T16:00:33.222Z",
+    "ts": "1781971233.209369"
+  },
+  "2026-06-13": {
+    "date": "2026-06-13",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-13 — accepted (video 66m is 324% of 20m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:33.515Z",
+    "ts": "1781971233.495919"
+  },
+  "2026-06-15": {
+    "date": "2026-06-15",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-15 — accepted (video 83m is 386% of 21m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:33.798Z",
+    "ts": "1781971233.792409"
+  },
+  "2026-06-16": {
+    "date": "2026-06-16",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-16 — accepted (video 93m is 255% of 36m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:34.092Z",
+    "ts": "1781971234.080449"
+  },
+  "2026-06-17": {
+    "date": "2026-06-17",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-17 — accepted (video 50m is 248% of 20m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:34.375Z",
+    "ts": "1781971234.362799"
+  },
+  "2026-06-18": {
+    "date": "2026-06-18",
+    "channel": "orients-ops-console-test",
+    "text": "✅ 2026-06-18 — accepted (video 114m is 614% of 19m airborne; dataset ✓).",
+    "postedAt": "2026-06-20T16:00:34.665Z",
+    "ts": "1781971234.659459"
+  }
+}

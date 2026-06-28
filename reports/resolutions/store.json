@@ -1,0 +1,10 @@
+[
+  {
+    "date": "2026-06-04",
+    "decision": "accepted_exception",
+    "note": "The approver stated \"тут було усе ок, апрув\" (everything was fine here, approve), explicitly approving the day despite the bot's concerns about missing video and dataset.",
+    "source": "https://orientsai.slack.com/archives/C0BC1GT1G4R/p1781972134995669",
+    "recordedAt": "2026-06-20T16:24:38.173Z",
+    "by": "Oleksandr K"
+  }
+]
