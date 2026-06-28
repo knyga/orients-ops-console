@@ -52,6 +52,17 @@ Dates are inclusive and must be `YYYY-MM-DD`.
 
 Missing any of these makes the CLI exit non-zero with a clear message — tell the user to set them in `.env`.
 
+## Rolling notification (`--notify`)
+
+As each flight day's acceptance settles (verdict ≠ PENDING), post that day's
+per-person breakdown in the day's verdict thread and DM each participant their
+**provisional** share (the monthly drone-loss multiplier settles separately).
+
+- Dry-run: `npm run field-bonus -- --start … --end … --notify` (prints, sends nothing).
+- Send: add `--publish --channel <name>` (needs `chat:write`, `im:write`; use a private test channel first).
+- Idempotent via the `bonus_notified` table; only settled, already-`field-publish`ed days are notified; names without a Slack id are skipped and flagged (add them to `SLACK_ID_OVERRIDES` in `lib/fieldSlackIds.ts`).
+- Prereqs: run `npm run field-verdict -- --write` and `npm run field-publish -- … --publish` first.
+
 ## Out of scope
 
 The assemblers' "Бонус за готові дрони" (ready-drone) fund is **not** computed here — it is a separate in-house fund for ready/delivered drone units, not deployment bonuses. This CLI covers only deployment-based field bonuses.

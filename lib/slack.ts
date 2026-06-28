@@ -91,6 +91,12 @@ async function userMap(): Promise<Map<string, string>> {
   return map;
 }
 
+/** Public directory snapshot [{ id, name }] from a users.list page-walk. */
+export async function listUsers(): Promise<{ id: string; name: string }[]> {
+  const map = await userMap();
+  return [...map.entries()].map(([id, name]) => ({ id, name }));
+}
+
 interface HistoryResponse extends SlackOk {
   messages: { user?: string; bot_id?: string; ts: string; text?: string; files?: RawFile[] }[];
 }
@@ -341,6 +347,26 @@ export async function postMessage(channelId: string, text: string, threadTs?: st
     );
   }
   return body.ts ?? "";
+}
+
+/**
+ * Open (or fetch) the bot↔user DM channel via conversations.open and return its
+ * channel id for postMessage. SERVER-ONLY; needs `im:write` (+ `chat:write` to
+ * post). Throws SlackError on failure.
+ */
+export async function openDm(userId: string): Promise<string> {
+  const res = await fetch(`${API}/conversations.open`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token()}`, "Content-Type": "application/json; charset=utf-8" },
+    cache: "no-store",
+    body: JSON.stringify({ users: userId }),
+  });
+  if (!res.ok) throw new SlackError(`Slack conversations.open returned ${res.status} ${res.statusText}`, res.status);
+  const body = (await res.json()) as SlackOk & { channel?: { id?: string } };
+  if (!body.ok || !body.channel?.id) {
+    throw new SlackError(`Slack conversations.open error: ${body.error ?? "unknown"} (is the im:write scope granted?)`, 502);
+  }
+  return body.channel.id;
 }
 
 /**

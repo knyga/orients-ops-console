@@ -15,6 +15,13 @@
       "when": 1782675245843,
       "tag": "0001_watery_smasher",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782679034342,
+      "tag": "0002_stiff_rictor",
+      "breakpoints": true
     }
   ]
 }

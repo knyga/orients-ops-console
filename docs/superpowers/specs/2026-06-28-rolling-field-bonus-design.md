@@ -57,9 +57,11 @@ Out of scope (unchanged from reality):
 
 ## Trigger & amount
 
-- **Trigger (rolling):** a day is eligible to notify once its `field-verdict`
-  status is **no longer `PENDING`** (grace elapsed, or accepted/exception/
-  rejected). Never notify a `PENDING` day.
+- **Trigger (rolling):** a day is eligible to notify only when its
+  `field-verdict` status is **FINAL**: `ACCEPTED` or `ACCEPTED_EXCEPTION`
+  (earned breakdown + DMs) or `REJECTED` (no-bonus note, no DMs). `PENDING`
+  and `NEEDS_REVIEW` are both skipped — `NEEDS_REVIEW` is not final because a
+  human may still resolve it to `ACCEPTED_EXCEPTION`.
 - **Amount (provisional):** from the `field-bonus` `DayBonus` for that date:
   - `counted` day → **earned**: per roster member `base = TRIP`, `+EARLY` if the
     day is `early`, `+WEEKEND` if `weekend`; `total` per person; day total = sum.
