@@ -22,8 +22,31 @@ const FEATURE = "field-bonus";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
-  if (searchParams.get("periods")) {
+  if (searchParams.get("periods") === "1") {
     return NextResponse.json({ periods: await listPeriods(FEATURE) });
+  }
+
+  // Live mode: ?start=&end=&refresh=1 (refresh required for live compute).
+  if (searchParams.get("refresh") === "1") {
+    const start = searchParams.get("start");
+    const end = searchParams.get("end");
+
+    if (!start || !end) {
+      return NextResponse.json(
+        { error: "Provide `period`, `periods`, or both `start` and `end`." },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const periodObj = { start, end };
+      const report = await computeBonusReport(periodObj);
+      return NextResponse.json(report);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unexpected server error.";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
   }
 
   const period = searchParams.get("period");
@@ -44,24 +67,8 @@ export async function GET(request: Request) {
     return NextResponse.json(report);
   }
 
-  // Live mode: ?start=&end= (with optional ?refresh=1).
-  const start = searchParams.get("start");
-  const end = searchParams.get("end");
-
-  if (!start || !end) {
-    return NextResponse.json(
-      { error: "Provide `period`, `periods`, or both `start` and `end`." },
-      { status: 400 },
-    );
-  }
-
-  try {
-    const periodObj = { start, end };
-    const report = await computeBonusReport(periodObj);
-    return NextResponse.json(report);
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unexpected server error.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json(
+    { error: "Provide `period`, `periods`, or both `start`, `end`, and `refresh=1`." },
+    { status: 400 },
+  );
 }
