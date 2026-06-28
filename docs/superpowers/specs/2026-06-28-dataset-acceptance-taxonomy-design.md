@@ -143,7 +143,7 @@ extending their output with the `axis` field, not adding a new ingestion mechani
 2. **Slack** — `formatDayMessage` (`lib/verdictPublish.ts`) replaces the
    `day.datasetPosted ? "dataset ✓" : "no dataset"` marker with:
    - `POSTED` → `dataset ✓`
-   - `WAIVED` → `dataset ✓ (waived: <reason>)`
+   - `WAIVED` → `dataset 📝 waived: <reason>` (reason truncated to one line, ~120 chars)
    - `MISSING` → `no dataset`
    - `DECLINED` → `dataset ⛔ (declined by <admin>)`
 3. **Web** — the field-verdict view renders a dataset-status badge per day, fed by the same
@@ -161,12 +161,11 @@ extending their output with the `axis` field, not adding a new ingestion mechani
 - `lib/verdictPublish.ts` (pure): marker rendering for each `DatasetStatus`.
 - Migration test / backfill assertion: legacy rows resolve to `axis = "day"`.
 
-## Open questions for review
+## Resolved decisions
 
-1. **Marker wording** — is `dataset ✓ (waived: <reason>)` the right tone for the Slack post,
-   or should a waiver read differently from a genuine posting (e.g. `dataset ~ waived`)?
-2. **DECLINED reach** — should an admin be able to decline a *genuinely posted* dataset
-   (data-quality veto), or is DECLINED strictly the bs-filter on waived reasons? Current
-   design: the latter; a posted-but-bad dataset is a day-axis rejection.
-3. **Reason capture for WAIVED** — store the verbatim reason text in `Resolution.note`
-   (current plan) and surface it in the marker, or summarize it?
+1. **Marker wording** — a waiver must not read as a clean pass. Use the `📝` marker, not `✓`:
+   `dataset 📝 waived: <reason>`. `POSTED` keeps `dataset ✓`.
+2. **DECLINED reach** — `DECLINED` is strictly the bs-filter on *waived reasons*. A
+   genuinely posted but low-quality dataset is a separate day-axis rejection, out of scope here.
+3. **Reason capture for WAIVED** — store the verbatim reason text in `Resolution.note`;
+   surface it in the marker, truncated to a single line (~120 chars) for the Slack post.
