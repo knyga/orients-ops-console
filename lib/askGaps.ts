@@ -8,8 +8,13 @@
  *  - no_dataset: no #datasets notice for the day → ask in #datasets.
  *  - low_video:  Vimeo video < 50% of airborne (incl. zero) → ask in #field-qa
  *                (unrecorded flights? tech issue?).
+ *
+ * Dates in the question text carry their Ukrainian weekday (e.g. "2026-06-23
+ * (вівторок)") to match the verdict posts — see dateWithWeekday in ./workdays.
+ * The structured `date` field stays a raw YYYY-MM-DD (it's the ask-once key).
  */
 import { MIN_RATIO } from "./reconcile";
+import { dateWithWeekday } from "./workdays";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 export type GapType = "no_dataset" | "low_video";
@@ -33,6 +38,8 @@ export function gapsForDay(day: DayVerdict): Gap[] {
   if (day.status !== "NEEDS_REVIEW") return [];
   const gaps: Gap[] = [];
 
+  const date = dateWithWeekday(day.date);
+
   const videoOk = day.ratio !== null && day.ratio >= MIN_RATIO;
   if (!videoOk) {
     const vid = day.videoMinutes.toFixed(0);
@@ -42,7 +49,7 @@ export function gapsForDay(day: DayVerdict): Gap[] {
       date: day.date,
       channel: "field-qa",
       question:
-        `За ${day.date} на Vimeo завантажено ${vid} хв відео — це менше 50% від часу в повітрі (${air} хв). ` +
+        `За ${date} на Vimeo завантажено ${vid} хв відео — це менше 50% від часу в повітрі (${air} хв). ` +
         `Є незаписані польоти, чи була технічна проблема із записом? Якщо так — напишіть деталі.`,
     });
   }
@@ -53,7 +60,7 @@ export function gapsForDay(day: DayVerdict): Gap[] {
       date: day.date,
       channel: "datasets",
       question:
-        `За ${day.date} не бачу повідомлення про датасет. Його опубліковано? ` +
+        `За ${date} не бачу повідомлення про датасет. Його опубліковано? ` +
         `Будь ласка, дайте лінк, або напишіть "немає датасету" якщо публікувати нічого.`,
     });
   }

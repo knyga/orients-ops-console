@@ -9,6 +9,7 @@
  * "pending" verdict would be noise that flips later.
  */
 import { MIN_RATIO } from "./reconcile";
+import { dateWithWeekday } from "./workdays";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const ICON: Record<string, string> = {
@@ -65,16 +66,17 @@ export function formatOverride(
  */
 export function formatDayMessage(day: DayVerdict): string {
   const icon = ICON[day.status] ?? "";
+  const date = dateWithWeekday(day.date);
   const air = day.airborneMinutes.toFixed(0);
   const vid = day.videoMinutes.toFixed(0);
   const pct = day.ratio === null ? "—" : `${(day.ratio * 100).toFixed(0)}%`;
   const ds = day.datasetPosted ? "датасет ✓" : "без датасету";
 
   if (day.status === "ACCEPTED") {
-    return `✅ ${day.date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`;
+    return `✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`;
   }
   if (day.status === "ACCEPTED_EXCEPTION") {
-    return `🟡 ${day.date} — прийнято (виняток): ${day.reasons.join("; ")}.`;
+    return `🟡 ${date} — прийнято (виняток): ${day.reasons.join("; ")}.`;
   }
   // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
   const reasons: string[] = [];
@@ -88,5 +90,5 @@ export function formatDayMessage(day: DayVerdict): string {
   }
   if (!day.datasetPosted) reasons.push("немає повідомлення про датасет за цей день");
 
-  return `${icon} ${day.date} — потрібна перевірка: ${reasons.join("; ")} (відео ${vid} хв / ${air} хв у повітрі, ${ds}).`;
+  return `${icon} ${date} — потрібна перевірка: ${reasons.join("; ")} (відео ${vid} хв / ${air} хв у повітрі, ${ds}).`;
 }

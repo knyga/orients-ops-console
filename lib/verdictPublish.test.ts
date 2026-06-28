@@ -33,7 +33,7 @@ describe("publishableDays", () => {
 describe("formatDayMessage", () => {
   it("formats an ACCEPTED day with ratio and dataset", () => {
     const msg = formatDayMessage(day({}));
-    expect(msg).toMatch(/^✅ 2026-06-18 — прийнято/);
+    expect(msg).toMatch(/^✅ 2026-06-18 \(четвер\) — прийнято/);
     expect(msg).toContain("датасет ✓");
     expect(msg).toMatch(/1144%|114[0-9]%/); // 206/18 ≈ 1144%
   });
@@ -44,7 +44,7 @@ describe("formatDayMessage", () => {
       // from the structured fields (airborne 18m, video 2m, 11%).
       day({ date: "2026-06-13", status: "NEEDS_REVIEW", videoMinutes: 2, ratio: 0.1, datasetPosted: false, reasons: ["video 2m is 10% of airborne 20m (< 50%)", "no #datasets notice for the day"] }),
     );
-    expect(msg).toMatch(/^⚠️ 2026-06-13 — потрібна перевірка:/);
+    expect(msg).toMatch(/^⚠️ 2026-06-13 \(субота\) — потрібна перевірка:/);
     expect(msg).toContain("< 50%");
     expect(msg).toContain("немає повідомлення про датасет");
     expect(msg).toContain("18 хв");
@@ -62,7 +62,7 @@ describe("formatDayMessage", () => {
     const msg = formatDayMessage(
       day({ date: "2026-06-13", status: "ACCEPTED_EXCEPTION", reasons: ["форс-мажор: гроза"] }),
     );
-    expect(msg).toMatch(/^🟡 2026-06-13 — прийнято \(виняток\): форс-мажор: гроза/);
+    expect(msg).toMatch(/^🟡 2026-06-13 \(субота\) — прийнято \(виняток\): форс-мажор: гроза/);
   });
 });
 

@@ -22,6 +22,27 @@ export function isWorkingDay(day: string): boolean {
   return wd >= 1 && wd <= 5;
 }
 
+// Nominative-case Ukrainian weekday names, indexed by ISO weekday (Mon=1 … Sun=7).
+const UK_WEEKDAYS = [
+  "понеділок",
+  "вівторок",
+  "середа",
+  "четвер",
+  "п'ятниця",
+  "субота",
+  "неділя",
+] as const;
+
+/** Ukrainian weekday name (nominative) for a YYYY-MM-DD date. */
+export function ukrainianWeekday(day: string): string {
+  return UK_WEEKDAYS[isoWeekday(day) - 1];
+}
+
+/** "2026-06-23 (вівторок)" — a date with its Ukrainian weekday, for team-facing Slack messages. */
+export function dateWithWeekday(day: string): string {
+  return `${day} (${ukrainianWeekday(day)})`;
+}
+
 /** Add `n` working days (Mon–Fri) to a YYYY-MM-DD date; n=0 returns the input. */
 export function addWorkingDays(day: string, n: number): string {
   const date = parseDay(day);
