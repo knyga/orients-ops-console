@@ -15,6 +15,9 @@ import type { Period } from "./period";
 import { TRACKED_CHANNELS, type SlackChannel } from "./slackChannels";
 import type { SlackFile, SlackMessage } from "./policySchedule";
 import { toSlackFiles, type RawFile } from "./slackFiles";
+import { sendTracked, type SendMeta } from "./sendTracked";
+
+export type { SendMeta };
 
 const API = "https://slack.com/api";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -319,14 +322,7 @@ export async function downloadFileBase64(
   return { base64: buf.toString("base64"), mediaType };
 }
 
-/**
- * Post a message to a channel via chat.postMessage. SERVER-ONLY; needs the
- * `chat:write` scope (the bot must be a member of the channel). This is the ONLY
- * outward-facing write in the console — callers gate it behind an explicit
- * --publish flag (dry-run is the default). Throws SlackError (e.g. missing_scope
- * → "not_in_channel"/"missing_scope") on failure; returns the posted ts.
- */
-export async function postMessage(channelId: string, text: string, threadTs?: string): Promise<string> {
+async function rawPost(channelId: string, text: string, threadTs?: string): Promise<string> {
   const res = await fetch(`${API}/chat.postMessage`, {
     method: "POST",
     headers: {
@@ -350,6 +346,31 @@ export async function postMessage(channelId: string, text: string, threadTs?: st
 }
 
 /**
+ * Post a message to a channel. SERVER-ONLY; needs the `chat:write` scope. Every
+ * send is recorded + deduped via sendTracked (reserve-then-send). `meta.key`
+ * identifies the logical action; a repeat call with the same key is skipped and
+ * returns the original ts. Returns the posted ts.
+ */
+export async function postMessage(
+  channelId: string,
+  text: string,
+  meta: SendMeta,
+  threadTs?: string,
+): Promise<string> {
+  return sendTracked(
+    {
+      channelId,
+      text,
+      kind: threadTs ? "reply" : "post",
+      threadTs: threadTs ?? null,
+      ts: null,
+      meta,
+    },
+    () => rawPost(channelId, text, threadTs),
+  );
+}
+
+/**
  * Open (or fetch) the bot↔user DM channel via conversations.open and return its
  * channel id for postMessage. SERVER-ONLY; needs `im:write` (+ `chat:write` to
  * post). Throws SlackError on failure.
@@ -369,12 +390,7 @@ export async function openDm(userId: string): Promise<string> {
   return body.channel.id;
 }
 
-/**
- * Edit one of the bot's own messages via chat.update. SERVER-ONLY; needs
- * `chat:write`. Used to amend a published verdict in place (strike-through the
- * old text + append the override). Throws SlackError on failure.
- */
-export async function updateMessage(channelId: string, ts: string, text: string): Promise<void> {
+async function rawUpdate(channelId: string, ts: string, text: string): Promise<void> {
   const res = await fetch(`${API}/chat.update`, {
     method: "POST",
     headers: {
@@ -391,4 +407,23 @@ export async function updateMessage(channelId: string, ts: string, text: string)
   if (!body.ok) {
     throw new SlackError(`Slack chat.update error: ${body.error ?? "unknown"}`, 502);
   }
+}
+
+/**
+ * Edit one of the bot's own messages. SERVER-ONLY; needs `chat:write`. Recorded +
+ * deduped via sendTracked (kind "edit"); the row's ts is the edited message's ts.
+ */
+export async function updateMessage(
+  channelId: string,
+  ts: string,
+  text: string,
+  meta: SendMeta,
+): Promise<void> {
+  await sendTracked(
+    { channelId, text, kind: "edit", threadTs: null, ts, meta },
+    async () => {
+      await rawUpdate(channelId, ts, text);
+      return ts;
+    },
+  );
 }

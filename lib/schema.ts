@@ -83,6 +83,32 @@ export const asks = pgTable(
   (t) => [primaryKey({ columns: [t.period, t.gapKey] })],
 );
 
+/** Every message the bot posts/edits to Slack — audit log + reserve-then-send dedup. */
+export const outboundMessages = pgTable(
+  "outbound_messages",
+  {
+    key: text("key").primaryKey(), // logical-action idempotency key
+    feature: text("feature").notNull(), // "verdict" | "ask" | "approval" | "webhook-failure"
+    kind: text("kind").notNull(), // "post" | "reply" | "edit"
+    channel: text("channel").notNull(), // tracked channel NAME
+    channelId: text("channel_id").notNull(),
+    text: text("text").notNull(), // exact text sent
+    threadTs: text("thread_ts"), // thread root (null for top-level posts)
+    ts: text("ts"), // Slack ts (null until sent for posts)
+    status: text("status").notNull(), // "pending" | "sent" | "failed" | "skipped"
+    origin: text("origin").notNull(), // "vercel" | "local" | "unknown"
+    trigger: text("trigger").notNull(), // "cli" | "cron" | "webhook" | "unknown"
+    error: text("error"),
+    attempts: integer("attempts").notNull(),
+    reservedAt: text("reserved_at").notNull(), // ISO
+    sentAt: text("sent_at"), // ISO, set on success
+  },
+  (t) => [
+    index("outbound_messages_sent_at").on(t.sentAt),
+    index("outbound_messages_feature").on(t.feature),
+  ],
+);
+
 /** Durable roster initial→name aliases (e.g. resolved "М"→"Максим"). */
 export const rosterAliases = pgTable("roster_aliases", {
   initial: text("initial").primaryKey(),

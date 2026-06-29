@@ -23,6 +23,8 @@
   - approval edit: `approval-edit:<date>:<rev>`
   - approval ack reply: `approval-ack:<date>:<rev>`
   - webhook failure notice: `webhook-failure:<date>:<kind>:<rev>`
+  - bonus thread breakdown: `bonus-thread:<date>`
+  - bonus per-person DM: `bonus-dm:<date>:<slackId>`
   - `<rev>` = `contentRev(text)` (a stable djb2 base-36 hash of the message text).
 - `origin` values: `"vercel"` | `"local"` (auto-detected) | `"unknown"` (backfill only). `trigger` values: `"cli"` | `"cron"` | `"webhook"` | `"unknown"`.
 
@@ -35,7 +37,7 @@
 - `lib/outbound.ts` — **create**: DB layer (`reserveSend`, `markSent`, `markFailed`, `readOutbound`, `readOutboundPeriods`). Not server-only.
 - `lib/sendTracked.ts` — **create**: reserve-then-send wrapper (no `server-only`, takes the raw sender as a callback so it is unit-testable).
 - `lib/slack.ts` — **modify**: `postMessage`/`updateMessage` gain a required `meta` arg and delegate to `sendTracked`; extract raw fetches to private `rawPost`/`rawUpdate`.
-- `scripts/field-publish.ts`, `scripts/field-ask.ts`, `lib/applyApproval.ts`, `app/api/slack/events/route.ts`, `scripts/field-approvals.ts` — **modify**: pass `meta`/`trigger`.
+- `scripts/field-publish.ts`, `scripts/field-ask.ts`, `lib/applyApproval.ts`, `app/api/slack/events/route.ts`, `scripts/field-approvals.ts`, `scripts/field-bonus.ts` — **modify**: pass `meta`/`trigger` at every send site.
 - `lib/sentLog.ts` — **create**: pure shaping (`toSentView`, `summarizeSent`) + view types.
 - `scripts/sentReport.ts` — **create**: pure CLI arg parsing + table formatting.
 - `scripts/sent.ts` — **create**: CLI entry. `package.json` — **modify**: add `sent` + `backfill-outbound` scripts.
@@ -146,12 +148,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
   - `type SendTrigger = "cli" | "cron" | "webhook" | "unknown"`
   - `type OutboundStatus = "pending" | "sent" | "failed" | "skipped"`
   - `contentRev(text: string): string`
-  - `detectOrigin(env?: NodeJS.ProcessEnv): "vercel" | "local"`
+  - `detectOrigin(env?: Record<string, string | undefined>): "vercel" | "local"`
   - `verdictKey(periodKey: string, date: string): string`
   - `askKey(gapType: string, date: string): string`
   - `approvalEditKey(date: string, rev: string): string`
   - `approvalAckKey(date: string, rev: string): string`
   - `webhookFailureKey(date: string, kind: string, rev: string): string`
+  - `bonusThreadKey(date: string): string`
+  - `bonusDmKey(date: string, slackId: string): string`
   - `decideReserve(inserted: { ts: string | null } | null, existing: { status: OutboundStatus; ts: string | null } | null): { won: boolean; existingTs: string | null }`
 
 - [ ] **Step 1: Write the failing test**
@@ -164,6 +168,8 @@ import {
   approvalAckKey,
   approvalEditKey,
   askKey,
+  bonusDmKey,
+  bonusThreadKey,
   contentRev,
   decideReserve,
   detectOrigin,
@@ -180,6 +186,8 @@ describe("key builders", () => {
     expect(webhookFailureKey("2026-06-04", "approver", "abc")).toBe(
       "webhook-failure:2026-06-04:approver:abc",
     );
+    expect(bonusThreadKey("2026-06-04")).toBe("bonus-thread:2026-06-04");
+    expect(bonusDmKey("2026-06-04", "U123")).toBe("bonus-dm:2026-06-04:U123");
   });
 });
 
@@ -193,8 +201,8 @@ describe("contentRev", () => {
 
 describe("detectOrigin", () => {
   it("maps VERCEL=1 to vercel, else local", () => {
-    expect(detectOrigin({ VERCEL: "1" } as NodeJS.ProcessEnv)).toBe("vercel");
-    expect(detectOrigin({} as NodeJS.ProcessEnv)).toBe("local");
+    expect(detectOrigin({ VERCEL: "1" })).toBe("vercel");
+    expect(detectOrigin({})).toBe("local");
   });
 });
 
@@ -247,7 +255,9 @@ export function contentRev(text: string): string {
 }
 
 /** Which point of execution this is. Vercel sets VERCEL=1 in its runtime. */
-export function detectOrigin(env: NodeJS.ProcessEnv = process.env): "vercel" | "local" {
+export function detectOrigin(
+  env: Record<string, string | undefined> = process.env,
+): "vercel" | "local" {
   return env.VERCEL === "1" ? "vercel" : "local";
 }
 
@@ -260,6 +270,9 @@ export const approvalAckKey = (date: string, rev: string): string =>
   `approval-ack:${date}:${rev}`;
 export const webhookFailureKey = (date: string, kind: string, rev: string): string =>
   `webhook-failure:${date}:${kind}:${rev}`;
+export const bonusThreadKey = (date: string): string => `bonus-thread:${date}`;
+export const bonusDmKey = (date: string, slackId: string): string =>
+  `bonus-dm:${date}:${slackId}`;
 
 /**
  * Decide the reserve outcome. We win (and should send) when our INSERT landed,
@@ -462,7 +475,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Create: `lib/sendTracked.ts`
 - Test: `lib/sendTracked.test.ts`
 - Modify: `lib/slack.ts` (postMessage line 323, updateMessage line 351)
-- Modify: `scripts/field-publish.ts:94`, `scripts/field-ask.ts:85`, `lib/applyApproval.ts:64-66`, `scripts/field-approvals.ts:97`, `app/api/slack/events/route.ts` (failVisibly + its callers + applyApproverReply call)
+- Modify: `scripts/field-publish.ts:94`, `scripts/field-ask.ts:85`, `lib/applyApproval.ts:64-66`, `scripts/field-approvals.ts:97`, `app/api/slack/events/route.ts` (failVisibly + its callers + applyApproverReply call), `scripts/field-bonus.ts` (the two `postMessage` calls in the `--notify` block)
+
+> Note: `lib/slack.ts` also exports `openDm` (opens a DM conversation, no text). It is intentionally **not** tracked — the audit log records messages posted, not channel-open calls. Only the `postMessage` that follows `openDm` is tracked.
 
 **Interfaces:**
 - Consumes: `reserveSend`, `markSent`, `markFailed` from `./outbound`; `detectOrigin` + `SendTrigger` from `./outboundKeys`.
@@ -828,6 +843,38 @@ Update its two call sites (lines 163 and 175) from `failVisibly(channel.id, …)
 
 Add `trigger: "webhook",` to the `applyApproverReply({ … })` call (line 151-158).
 
+- [ ] **Step 10b: Update `scripts/field-bonus.ts` (the `--notify` block)**
+
+The notifier dynamically imports `postMessage` (line 18). Add `bonusThreadKey`, `bonusDmKey` to the dynamic imports inside the `if (args.notify)` block, alongside the existing ones:
+
+```ts
+    const { bonusThreadKey, bonusDmKey } = await import("../lib/outboundKeys");
+```
+
+Replace the thread-breakdown send (line 51):
+
+```ts
+        const ts = await postMessage(channel.id, text, {
+          key: bonusThreadKey(item.date),
+          feature: "bonus",
+          channel: channel.name,
+          trigger: "cli",
+        }, rootTs);
+```
+
+Replace the per-person DM send (line 59):
+
+```ts
+        const ts = await postMessage(dm, formatDm(item.date, t.amount), {
+          key: bonusDmKey(item.date, t.slackId),
+          feature: "bonus",
+          channel: `dm:${t.slackId}`,
+          trigger: "cli",
+        });
+```
+
+(`t.slackId` is non-null here — line 57 `continue`s when it is null. The DM has no tracked channel name, so the audit row labels it `dm:<slackId>`.)
+
 - [ ] **Step 11: Run the full suite + type-check + lint**
 
 Run: `npx tsc --noEmit && npx vitest run && npm run lint`
@@ -836,7 +883,7 @@ Expected: PASS. (All `postMessage`/`updateMessage` call sites now supply `meta`;
 - [ ] **Step 12: Commit**
 
 ```bash
-git add lib/sendTracked.ts lib/sendTracked.test.ts lib/slack.ts scripts/field-publish.ts scripts/field-ask.ts lib/applyApproval.ts scripts/field-approvals.ts app/api/slack/events/route.ts
+git add lib/sendTracked.ts lib/sendTracked.test.ts lib/slack.ts scripts/field-publish.ts scripts/field-ask.ts lib/applyApproval.ts scripts/field-approvals.ts app/api/slack/events/route.ts scripts/field-bonus.ts
 git commit -m "feat(outbound): record + dedup every Slack send via sendTracked
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -1553,7 +1600,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Self-Review
 
 **Spec coverage:**
-- Chokepoint instrumentation → Task 4 (sendTracked + slack.ts + all 4 callers). ✓
+- Chokepoint instrumentation → Task 4 (sendTracked + slack.ts + all send sites: field-publish, field-ask, applyApproval, events webhook, field-bonus thread+DM). `openDm` intentionally untracked (no message text). ✓
 - `outbound_messages` data model → Task 1. ✓
 - Idempotency key conventions (`<rev>` content hash) → Task 2 (`contentRev`, key builders) + applied in Task 4. ✓
 - Reserve-then-send (INSERT ON CONFLICT, retry-on-failed) → Task 2 (`decideReserve`) + Task 3 (`reserveSend`) + Task 4 (`sendTracked`). ✓

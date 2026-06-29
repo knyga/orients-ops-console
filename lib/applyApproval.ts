@@ -8,6 +8,7 @@
 import "server-only";
 import { classifyApproval } from "./approvalClassify";
 import { postMessage, updateMessage } from "./slack";
+import { approvalAckKey, approvalEditKey, contentRev, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { writePublished, type PublishedEntry } from "./published";
 import { upsertResolution, type ResolutionDecision } from "./resolutions";
@@ -22,6 +23,7 @@ export interface ApproverDecisionArgs {
   by: string;                   // approver name
   reason: string;
   evidence: string;             // permalink to the deciding reply (or "")
+  trigger?: SendTrigger;
 }
 
 export interface ApproverDecisionResult {
@@ -40,7 +42,7 @@ export interface ApproverDecisionResult {
 export async function applyApproverDecision(
   args: ApproverDecisionArgs,
 ): Promise<ApproverDecisionResult> {
-  const { entry, period, decision, by, reason, evidence } = args;
+  const { entry, period, decision, by, reason, evidence, trigger = "unknown" } = args;
 
   if (entry.override?.decision === decision) {
     return { applied: false, alreadyAcked: true };
@@ -62,8 +64,24 @@ export async function applyApproverDecision(
   }
 
   const { updatedText, replyText } = formatOverride(entry.text, decision, by, reason);
-  await updateMessage(channel.id, entry.ts, updatedText);
-  await postMessage(channel.id, replyText, entry.ts);
+  const editRev = contentRev(updatedText);
+  await updateMessage(channel.id, entry.ts, updatedText, {
+    key: approvalEditKey(entry.date, editRev),
+    feature: "approval",
+    channel: channel.name,
+    trigger,
+  });
+  await postMessage(
+    channel.id,
+    replyText,
+    {
+      key: approvalAckKey(entry.date, contentRev(replyText)),
+      feature: "approval",
+      channel: channel.name,
+      trigger,
+    },
+    entry.ts,
+  );
 
   await writePublished(period, {
     [entry.date]: { ...entry, override: { decision, by, ackedAt: new Date().toISOString() } },
@@ -79,6 +97,7 @@ export interface ApproverReplyArgs {
   approverName: string;
   replyPermalink: string;
   replyTs: string;
+  trigger?: SendTrigger;
 }
 
 /**
@@ -103,5 +122,6 @@ export async function applyApproverReply(
     by: outcome.by,
     reason: outcome.reason,
     evidence: outcome.evidencePermalink,
+    trigger: args.trigger,
   });
 }

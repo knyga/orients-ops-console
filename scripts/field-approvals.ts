@@ -101,6 +101,7 @@ async function main(): Promise<void> {
         by: outcome.by,
         reason: outcome.reason,
         evidence: outcome.evidencePermalink,
+        trigger: "cli",
       });
       if (result.applied) {
         process.stderr.write(`field-approvals: amended + acknowledged ${entry.date} in #${entry.channel}.\n`);

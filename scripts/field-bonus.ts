@@ -16,6 +16,7 @@ async function main(): Promise<void> {
     const { readPublished } = await import("../lib/published");
     const { readNotified, writeNotified, recordThread, recordDm } = await import("../lib/bonusNotified");
     const { listUsers, openDm, postMessage } = await import("../lib/slack");
+    const { bonusThreadKey, bonusDmKey } = await import("../lib/outboundKeys");
     const { matchSlackId } = await import("../lib/fieldSlackIds");
     const { TRACKED_CHANNELS } = await import("../lib/slackChannels");
     const { formatThreadBreakdown, formatDm, formatNoBonusNote } = await import("../lib/bonusNotify");
@@ -48,7 +49,12 @@ async function main(): Promise<void> {
       const rootTs = published[item.date].ts;
       if (item.threadPending) {
         const text = item.earned ? formatThreadBreakdown(item.date, item.people) : formatNoBonusNote(item.date, item.reason);
-        const ts = await postMessage(channel.id, text, rootTs);
+        const ts = await postMessage(channel.id, text, {
+          key: bonusThreadKey(item.date),
+          feature: "bonus",
+          channel: channel.name,
+          trigger: "cli",
+        }, rootTs);
         log = recordThread(log, item.date, ts);
         await writeNotified(period, log);
         process.stderr.write(`field-bonus: posted ${item.earned ? "breakdown" : "no-bonus note"} for ${item.date}\n`);
@@ -56,7 +62,12 @@ async function main(): Promise<void> {
       for (const t of item.pendingDms) {
         if (t.slackId === null) continue;
         const dm = await openDm(t.slackId);
-        const ts = await postMessage(dm, formatDm(item.date, t.amount));
+        const ts = await postMessage(dm, formatDm(item.date, t.amount), {
+          key: bonusDmKey(item.date, t.slackId),
+          feature: "bonus",
+          channel: `dm:${t.slackId}`,
+          trigger: "cli",
+        });
         log = recordDm(log, item.date, t.slackId, ts, t.amount.total);
         await writeNotified(period, log);
         process.stderr.write(`field-bonus: DMed ${t.name} for ${item.date} (${t.amount.total} грн)\n`);
