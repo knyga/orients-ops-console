@@ -24,8 +24,9 @@ async function main(): Promise<void> {
   }
 
   const pub = await db.select().from(schema.published);
+  let pubSeeded = 0;
   for (const r of pub) {
-    await db
+    const inserted = await db
       .insert(schema.outboundMessages)
       .values({
         key: verdictKey(r.period, r.date),
@@ -44,15 +45,16 @@ async function main(): Promise<void> {
         reservedAt: r.postedAt,
         sentAt: r.postedAt,
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning();
+    if (inserted.length > 0) pubSeeded += 1;
   }
 
   const asks = await db.select().from(schema.asks);
   let asksSeeded = 0;
   for (const a of asks) {
     if (!a.askedTs) continue;
-    asksSeeded += 1;
-    await db
+    const inserted = await db
       .insert(schema.outboundMessages)
       .values({
         key: askKey(a.gapType, a.date),
@@ -71,11 +73,13 @@ async function main(): Promise<void> {
         reservedAt: a.askedAt,
         sentAt: a.askedAt,
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning();
+    if (inserted.length > 0) asksSeeded += 1;
   }
 
   process.stderr.write(
-    `backfill-outbound: seeded ${pub.length} verdict(s) and ${asksSeeded} ask(s).\n`,
+    `backfill-outbound: inserted ${pubSeeded} new verdict(s) and ${asksSeeded} new ask(s) (existing rows skipped).\n`,
   );
 }
 
