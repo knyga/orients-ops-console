@@ -36,8 +36,8 @@ describe("contentRev", () => {
 
 describe("detectOrigin", () => {
   it("maps VERCEL=1 to vercel, else local", () => {
-    expect(detectOrigin({ VERCEL: "1" } as NodeJS.ProcessEnv)).toBe("vercel");
-    expect(detectOrigin({} as NodeJS.ProcessEnv)).toBe("local");
+    expect(detectOrigin({ VERCEL: "1" })).toBe("vercel");
+    expect(detectOrigin({})).toBe("local");
   });
 });
 

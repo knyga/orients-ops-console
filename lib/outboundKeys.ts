@@ -16,7 +16,9 @@ export function contentRev(text: string): string {
 }
 
 /** Which point of execution this is. Vercel sets VERCEL=1 in its runtime. */
-export function detectOrigin(env: NodeJS.ProcessEnv = process.env): "vercel" | "local" {
+export function detectOrigin(
+  env: Record<string, string | undefined> = process.env,
+): "vercel" | "local" {
   return env.VERCEL === "1" ? "vercel" : "local";
 }
 
