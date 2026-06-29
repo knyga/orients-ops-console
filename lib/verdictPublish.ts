@@ -62,7 +62,8 @@ export function formatOverride(
  * Ukrainian, the field team's language. For NEEDS_REVIEW the gap wording is
  * rebuilt here from the verdict's structured fields (mirroring askGaps.ts), so
  * the English `day.reasons` (kept for the internal web/reports) never leaks to
- * the channel. ACCEPTED_EXCEPTION passes the human exception reason through.
+ * the channel. ACCEPTED_EXCEPTION rebuilds the same gaps and keeps only the
+ * human exception note (the last reason) verbatim.
  */
 export function formatDayMessage(day: DayVerdict): string {
   const icon = ICON[day.status] ?? "";
@@ -76,19 +77,38 @@ export function formatDayMessage(day: DayVerdict): string {
     return `✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`;
   }
   if (day.status === "ACCEPTED_EXCEPTION") {
-    return `🟡 ${date} — прийнято (виняток): ${day.reasons.join("; ")}.`;
+    // Machine gaps are rebuilt in Ukrainian (the English strings in day.reasons
+    // never reach the channel). The human exception note is the LAST reason
+    // (applyResolution appends `exception[(by)]: note` last); keep its text
+    // verbatim, translating only the `exception` label → `виняток`.
+    const note = day.reasons.length
+      ? day.reasons[day.reasons.length - 1].replace(/^exception/, "виняток")
+      : "";
+    const parts = [...ukrainianGaps(day), note].filter(Boolean);
+    return `🟡 ${date} — прийнято (виняток): ${parts.join("; ")}.`;
   }
   // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
-  const reasons: string[] = [];
+  return `${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} (відео ${vid} хв / ${air} хв у повітрі, ${ds}).`;
+}
+
+/**
+ * The flight day's unmet recording-completeness gaps, phrased in Ukrainian and
+ * derived purely from the verdict's structured fields (never the English
+ * `reasons` strings). Shared by the NEEDS_REVIEW and ACCEPTED_EXCEPTION renders.
+ */
+function ukrainianGaps(day: DayVerdict): string[] {
+  const air = day.airborneMinutes.toFixed(0);
+  const vid = day.videoMinutes.toFixed(0);
+  const pct = day.ratio === null ? "—" : `${(day.ratio * 100).toFixed(0)}%`;
+  const gaps: string[] = [];
   const videoOk = day.ratio !== null && day.ratio >= MIN_RATIO;
   if (!videoOk) {
-    reasons.push(
+    gaps.push(
       day.ratio === null
         ? "немає записаного часу в повітрі за день"
         : `відео ${vid} хв — лише ${pct} від ${air} хв у повітрі (< 50%)`,
     );
   }
-  if (!day.datasetPosted) reasons.push("немає повідомлення про датасет за цей день");
-
-  return `${icon} ${date} — потрібна перевірка: ${reasons.join("; ")} (відео ${vid} хв / ${air} хв у повітрі, ${ds}).`;
+  if (!day.datasetPosted) gaps.push("немає повідомлення про датасет за цей день");
+  return gaps;
 }
