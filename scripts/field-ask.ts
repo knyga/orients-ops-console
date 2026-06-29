@@ -17,6 +17,7 @@
  * Runs under `--conditions=react-server` so the server-only Slack import resolves.
  */
 import { postMessage } from "../lib/slack";
+import { askKey } from "../lib/outboundKeys";
 import { TRACKED_CHANNELS } from "../lib/slackChannels";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
 import { readReportJson, periodKey } from "../lib/reports";
@@ -82,7 +83,12 @@ async function main(): Promise<void> {
       process.stderr.write(`field-ask: gap channel "${item.gap.channel}" is not tracked — skipping ${item.key}.\n`);
       continue;
     }
-    const ts = await postMessage(channel.id, item.gap.question);
+    const ts = await postMessage(channel.id, item.gap.question, {
+      key: askKey(item.gap.gapType, item.gap.date),
+      feature: "ask",
+      channel: channel.name,
+      trigger: "cli",
+    });
     nextLog = recordAsk(nextLog, item.key, {
       gapType: item.gap.gapType,
       date: item.gap.date,

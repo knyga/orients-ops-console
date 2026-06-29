@@ -18,6 +18,7 @@
  * Runs under `--conditions=react-server` so the server-only Slack import resolves.
  */
 import { postMessage } from "../lib/slack";
+import { verdictKey } from "../lib/outboundKeys";
 import { TRACKED_CHANNELS } from "../lib/slackChannels";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
 import { readReportJson, periodKey } from "../lib/reports";
@@ -91,7 +92,12 @@ async function main(): Promise<void> {
   let nextLog = log;
   let posted = 0;
   for (const item of pending) {
-    const ts = await postMessage(channel.id, item.text);
+    const ts = await postMessage(channel.id, item.text, {
+      key: verdictKey(periodKey(period), item.date),
+      feature: "verdict",
+      channel: channel.name,
+      trigger: "cli",
+    });
     nextLog = recordPublished(nextLog, {
       date: item.date,
       channel: channel.name,

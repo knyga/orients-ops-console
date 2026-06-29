@@ -27,6 +27,7 @@ import { applyApproverReply } from "@/lib/applyApproval";
 import { applyAnswerReply } from "@/lib/applyAnswer";
 import { permalinkFor, postMessage } from "@/lib/slack";
 import { formatWebhookFailureNotice } from "@/lib/webhookNotice";
+import { contentRev, webhookFailureKey } from "@/lib/outboundKeys";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,7 +63,7 @@ function ack(detail: Record<string, unknown>): Response {
  * almost always a config error (e.g. a missing server key) a human must fix.
  */
 async function failVisibly(
-  channelId: string,
+  channel: { id: string; name: string },
   threadTs: string,
   kind: string,
   date: string,
@@ -71,7 +72,17 @@ async function failVisibly(
   const message = err instanceof Error ? err.message : String(err);
   console.error(`slack events: ${kind} apply failed for ${date}:`, err);
   try {
-    await postMessage(channelId, formatWebhookFailureNotice(message), threadTs);
+    await postMessage(
+      channel.id,
+      formatWebhookFailureNotice(message),
+      {
+        key: webhookFailureKey(date, kind, contentRev(message)),
+        feature: "webhook-failure",
+        channel: channel.name,
+        trigger: "webhook",
+      },
+      threadTs,
+    );
   } catch (postErr) {
     console.error("slack events: failed to post failure notice:", postErr);
   }
@@ -155,12 +166,13 @@ export async function POST(req: Request): Promise<Response> {
           approverName: approver.name,
           replyPermalink,
           replyTs,
+          trigger: "webhook",
         });
         console.log(`slack events: applyApproverReply → applied=${result.applied} alreadyAcked=${result.alreadyAcked}`);
         return ack({ handled: "approver", date: pub.entry.date, ...result });
       } catch (err) {
         // Recognised an approver override but couldn't apply it — make it visible.
-        return await failVisibly(channel.id, threadTs, "approver", pub.entry.date, err);
+        return await failVisibly(channel, threadTs, "approver", pub.entry.date, err);
       }
     }
 
@@ -172,7 +184,7 @@ export async function POST(req: Request): Promise<Response> {
         console.log(`slack events: applyAnswerReply done for ${ask.record.date}`);
         return ack({ handled: "answer", date: ask.record.date });
       } catch (err) {
-        return await failVisibly(channel.id, threadTs, "answer", ask.record.date, err);
+        return await failVisibly(channel, threadTs, "answer", ask.record.date, err);
       }
     }
 
