@@ -3,7 +3,7 @@
  * same precedent as lib/published.ts). Holds the reserve-then-send writes and the
  * read paths the CLI + web render. Pure decision logic lives in ./outboundKeys.
  */
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db";
 import { decideReserve, type OutboundStatus } from "./outboundKeys";
 import type { Period } from "./period";
@@ -98,28 +98,33 @@ export async function markFailed(key: string, error: string): Promise<void> {
     .where(eq(schema.outboundMessages.key, key));
 }
 
-/** Rows sent within [period.start, period.end] (UTC), newest first. */
+/**
+ * Rows whose send was attempted within [period.start, period.end], newest first.
+ * Buckets by COALESCE(sentAt, reservedAt) so failed/pending rows (sentAt still
+ * null) stay visible — surfacing failures is the audit log's main purpose.
+ * NOTE: bounds are compared as UTC ISO strings, not Europe/Kyiv — month-edge
+ * sends can bucket a few hours off; acceptable for an internal audit log.
+ */
 export async function readOutbound(period: Period): Promise<OutboundRow[]> {
   const startIso = `${period.start}T00:00:00.000Z`;
   const endIso = `${period.end}T23:59:59.999Z`;
+  const when = sql`coalesce(${schema.outboundMessages.sentAt}, ${schema.outboundMessages.reservedAt})`;
   return db
     .select()
     .from(schema.outboundMessages)
-    .where(
-      and(
-        gte(schema.outboundMessages.sentAt, startIso),
-        lte(schema.outboundMessages.sentAt, endIso),
-      ),
-    )
-    .orderBy(desc(schema.outboundMessages.sentAt));
+    .where(sql`${when} >= ${startIso} and ${when} <= ${endIso}`)
+    .orderBy(desc(when));
 }
 
-/** Distinct YYYY-MM (UTC) months that have sent rows, newest first. */
+/** Distinct YYYY-MM (UTC) months that have any row, newest first. */
 export async function readOutboundPeriods(): Promise<string[]> {
   const rows = await db
-    .select({ sentAt: schema.outboundMessages.sentAt })
+    .select({
+      sentAt: schema.outboundMessages.sentAt,
+      reservedAt: schema.outboundMessages.reservedAt,
+    })
     .from(schema.outboundMessages);
   const months = new Set<string>();
-  for (const r of rows) if (r.sentAt) months.add(r.sentAt.slice(0, 7));
+  for (const r of rows) months.add((r.sentAt ?? r.reservedAt).slice(0, 7));
   return [...months].sort().reverse();
 }

@@ -4,7 +4,7 @@
  * reserve-then-send decision. No DB, no Slack, no node:fs — unit-testable.
  */
 export type SendTrigger = "cli" | "cron" | "webhook" | "unknown";
-export type OutboundStatus = "pending" | "sent" | "failed" | "skipped";
+export type OutboundStatus = "pending" | "sent" | "failed" | "skipped"; // "skipped" is reserved for forward-compat / manual ops — no code path writes it today
 
 /** Stable, dependency-free djb2 hash → base36. Used to key distinct edits. */
 export function contentRev(text: string): string {
