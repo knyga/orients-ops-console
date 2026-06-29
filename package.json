@@ -22,6 +22,8 @@
     "field-ask": "node --conditions=react-server --import tsx scripts/field-ask.ts",
     "field-remember": "node --conditions=react-server --import tsx scripts/field-remember.ts",
     "field-approvals": "node --conditions=react-server --import tsx scripts/field-approvals.ts",
+    "sent": "node --conditions=react-server --import tsx scripts/sent.ts",
+    "backfill-outbound": "node --conditions=react-server --import tsx scripts/backfill-outbound.ts",
     "field-bonus": "node --conditions=react-server --import tsx scripts/field-bonus.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
