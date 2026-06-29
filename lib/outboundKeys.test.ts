@@ -61,4 +61,16 @@ describe("decideReserve", () => {
       existingTs: null,
     });
   });
+  it("loses to an existing skipped row and returns its ts", () => {
+    expect(decideReserve(null, { status: "skipped", ts: "7.7" })).toEqual({
+      won: false,
+      existingTs: "7.7",
+    });
+  });
+  it("reclaims a failed row that already has a ts and returns that ts", () => {
+    expect(decideReserve(null, { status: "failed", ts: "3.3" })).toEqual({
+      won: true,
+      existingTs: "3.3",
+    });
+  });
 });
