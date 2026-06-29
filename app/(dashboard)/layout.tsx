@@ -14,6 +14,7 @@ const TABS: { href: string; label: string; enabled: boolean }[] = [
   { href: "/github-reporting", label: "GitHub Activity", enabled: true },
   { href: "/policy-tracking", label: "Policy Tracking", enabled: true },
   { href: "/drive", label: "Drive Sync", enabled: true },
+  { href: "/sent", label: "Outbound", enabled: true },
 ];
 
 export default function DashboardLayout({
