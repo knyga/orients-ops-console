@@ -85,7 +85,7 @@ function csvField(value: string): string {
 }
 
 export function toCsv(report: VerdictReport): string {
-  const lines = ["date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons"];
+  const lines = ["date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster"];
   for (const d of report.days) {
     lines.push([
       d.date,
@@ -95,6 +95,7 @@ export function toCsv(report: VerdictReport): string {
       d.ratio === null ? "" : d.ratio.toFixed(3),
       d.datasetStatus,
       csvField(d.reasons.join("; ")),
+      csvField(d.roster.join("; ")),
     ].join(","));
   }
   return `${lines.join("\n")}\n`;
@@ -119,14 +120,15 @@ export function formatTable(report: VerdictReport): string {
   const lines: string[] = [];
   lines.push(`Field-day verdict   ${report.period.start} … ${report.period.end}   (as of ${report.runDate}, grace ${report.graceWorkingDays}wd)`);
   lines.push("");
-  lines.push("Date         Status               Air(m)  Vid(m)  Ratio  DS  Reasons");
-  lines.push("----------   ------------------   ------  ------  -----  --  -------");
+  lines.push("Date         Status               Air(m)  Vid(m)  Ratio  DS  Crew                  Reasons");
+  lines.push("----------   ------------------   ------  ------  -----  --  ----                  -------");
   if (report.days.length === 0) {
     lines.push("(no flight days in this period)");
   } else {
     for (const d of report.days) {
+      const crew = [...d.roster, ...d.unknownInitials.map((u) => `?${u}`)].join(", ");
       lines.push(
-        `${d.date}   ${((STATUS_ICON[d.status] ?? "") + " " + d.status).padEnd(18)}   ${String(d.airborneMinutes).padStart(6)}  ${String(d.videoMinutes).padStart(6)}  ${(d.ratio === null ? "—" : d.ratio.toFixed(2)).padStart(5)}  ${((DATASET_ICON[d.datasetStatus] ?? "?") + " ").padEnd(2)}  ${d.reasons.join("; ")}`,
+        `${d.date}   ${((STATUS_ICON[d.status] ?? "") + " " + d.status).padEnd(18)}   ${String(d.airborneMinutes).padStart(6)}  ${String(d.videoMinutes).padStart(6)}  ${(d.ratio === null ? "—" : d.ratio.toFixed(2)).padStart(5)}  ${((DATASET_ICON[d.datasetStatus] ?? "?") + " ").padEnd(2)}  ${crew.padEnd(20)}  ${d.reasons.join("; ")}`,
       );
     }
   }

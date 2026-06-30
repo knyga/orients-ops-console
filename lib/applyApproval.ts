@@ -12,7 +12,7 @@ import { approvalAckKey, approvalEditKey, contentRev, type SendTrigger } from ".
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { writePublished, type PublishedEntry } from "./published";
 import { upsertResolution, type ResolutionDecision } from "./resolutions";
-import { formatOverride } from "./verdictPublish";
+import { formatOverride, splitRosterSuffix } from "./verdictPublish";
 import type { Period } from "./period";
 import { decideApproval } from "../scripts/fieldApprovalsReport";
 
@@ -64,7 +64,11 @@ export async function applyApproverDecision(
     return { applied: false, alreadyAcked: false };
   }
 
-  const { updatedText, replyText } = formatOverride(entry.text, decision, by, reason);
+  // Strike only the verdict BODY; preserve the crew suffix (👥 У полі: …) so an
+  // override and a roster correction edit disjoint regions of the message.
+  const { body, rosterLine } = splitRosterSuffix(entry.text);
+  const { updatedText: struck, replyText } = formatOverride(body, decision, by, reason);
+  const updatedText = rosterLine ? `${struck}\n${rosterLine}` : struck;
   const editRev = contentRev(updatedText);
   await updateMessage(channel.id, entry.ts, updatedText, {
     key: approvalEditKey(entry.date, editRev),

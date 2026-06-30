@@ -53,6 +53,12 @@ describe("verdictForDay", () => {
     expect(v.withinGrace).toBe(true);
     expect(v.status).toBe("PENDING");
   });
+
+  it("returns empty roster/unknownInitials (crew is attached by the orchestrator, not the gate)", () => {
+    const v = verdictForDay(base);
+    expect(v.roster).toEqual([]);
+    expect(v.unknownInitials).toEqual([]);
+  });
 });
 
 describe("verdictForDay with DatasetStatus", () => {

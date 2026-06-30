@@ -15,6 +15,11 @@ import { hasDatasetNotice } from "./datasetNotice";
 import { verdictForDay, type DayVerdict } from "./fieldDayVerdict";
 import { applyResolution, deriveDatasetStatus, readResolutions } from "./resolutions";
 import { addWorkingDays } from "./workdays";
+import { parseMonth } from "./fieldReports";
+import { readAliases, mergeAliases } from "./rosterAliases";
+import { SEED_ALIASES } from "./fieldRoster";
+import { readRosterCorrections } from "./rosterCorrections";
+import { applyRosterCorrection } from "./rosterCorrection";
 import { buildReport, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
 import { todayInFieldTz } from "./syncChannels";
 
@@ -75,6 +80,12 @@ export async function computeVerdicts(
   // 4. Resolutions (exceptions).
   const resolutions = await readResolutions();
 
+  // 5. Crew per flight day — parsed from the #field-qa "Звіт" reports + corrections.
+  const aliases = mergeAliases(SEED_ALIASES, await readAliases());
+  const fieldQaMessages = (await readChannelMessages("field-qa", period)).filter((m) => !m.deleted);
+  const parsedByDate = new Map(parseMonth(fieldQaMessages, aliases).map((r) => [r.flightDate, r]));
+  const corrections = await readRosterCorrections();
+
   // Flight days = days the bot reported airborne time (the field-qa report).
   const flightDates = [...airborneByDate.keys()].sort();
   const days: DayVerdict[] = flightDates.map((date) => {
@@ -93,7 +104,11 @@ export async function computeVerdicts(
     });
     // Surface the verbatim waiver/decline reason in the verdict reasons.
     const withNote = datasetNote ? { ...base, reasons: [...base.reasons, datasetNote] } : base;
-    return applyResolution(withNote, resolutions);
+    const resolved = applyResolution(withNote, resolutions);
+    // Attach the effective crew (parsed "Звіт" roster + any approver correction).
+    const parsed = parsedByDate.get(date);
+    const eff = applyRosterCorrection(parsed?.roster ?? [], true, corrections.find((c) => c.date === date));
+    return { ...resolved, roster: eff.roster, unknownInitials: parsed?.unknownInitials ?? [] };
   });
 
   const report = buildReport(days, period, today, GRACE_WORKING_DAYS);

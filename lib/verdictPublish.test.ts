@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDayMessage, formatOverride, publishableDays } from "./verdictPublish";
+import { formatDayMessage, formatOverride, publishableDays, ROSTER_MARKER, splitRosterSuffix, withRosterSuffix } from "./verdictPublish";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
@@ -11,6 +11,8 @@ const day = (over: Partial<DayVerdict>): DayVerdict => ({
   datasetStatus: "POSTED",
   withinGrace: false,
   reasons: [],
+  roster: [],
+  unknownInitials: [],
   ...over,
 });
 
@@ -66,7 +68,7 @@ describe("formatDayMessage", () => {
   });
 
   it("renders the waived dataset marker (Ukrainian)", () => {
-    const msg = formatDayMessage({ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [] });
+    const msg = formatDayMessage({ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [], roster: [], unknownInitials: [] });
     expect(msg).toContain("датасет 📝 виняток");
   });
 
@@ -110,5 +112,40 @@ describe("formatOverride", () => {
     expect(o.updatedText).toContain("~✅ 2026-06-05 — прийнято …~");
     expect(o.updatedText).toContain("⛔ Оновлено → відхилено, Bohdan Forostianyi: не приймається");
     expect(o.replyText).toMatch(/^⛔ Зафіксовано: відхилено/);
+  });
+});
+
+describe("crew suffix", () => {
+  it("round-trips body + roster", () => {
+    const body = "✅ 2026-06-13 — прийнято.";
+    const text = withRosterSuffix(body, ["Андріан", "Любомир"]);
+    expect(text).toBe(`${body}\n${ROSTER_MARKER}Андріан, Любомир.`);
+    const split = splitRosterSuffix(text);
+    expect(split.body).toBe(body);
+    expect(split.rosterLine).toBe(`${ROSTER_MARKER}Андріан, Любомир.`);
+  });
+
+  it("omits the suffix for an empty roster and splits cleanly when absent", () => {
+    expect(withRosterSuffix("body", [])).toBe("body");
+    expect(splitRosterSuffix("body")).toEqual({ body: "body", rosterLine: null });
+  });
+
+  it("formatDayMessage appends the crew line for an ACCEPTED day", () => {
+    const msg = formatDayMessage(day({ roster: ["Андріан", "Любомир"] }));
+    expect(msg).toContain(`\n${ROSTER_MARKER}Андріан, Любомир.`);
+  });
+
+  it("formatDayMessage omits the crew line when roster is empty", () => {
+    expect(formatDayMessage(day({ roster: [] }))).not.toContain(ROSTER_MARKER);
+  });
+
+  it("an override strike leaves the crew line intact (disjoint regions)", () => {
+    const published = withRosterSuffix("⚠️ 2026-06-04 — потрібна перевірка: …", ["Тарас"]);
+    const { body, rosterLine } = splitRosterSuffix(published);
+    const o = formatOverride(body, "accepted_exception", "Oleksandr K", "ми тестували");
+    const result = rosterLine ? `${o.updatedText}\n${rosterLine}` : o.updatedText;
+    expect(result).toContain("~⚠️ 2026-06-04 — потрібна перевірка: …~");
+    expect(result).toContain(`${ROSTER_MARKER}Тарас.`);
+    expect(result).not.toContain("~👥");
   });
 });

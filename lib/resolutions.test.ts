@@ -20,7 +20,7 @@ const needsReview: DayVerdict = {
   ratio: 0.1,
   datasetStatus: "MISSING",
   withinGrace: false,
-  reasons: ["video < 50%"],
+  reasons: ["video < 50%"], roster: [], unknownInitials: [],
 };
 
 describe("applyResolution (legacy day-axis tests)", () => {
@@ -103,7 +103,7 @@ describe("deriveDatasetStatus", () => {
 describe("applyResolution (video/day axes only)", () => {
   const verdict: DayVerdict = {
     date: "2026-06-10", status: "NEEDS_REVIEW" as const, airborneMinutes: 100,
-    videoMinutes: 10, ratio: 0.1, datasetStatus: "WAIVED" as const, withinGrace: false, reasons: [],
+    videoMinutes: 10, ratio: 0.1, datasetStatus: "WAIVED" as const, withinGrace: false, reasons: [], roster: [], unknownInitials: [],
   };
   it("video-axis exception flips NEEDS_REVIEW → ACCEPTED_EXCEPTION", () => {
     const out = applyResolution(verdict, [R({ axis: "video" })]);

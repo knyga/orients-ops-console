@@ -13,6 +13,8 @@ const verdict = (over: Partial<DayVerdict>): DayVerdict => ({
   datasetStatus: "POSTED",
   withinGrace: false,
   reasons: [],
+  roster: [],
+  unknownInitials: [],
   ...over,
 });
 

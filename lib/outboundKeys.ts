@@ -43,6 +43,12 @@ export const bonusDmKey = (date: string, slackId: string): string =>
 export const backfillEditKey = (date: string, rev: string): string =>
   `backfill-edit:${date}:${rev}`;
 
+/** Roster correction (S-roster): edit the verdict's crew suffix + threaded ack. */
+export const rosterEditKey = (date: string, rev: string): string =>
+  `roster-edit:${date}:${rev}`;
+export const rosterAckKey = (date: string, rev: string): string =>
+  `roster-ack:${date}:${rev}`;
+
 /**
  * Decide the reserve outcome. We win (and should send) when our INSERT landed,
  * OR when the only existing row is a prior FAILED attempt (retry). We lose (skip

@@ -11,6 +11,8 @@ const day = (over: Partial<DayVerdict>): DayVerdict => ({
   datasetStatus: "MISSING",
   withinGrace: false,
   reasons: [],
+  roster: [],
+  unknownInitials: [],
   ...over,
 });
 
