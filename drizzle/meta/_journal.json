@@ -36,6 +36,13 @@
       "when": 1782821350381,
       "tag": "0004_faithful_korath",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782825076256,
+      "tag": "0005_rapid_vision",
+      "breakpoints": true
     }
   ]
 }

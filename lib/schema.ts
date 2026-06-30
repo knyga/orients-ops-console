@@ -55,6 +55,17 @@ export const resolutions = pgTable(
   (t) => [primaryKey({ columns: [t.date, t.axis] })],
 );
 
+/** Approver roster corrections, keyed by flight date (crew + per-person eligibility). */
+export const rosterCorrections = pgTable("roster_corrections", {
+  date: text("date").primaryKey(),
+  roster: jsonb("roster"),            // string[] | null
+  eligibility: jsonb("eligibility"),  // Record<name,"counted"|"not_counted"> | null
+  note: text("note").notNull(),
+  by: text("by").notNull(),
+  source: text("source").notNull(),
+  recordedAt: text("recorded_at").notNull(),
+});
+
 /** Published verdicts (idempotency + thread root for approver overrides). */
 export const published = pgTable(
   "published",
