@@ -3,19 +3,21 @@
  * (e.g. "2026-06-13 force-majeure, accepted"). Consulted by the verdict so a
  * remembered exception flips NEEDS_REVIEW → ACCEPTED_EXCEPTION (or a veto →
  * REJECTED). Decisions are auditable and reversible. Backed by the `resolutions`
- * Postgres table (keyed by flight date), shared by CLIs, events route, and web.
+ * Postgres table (keyed by flight date + axis), shared by CLIs, events route, and web.
  *
  * NOT server-only: the CLIs import it (like lib/reports.ts). The apply/merge
  * logic is pure; only the read/write hit the DB.
  */
 import { db, schema } from "./db";
-import type { DayVerdict } from "./fieldDayVerdict";
+import type { DatasetStatus, DayVerdict } from "./fieldDayVerdict";
 
 export type ResolutionDecision = "accepted_exception" | "rejected";
+export type ResolutionAxis = "dataset" | "video" | "day";
 
 export interface Resolution {
   date: string;                     // YYYY-MM-DD flight day
-  decision: ResolutionDecision;     // accepted_exception (forgive a miss) | rejected (human veto)
+  axis: ResolutionAxis;             // what the decision is about (dataset | video | whole day)
+  decision: ResolutionDecision;     // accepted_exception (forgive) | rejected (veto)
   note: string;
   source: string;                   // permalink or "manual"
   recordedAt: string;               // ISO
@@ -26,6 +28,7 @@ export interface Resolution {
 function toResolution(r: typeof schema.resolutions.$inferSelect): Resolution {
   return {
     date: r.date,
+    axis: (r.axis as ResolutionAxis | null) ?? "day",
     decision: r.decision as ResolutionDecision,
     note: r.note,
     source: r.source,
@@ -40,10 +43,11 @@ export async function readResolutions(): Promise<Resolution[]> {
   return rows.map(toResolution);
 }
 
-/** Insert or replace the resolution for its date. */
+/** Insert or replace the resolution for its date + axis. */
 export async function upsertResolution(resolution: Resolution): Promise<void> {
   const values = {
     date: resolution.date,
+    axis: resolution.axis,
     decision: resolution.decision,
     note: resolution.note,
     source: resolution.source,
@@ -53,32 +57,64 @@ export async function upsertResolution(resolution: Resolution): Promise<void> {
   await db
     .insert(schema.resolutions)
     .values(values)
-    .onConflictDoUpdate({ target: schema.resolutions.date, set: values });
+    .onConflictDoUpdate({ target: [schema.resolutions.date, schema.resolutions.axis], set: values });
 }
 
-/** The resolution for a flight day, if any. Pure. */
+/** The resolution for a flight day (any axis), if any. Pure. */
 export function resolutionFor(date: string, resolutions: Resolution[]): Resolution | undefined {
   return resolutions.find((r) => r.date === date);
 }
 
 /**
- * Apply a human resolution to a verdict (pure):
- *  - `rejected` is an authoritative human veto → REJECTED from ANY status.
- *  - `accepted_exception` forgives a flagged miss → ACCEPTED_EXCEPTION, but only
- *    from NEEDS_REVIEW (it never "upgrades" an already-good day).
- * The decider's name (if any) is folded into the appended reason. Other cases
- * leave the verdict untouched.
+ * Derive the dataset axis status from the live #datasets signal + the dataset-
+ * scoped (or whole-day) resolutions. A stated reason WAIVES; an admin veto on a
+ * day with no posting DECLINES. A genuine posting wins (a posted-but-rejected day
+ * stays POSTED here — the day-level veto is applied separately). Pure.
+ */
+export function deriveDatasetStatus(
+  datasetPosted: boolean,
+  date: string,
+  resolutions: Resolution[],
+): { status: DatasetStatus; note?: string } {
+  const forDate = resolutions.filter(
+    (r) => r.date === date && (r.axis === "dataset" || r.axis === "day"),
+  );
+  const rejected = forDate.find((r) => r.decision === "rejected");
+  const exception = forDate.find((r) => r.decision === "accepted_exception");
+
+  if (!datasetPosted && rejected) {
+    const who = rejected.by ? ` (${rejected.by})` : "";
+    return { status: "DECLINED", note: `dataset reason declined${who}: ${rejected.note}` };
+  }
+  if (datasetPosted) return { status: "POSTED" };
+  if (exception) {
+    const who = exception.by ? ` (${exception.by})` : "";
+    return { status: "WAIVED", note: `dataset waived${who}: ${exception.note}` };
+  }
+  return { status: "MISSING" };
+}
+
+/**
+ * Apply the VIDEO/DAY-axis overlay to a verdict (pure). The dataset axis is
+ * handled by deriveDatasetStatus + verdictForDay; here we only honour exceptions
+ * and vetoes that target the video gate or the whole day:
+ *  - a `rejected` (video|day) is an authoritative veto → REJECTED from ANY status.
+ *  - an `accepted_exception` (video|day) forgives a flagged miss → ACCEPTED_EXCEPTION,
+ *    but only from NEEDS_REVIEW (never upgrades an already-good day).
  */
 export function applyResolution(verdict: DayVerdict, resolutions: Resolution[]): DayVerdict {
-  const match = resolutionFor(verdict.date, resolutions);
-  if (!match) return verdict;
-  const who = match.by ? ` (${match.by})` : "";
-
-  if (match.decision === "rejected") {
-    return { ...verdict, status: "REJECTED", reasons: [...verdict.reasons, `rejected${who}: ${match.note}`] };
+  const forDate = resolutions.filter(
+    (r) => r.date === verdict.date && (r.axis === "video" || r.axis === "day"),
+  );
+  const rejected = forDate.find((r) => r.decision === "rejected");
+  if (rejected) {
+    const who = rejected.by ? ` (${rejected.by})` : "";
+    return { ...verdict, status: "REJECTED", reasons: [...verdict.reasons, `rejected${who}: ${rejected.note}`] };
   }
-  if (match.decision === "accepted_exception" && verdict.status === "NEEDS_REVIEW") {
-    return { ...verdict, status: "ACCEPTED_EXCEPTION", reasons: [...verdict.reasons, `exception${who}: ${match.note}`] };
+  const exception = forDate.find((r) => r.decision === "accepted_exception");
+  if (exception && verdict.status === "NEEDS_REVIEW") {
+    const who = exception.by ? ` (${exception.by})` : "";
+    return { ...verdict, status: "ACCEPTED_EXCEPTION", reasons: [...verdict.reasons, `exception${who}: ${exception.note}`] };
   }
   return verdict;
 }

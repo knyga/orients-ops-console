@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { applyResolution, resolutionFor, type Resolution } from "./resolutions";
+import { applyResolution, deriveDatasetStatus, resolutionFor, type Resolution } from "./resolutions";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const res = (over: Partial<Resolution>): Resolution => ({
   date: "2026-06-13",
+  axis: "day",
   decision: "accepted_exception",
   note: "force majeure — confirmed by Bogdan",
   source: "manual",
@@ -17,13 +18,13 @@ const needsReview: DayVerdict = {
   airborneMinutes: 20,
   videoMinutes: 2,
   ratio: 0.1,
-  datasetPosted: false,
+  datasetStatus: "MISSING",
   withinGrace: false,
   reasons: ["video < 50%"],
 };
 
-describe("resolutionFor / applyResolution", () => {
-  it("flips NEEDS_REVIEW → ACCEPTED_EXCEPTION when a resolution exists for the day", () => {
+describe("resolutionFor / applyResolution (legacy day-axis tests)", () => {
+  it("flips NEEDS_REVIEW → ACCEPTED_EXCEPTION when a day-axis resolution exists for the day", () => {
     const out = applyResolution(needsReview, [res({})]);
     expect(out.status).toBe("ACCEPTED_EXCEPTION");
     expect(out.reasons.join(" ")).toMatch(/force majeure/);
@@ -55,5 +56,62 @@ describe("resolutionFor / applyResolution", () => {
   it("resolutionFor returns the matching resolution or undefined", () => {
     expect(resolutionFor("2026-06-13", [res({})])?.note).toMatch(/force majeure/);
     expect(resolutionFor("2026-06-14", [res({})])).toBeUndefined();
+  });
+});
+
+// ── New tests for Task 2 ──────────────────────────────────────────────────────
+
+const R = (over: Partial<Resolution>): Resolution => ({
+  date: "2026-06-10",
+  axis: "dataset",
+  decision: "accepted_exception",
+  note: "fog, no flight worth a dataset",
+  source: "slack",
+  recordedAt: "2026-06-12T00:00:00.000Z",
+  ...over,
+});
+
+describe("deriveDatasetStatus", () => {
+  it("posted notice → POSTED", () => {
+    expect(deriveDatasetStatus(true, "2026-06-10", []).status).toBe("POSTED");
+  });
+  it("no notice, dataset-axis exception → WAIVED with the verbatim note", () => {
+    const d = deriveDatasetStatus(false, "2026-06-10", [R({})]);
+    expect(d.status).toBe("WAIVED");
+    expect(d.note).toContain("fog");
+  });
+  it("no notice, dataset-axis rejection → DECLINED", () => {
+    expect(deriveDatasetStatus(false, "2026-06-10", [R({ decision: "rejected" })]).status).toBe("DECLINED");
+  });
+  it("no notice, nothing recorded → MISSING", () => {
+    expect(deriveDatasetStatus(false, "2026-06-10", []).status).toBe("MISSING");
+  });
+  it("a video-axis exception does NOT waive the dataset", () => {
+    expect(deriveDatasetStatus(false, "2026-06-10", [R({ axis: "video" })]).status).toBe("MISSING");
+  });
+  it("a day-axis exception waives the dataset (whole-day forgiveness)", () => {
+    expect(deriveDatasetStatus(false, "2026-06-10", [R({ axis: "day" })]).status).toBe("WAIVED");
+  });
+  it("posted but day-axis rejected → still POSTED here (day veto handled by applyResolution)", () => {
+    expect(deriveDatasetStatus(true, "2026-06-10", [R({ axis: "day", decision: "rejected" })]).status).toBe("POSTED");
+  });
+});
+
+describe("applyResolution (video/day axes only)", () => {
+  const verdict: DayVerdict = {
+    date: "2026-06-10", status: "NEEDS_REVIEW" as const, airborneMinutes: 100,
+    videoMinutes: 10, ratio: 0.1, datasetStatus: "WAIVED" as const, withinGrace: false, reasons: [],
+  };
+  it("video-axis exception flips NEEDS_REVIEW → ACCEPTED_EXCEPTION", () => {
+    const out = applyResolution(verdict, [R({ axis: "video" })]);
+    expect(out.status).toBe("ACCEPTED_EXCEPTION");
+  });
+  it("day-axis rejection vetoes to REJECTED", () => {
+    const out = applyResolution(verdict, [R({ axis: "day", decision: "rejected" })]);
+    expect(out.status).toBe("REJECTED");
+  });
+  it("a dataset-axis resolution is ignored here (it drives the dataset status, not the overlay)", () => {
+    const out = applyResolution({ ...verdict, status: "ACCEPTED" }, [R({ axis: "dataset" })]);
+    expect(out.status).toBe("ACCEPTED");
   });
 });
