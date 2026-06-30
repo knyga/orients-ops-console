@@ -33,8 +33,11 @@ export async function applyAnswerDecision(args: AnswerDecisionArgs): Promise<voi
   const { record, period, outcome } = args;
 
   if (outcome.writeException) {
+    // A no-dataset reason waives the dataset axis; a low-video reason forgives the video axis.
+    const axis = record.gapType === "no_dataset" ? "dataset" : "video";
     await upsertResolution({
       date: record.date,
+      axis,
       decision: "accepted_exception",
       note: outcome.note,
       source: outcome.evidencePermalink || "slack",

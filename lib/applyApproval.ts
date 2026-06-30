@@ -50,6 +50,7 @@ export async function applyApproverDecision(
 
   await upsertResolution({
     date: entry.date,
+    axis: "day",
     decision,
     note: reason,
     source: evidence || "slack",
