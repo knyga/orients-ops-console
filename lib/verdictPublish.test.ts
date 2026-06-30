@@ -11,6 +11,8 @@ const day = (over: Partial<DayVerdict>): DayVerdict => ({
   datasetStatus: "POSTED",
   withinGrace: false,
   reasons: [],
+  roster: [],
+  unknownInitials: [],
   ...over,
 });
 
@@ -66,7 +68,7 @@ describe("formatDayMessage", () => {
   });
 
   it("renders the waived dataset marker (Ukrainian)", () => {
-    const msg = formatDayMessage({ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [] });
+    const msg = formatDayMessage({ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [], roster: [], unknownInitials: [] });
     expect(msg).toContain("датасет 📝 виняток");
   });
 

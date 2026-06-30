@@ -34,6 +34,10 @@ export interface DayVerdict {
   datasetStatus: DatasetStatus;
   withinGrace: boolean;
   reasons: string[];
+  /** Resolved crew names for the day (display/attribution; not part of the gate). */
+  roster: string[];
+  /** "Звіт" tokens that did not resolve to a name (internal surfaces only). */
+  unknownInitials: string[];
 }
 
 export function verdictForDay(input: VerdictInput): DayVerdict {
@@ -67,5 +71,5 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
     status = "NEEDS_REVIEW";
   }
 
-  return { date: flightDate, status, airborneMinutes, videoMinutes, ratio, datasetStatus, withinGrace, reasons };
+  return { date: flightDate, status, airborneMinutes, videoMinutes, ratio, datasetStatus, withinGrace, reasons, roster: [], unknownInitials: [] };
 }

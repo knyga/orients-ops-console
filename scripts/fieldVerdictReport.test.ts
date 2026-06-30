@@ -11,6 +11,8 @@ const day = (over: Partial<DayVerdict>): DayVerdict => ({
   datasetStatus: "POSTED",
   withinGrace: false,
   reasons: [],
+  roster: [],
+  unknownInitials: [],
   ...over,
 });
 
@@ -45,7 +47,7 @@ describe("summarize / buildReport / toCsv", () => {
 
   it("CSV header carries datasetStatus and the row prints the status", () => {
     const report = buildReport(
-      [{ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [] }],
+      [{ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [], roster: [], unknownInitials: [] }],
       { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3,
     );
     const csv = toCsv(report);
