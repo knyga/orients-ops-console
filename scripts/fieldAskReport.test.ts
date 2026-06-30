@@ -9,7 +9,7 @@ const day = (over: Partial<DayVerdict>): DayVerdict => ({
   airborneMinutes: 20,
   videoMinutes: 66,
   ratio: 3.3,
-  datasetPosted: false,
+  datasetStatus: "MISSING",
   withinGrace: false,
   reasons: [],
   ...over,
@@ -28,8 +28,8 @@ describe("parseArgs / resolvePeriod", () => {
 describe("buildAskPlan / pendingAsks", () => {
   it("flattens gaps across days and marks already-asked", () => {
     const days = [
-      day({ date: "2026-06-13", ratio: 3.3, datasetPosted: false }), // no_dataset
-      day({ date: "2026-06-11", ratio: 0, videoMinutes: 0, datasetPosted: true }), // low_video
+      day({ date: "2026-06-13", ratio: 3.3, datasetStatus: "MISSING" }), // no_dataset
+      day({ date: "2026-06-11", ratio: 0, videoMinutes: 0, datasetStatus: "POSTED" }), // low_video
       day({ date: "2026-06-10", status: "ACCEPTED" }), // no gaps
     ];
     const log: AskLog = {
@@ -43,7 +43,7 @@ describe("buildAskPlan / pendingAsks", () => {
 
 describe("formatDryRun", () => {
   it("lists pending questions with channel + sends nothing", () => {
-    const plan = buildAskPlan([day({ date: "2026-06-13", ratio: 3.3, datasetPosted: false })], {});
+    const plan = buildAskPlan([day({ date: "2026-06-13", ratio: 3.3, datasetStatus: "MISSING" })], {});
     const out = formatDryRun(plan, { start: "2026-06-01", end: "2026-06-30" });
     expect(out).toMatch(/DRY RUN — would ask 1 question/);
     expect(out).toContain("#datasets");

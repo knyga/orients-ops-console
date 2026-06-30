@@ -10,7 +10,7 @@ const verdict = (over: Partial<DayVerdict>): DayVerdict => ({
   airborneMinutes: 18,
   videoMinutes: 206,
   ratio: 206 / 18,
-  datasetPosted: true,
+  datasetStatus: "POSTED",
   withinGrace: false,
   reasons: [],
   ...over,
@@ -48,7 +48,7 @@ describe("computeBackfillPlan", () => {
   });
 
   it("skips an overridden post so its struck amendment is never clobbered", () => {
-    const v = verdict({ status: "NEEDS_REVIEW", videoMinutes: 0, ratio: 0, datasetPosted: false });
+    const v = verdict({ status: "NEEDS_REVIEW", videoMinutes: 0, ratio: 0, datasetStatus: "MISSING" });
     const plan = computeBackfillPlan(
       logOf(entry({ override: { decision: "accepted_exception", by: "Oleksandr K", ackedAt: "x" } })),
       { "2026-06-18": v },

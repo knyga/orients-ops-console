@@ -8,7 +8,7 @@ const day = (over: Partial<DayVerdict>): DayVerdict => ({
   airborneMinutes: 20,
   videoMinutes: 12,
   ratio: 0.6,
-  datasetPosted: true,
+  datasetStatus: "POSTED",
   withinGrace: false,
   reasons: [],
   ...over,
@@ -39,7 +39,17 @@ describe("summarize / buildReport / toCsv", () => {
 
   it("toCsv emits a header + one row per day, escaping reasons", () => {
     const csv = toCsv(buildReport([day({ status: "NEEDS_REVIEW", reasons: ["video < 50%, no dataset"] })], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3));
-    expect(csv.split("\n")[0]).toBe("date,status,airborneMinutes,videoMinutes,ratio,datasetPosted,reasons");
+    expect(csv.split("\n")[0]).toBe("date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons");
     expect(csv).toMatch(/"video < 50%, no dataset"/);
+  });
+
+  it("CSV header carries datasetStatus and the row prints the status", () => {
+    const report = buildReport(
+      [{ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [] }],
+      { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3,
+    );
+    const csv = toCsv(report);
+    expect(csv.split("\n")[0]).toContain("datasetStatus");
+    expect(csv).toContain("WAIVED");
   });
 });

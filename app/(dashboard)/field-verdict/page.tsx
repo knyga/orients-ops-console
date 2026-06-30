@@ -178,7 +178,9 @@ export default function FieldVerdictPage() {
                       <td className="px-3 py-2 text-right tabular-nums text-slate-700">
                         {d.ratio === null ? "—" : `${(d.ratio * 100).toFixed(0)}%`}
                       </td>
-                      <td className="px-3 py-2 text-center">{d.datasetPosted ? "✓" : "✗"}</td>
+                      <td className="px-3 py-2 text-center">
+                        {{ POSTED: "✓", WAIVED: "📝", MISSING: "✗", DECLINED: "⛔" }[d.datasetStatus]}
+                      </td>
                       <td className="px-3 py-2 text-slate-500">{d.reasons.join("; ")}</td>
                     </tr>
                   );

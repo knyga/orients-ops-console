@@ -8,7 +8,7 @@ const day = (over: Partial<DayVerdict>): DayVerdict => ({
   airborneMinutes: 18,
   videoMinutes: 206,
   ratio: 206 / 18,
-  datasetPosted: true,
+  datasetStatus: "POSTED",
   withinGrace: false,
   reasons: [],
   ...over,
@@ -42,7 +42,7 @@ describe("formatDayMessage", () => {
     const msg = formatDayMessage(
       // English reasons in the verdict must NOT leak — the message is rebuilt
       // from the structured fields (airborne 18m, video 2m, 11%).
-      day({ date: "2026-06-13", status: "NEEDS_REVIEW", videoMinutes: 2, ratio: 0.1, datasetPosted: false, reasons: ["video 2m is 10% of airborne 20m (< 50%)", "no #datasets notice for the day"] }),
+      day({ date: "2026-06-13", status: "NEEDS_REVIEW", videoMinutes: 2, ratio: 0.1, datasetStatus: "MISSING", reasons: ["video 2m is 10% of airborne 20m (< 50%)", "no #datasets notice for the day"] }),
     );
     expect(msg).toMatch(/^⚠️ 2026-06-13 \(субота\) — потрібна перевірка:/);
     expect(msg).toContain("< 50%");
@@ -53,7 +53,7 @@ describe("formatDayMessage", () => {
 
   it("rebuilds the no-airborne gap in Ukrainian when ratio is null", () => {
     const msg = formatDayMessage(
-      day({ date: "2026-06-13", status: "NEEDS_REVIEW", airborneMinutes: 0, videoMinutes: 5, ratio: null, datasetPosted: true, reasons: ["no airborne time recorded for the day"] }),
+      day({ date: "2026-06-13", status: "NEEDS_REVIEW", airborneMinutes: 0, videoMinutes: 5, ratio: null, datasetStatus: "POSTED", reasons: ["no airborne time recorded for the day"] }),
     );
     expect(msg).toContain("немає записаного часу в повітрі за день");
   });
@@ -63,6 +63,11 @@ describe("formatDayMessage", () => {
       day({ date: "2026-06-13", status: "ACCEPTED_EXCEPTION", reasons: ["форс-мажор: гроза"] }),
     );
     expect(msg).toMatch(/^🟡 2026-06-13 \(субота\) — прийнято \(виняток\): форс-мажор: гроза/);
+  });
+
+  it("renders the waived dataset marker (Ukrainian)", () => {
+    const msg = formatDayMessage({ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [] });
+    expect(msg).toContain("датасет 📝 виняток");
   });
 
   it("rebuilds machine gaps in Ukrainian for ACCEPTED_EXCEPTION, keeping the human note verbatim", () => {
@@ -76,7 +81,7 @@ describe("formatDayMessage", () => {
         airborneMinutes: 32,
         videoMinutes: 0,
         ratio: 0,
-        datasetPosted: false,
+        datasetStatus: "MISSING",
         reasons: [
           "video 0m is 0% of airborne 32m (< 50%)",
           "no #datasets notice for the day",

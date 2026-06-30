@@ -57,6 +57,15 @@ export function formatOverride(
   };
 }
 
+function datasetMarker(status: DayVerdict["datasetStatus"]): string {
+  switch (status) {
+    case "POSTED": return "датасет ✓";
+    case "WAIVED": return "датасет 📝 виняток";
+    case "DECLINED": return "датасет ⛔ відхилено";
+    default: return "без датасету"; // MISSING
+  }
+}
+
 /**
  * The Slack message text the bot would post for a single day's verdict — in
  * Ukrainian, the field team's language. For NEEDS_REVIEW the gap wording is
@@ -71,7 +80,7 @@ export function formatDayMessage(day: DayVerdict): string {
   const air = day.airborneMinutes.toFixed(0);
   const vid = day.videoMinutes.toFixed(0);
   const pct = day.ratio === null ? "—" : `${(day.ratio * 100).toFixed(0)}%`;
-  const ds = day.datasetPosted ? "датасет ✓" : "без датасету";
+  const ds = datasetMarker(day.datasetStatus);
 
   if (day.status === "ACCEPTED") {
     return `✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`;
@@ -109,6 +118,6 @@ function ukrainianGaps(day: DayVerdict): string[] {
         : `відео ${vid} хв — лише ${pct} від ${air} хв у повітрі (< 50%)`,
     );
   }
-  if (!day.datasetPosted) gaps.push("немає повідомлення про датасет за цей день");
+  if (day.datasetStatus === "MISSING") gaps.push("немає повідомлення про датасет за цей день");
   return gaps;
 }

@@ -85,7 +85,7 @@ function csvField(value: string): string {
 }
 
 export function toCsv(report: VerdictReport): string {
-  const lines = ["date,status,airborneMinutes,videoMinutes,ratio,datasetPosted,reasons"];
+  const lines = ["date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons"];
   for (const d of report.days) {
     lines.push([
       d.date,
@@ -93,7 +93,7 @@ export function toCsv(report: VerdictReport): string {
       String(d.airborneMinutes),
       String(d.videoMinutes),
       d.ratio === null ? "" : d.ratio.toFixed(3),
-      String(d.datasetPosted),
+      d.datasetStatus,
       csvField(d.reasons.join("; ")),
     ].join(","));
   }
@@ -108,6 +108,13 @@ const STATUS_ICON: Record<string, string> = {
   REJECTED: "⛔",
 };
 
+const DATASET_ICON: Record<string, string> = {
+  POSTED: "✓",
+  WAIVED: "📝",
+  MISSING: "✗",
+  DECLINED: "⛔",
+};
+
 export function formatTable(report: VerdictReport): string {
   const lines: string[] = [];
   lines.push(`Field-day verdict   ${report.period.start} … ${report.period.end}   (as of ${report.runDate}, grace ${report.graceWorkingDays}wd)`);
@@ -119,7 +126,7 @@ export function formatTable(report: VerdictReport): string {
   } else {
     for (const d of report.days) {
       lines.push(
-        `${d.date}   ${((STATUS_ICON[d.status] ?? "") + " " + d.status).padEnd(18)}   ${String(d.airborneMinutes).padStart(6)}  ${String(d.videoMinutes).padStart(6)}  ${(d.ratio === null ? "—" : d.ratio.toFixed(2)).padStart(5)}  ${d.datasetPosted ? "✓ " : "✗ "}  ${d.reasons.join("; ")}`,
+        `${d.date}   ${((STATUS_ICON[d.status] ?? "") + " " + d.status).padEnd(18)}   ${String(d.airborneMinutes).padStart(6)}  ${String(d.videoMinutes).padStart(6)}  ${(d.ratio === null ? "—" : d.ratio.toFixed(2)).padStart(5)}  ${((DATASET_ICON[d.datasetStatus] ?? "?") + " ").padEnd(2)}  ${d.reasons.join("; ")}`,
       );
     }
   }
