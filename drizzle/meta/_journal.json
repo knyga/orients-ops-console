@@ -29,6 +29,13 @@
       "when": 1782711122721,
       "tag": "0003_magenta_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782821350381,
+      "tag": "0004_faithful_korath",
+      "breakpoints": true
     }
   ]
 }

@@ -40,15 +40,20 @@ export const slackSync = pgTable("slack_sync", {
   lastSync: text("last_sync").notNull(),
 });
 
-/** Durable human resolutions (exceptions / vetoes), keyed by flight date. */
-export const resolutions = pgTable("resolutions", {
-  date: text("date").primaryKey(),
-  decision: text("decision").notNull(), // "accepted_exception" | "rejected"
-  note: text("note").notNull(),
-  source: text("source").notNull(),
-  by: text("by"),
-  recordedAt: text("recorded_at").notNull(),
-});
+/** Durable human resolutions (exceptions / vetoes), keyed by (flight date, axis). */
+export const resolutions = pgTable(
+  "resolutions",
+  {
+    date: text("date").notNull(),
+    axis: text("axis").notNull().default("day"), // "dataset" | "video" | "day"
+    decision: text("decision").notNull(),        // "accepted_exception" | "rejected"
+    note: text("note").notNull(),
+    source: text("source").notNull(),
+    by: text("by"),
+    recordedAt: text("recorded_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.date, t.axis] })],
+);
 
 /** Published verdicts (idempotency + thread root for approver overrides). */
 export const published = pgTable(
