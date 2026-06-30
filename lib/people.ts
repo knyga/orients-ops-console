@@ -21,9 +21,47 @@ export interface Person {
   rosterInitial?: string;
 }
 
+// Filled from `npm run people:scaffold` (live Slack users.list) cross-referenced
+// with committed Jira/GitHub reports + the field roster, then human-reviewed
+// 2026-06-30 (mis-join-prone joins confirmed with the team). Bots, integrations,
+// and Slack-only non-engineering staff (no Jira/GitHub/roster identity) are
+// intentionally omitted — add a person when they gain a cross-source identity.
 export const PEOPLE: Person[] = [
-  { name: "Oleksandr K", role: "CEO/CTO", slackId: "U08G4EC244X", rosterInitial: "О" },
-  { name: "Bohdan Forostianyi", role: "Head of Engineering", slackId: "U08G4HZQTTR" },
+  // Leadership / engineering
+  // jira: both "Oleksandr Knyga" (primary) and a bare "Oleksandr" are this person;
+  // the Person.jiraAccount join keys on one id, so only the primary joins today.
+  // rosterInitial "О" (Олександр) is deliberately NOT set here — unconfirmed whether
+  // the field "Олександр" is the CEO or "Олександр Сорока" (slack U08G4HURRCP).
+  { name: "Oleksandr K", role: "CEO/CTO", slackId: "U08G4EC244X", jiraAccount: "Oleksandr Knyga" },
+  { name: "Bohdan Forostianyi", role: "Head of Engineering", slackId: "U08G4HZQTTR", jiraAccount: "Bohdan Forostianyi", githubLogin: "forobohd-orients" },
+
+  // Developers (Slack + Jira + GitHub where present)
+  { name: "Volodymyr Pavliukevych", role: "developer", slackId: "U09526J29AL", jiraAccount: "Volodymyr Pavliukevych", githubLogin: "VolodymyrPavliukevych" },
+  // also flies (field crew) → rosterInitial joins the field-bonus summary
+  { name: "Nadia Khasyshyn", role: "developer / field", slackId: "U099CA0UTFS", jiraAccount: "Nadia Khasyshyn", githubLogin: "nadiia-khasyshyn", rosterInitial: "Н" },
+  // alt slack U09176GKTMW ("daniltomashi"); 2nd github login "daniltomashi"
+  { name: "Danylo Tomashy", role: "developer / field", slackId: "U090AL585N2", jiraAccount: "Danylo Tomashy", githubLogin: "danylo-tomashy", rosterInitial: "Д" },
+  // alt slack U09P9EBJRA7 ("Ljubomyr")
+  { name: "Liubomyr Zaiats", role: "developer / field", slackId: "U091JDPH9L5", jiraAccount: "Liubomyr Zaiats", githubLogin: "lzaiatsoai", rosterInitial: "Л" },
+  // jira bare "Andrii" confirmed as Yefimov (distinct from Svidnytskyi / Gresyk)
+  { name: "Andrii Yefimov", role: "developer", slackId: "U08G4J1U5EK", jiraAccount: "Andrii", githubLogin: "andrii-yefimov" },
+  { name: "Andrii Svidnytskyi", role: "developer", slackId: "U08GHQUEDPZ", jiraAccount: "Andrii Svidnytskyi" },
+  { name: "Andrii Gresyk", role: "developer", slackId: "U09MQPBA9AN", jiraAccount: "Andrii Gresyk" },
+  { name: "Maksym Horpynchenko", role: "developer", slackId: "U08G4HVH8B1", jiraAccount: "Horpynchenko Maksym" },
+  { name: "Dmytro Antoniuk", role: "developer", slackId: "U08G4HWUYKZ", jiraAccount: "dmytro.antoniuk" },
+  { name: "Denys Borysov", role: "developer", slackId: "U08G4HYEGUX", jiraAccount: "denys.borysov" },
+  // alt slack U0ANQ8FB6DT, U08NWFTAZFE ("Dmytro R")
+  { name: "Dmytro Rozdobudko", role: "developer", slackId: "U08PXFRLGAX", jiraAccount: "dmytro.rozdobudko" },
+  { name: "Ruslan B", role: "developer", slackId: "U08G4HTFG6B", jiraAccount: "Ruslan" },
+
+  // Field operators (Slack + roster initial; Jira where present)
+  { name: "Andrian Korchynskiy", role: "field operator", slackId: "U09AAVAEE6L", jiraAccount: "Andrian Korchynskiy", rosterInitial: "А" },
+  { name: "Taras Panasyuk", role: "field operator", slackId: "U09LT4HM9PY", jiraAccount: "taras.panasyuk", rosterInitial: "Т" },
+  { name: "Kostiantyn V.", role: "field operator", slackId: "U0A77GNUDBJ", jiraAccount: "Kostiantyn V.", rosterInitial: "К" },
+  // alt slack U091JDN2U5B ("Владислав")
+  { name: "Vlad_G", role: "field operator", slackId: "U09UA5J6CHH", rosterInitial: "В" },
+  // rosterInitial "Сер" resolves to "Сергій" via resolveInitial's prefix rule
+  { name: "Serhiy Shainyuk", role: "field operator", slackId: "U09P35EQUGZ", rosterInitial: "Сер" },
 ];
 
 /** Resolve a CLI `--person` query: exact (case-insensitive) name first, then a
