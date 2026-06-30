@@ -12,6 +12,7 @@ const TABS: { href: string; label: string; enabled: boolean }[] = [
   { href: "/field-bonus", label: "Field Bonus", enabled: true },
   { href: "/dev-reporting", label: "Dev Reporting", enabled: true },
   { href: "/github-reporting", label: "GitHub Activity", enabled: true },
+  { href: "/people", label: "People", enabled: true },
   { href: "/policy-tracking", label: "Policy Tracking", enabled: true },
   { href: "/drive", label: "Drive Sync", enabled: true },
   { href: "/sent", label: "Outbound", enabled: true },
