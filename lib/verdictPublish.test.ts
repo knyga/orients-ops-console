@@ -58,11 +58,38 @@ describe("formatDayMessage", () => {
     expect(msg).toContain("немає записаного часу в повітрі за день");
   });
 
-  it("formats an ACCEPTED_EXCEPTION day, passing the human reason through verbatim", () => {
+  it("formats an ACCEPTED_EXCEPTION day, passing a bare human reason through verbatim", () => {
     const msg = formatDayMessage(
       day({ date: "2026-06-13", status: "ACCEPTED_EXCEPTION", reasons: ["форс-мажор: гроза"] }),
     );
     expect(msg).toMatch(/^🟡 2026-06-13 \(субота\) — прийнято \(виняток\): форс-мажор: гроза/);
+  });
+
+  it("rebuilds machine gaps in Ukrainian for ACCEPTED_EXCEPTION, keeping the human note verbatim", () => {
+    // Real applyResolution shape: machine gaps (English) + a trailing
+    // `exception (by): note`. Gaps must be rebuilt in Ukrainian from fields; the
+    // `exception` label becomes `виняток`; the human note text stays verbatim.
+    const msg = formatDayMessage(
+      day({
+        date: "2026-06-04",
+        status: "ACCEPTED_EXCEPTION",
+        airborneMinutes: 32,
+        videoMinutes: 0,
+        ratio: 0,
+        datasetPosted: false,
+        reasons: [
+          "video 0m is 0% of airborne 32m (< 50%)",
+          "no #datasets notice for the day",
+          'exception (Oleksandr K): approver replied "approve"',
+        ],
+      }),
+    );
+    expect(msg).toMatch(/^🟡 2026-06-04 \(четвер\) — прийнято \(виняток\):/);
+    expect(msg).toContain("відео 0 хв — лише 0% від 32 хв у повітрі (< 50%)");
+    expect(msg).toContain("немає повідомлення про датасет за цей день");
+    expect(msg).toContain('виняток (Oleksandr K): approver replied "approve"');
+    expect(msg).not.toContain("airborne");
+    expect(msg).not.toContain("exception (");
   });
 });
 

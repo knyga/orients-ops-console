@@ -3,6 +3,7 @@ import {
   approvalAckKey,
   approvalEditKey,
   askKey,
+  backfillEditKey,
   bonusDmKey,
   bonusThreadKey,
   contentRev,
@@ -23,6 +24,7 @@ describe("key builders", () => {
     );
     expect(bonusThreadKey("2026-06-04")).toBe("bonus-thread:2026-06-04");
     expect(bonusDmKey("2026-06-04", "U123")).toBe("bonus-dm:2026-06-04:U123");
+    expect(backfillEditKey("2026-06-01", "abc")).toBe("backfill-edit:2026-06-01:abc");
   });
 });
 
