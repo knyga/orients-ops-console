@@ -1,7 +1,7 @@
 // app/(dashboard)/people/page.tsx
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { PersonView } from "@/lib/who";
 
 function currentKyivMonthKey(): string {
@@ -27,27 +27,26 @@ export default function PeoplePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadView = useCallback(async (p: string, per: string) => {
-    setError(null);
-    setView(null);
-    try {
-      const r = await fetch(`/api/who?person=${encodeURIComponent(p)}&period=${encodeURIComponent(per)}`);
-      const body = await r.json();
-      if (!r.ok) { setError(body.error ?? `HTTP ${r.status}`); return; }
-      setView(body as PersonView);
-    } catch {
-      setError("Failed to load view.");
-    }
-  }, []);
 
   useEffect(() => {
     if (!person) return;
     let cancelled = false;
     (async () => {
-      if (!cancelled) void loadView(person, period);
+      setError(null);
+      setView(null);
+      try {
+        const r = await fetch(`/api/who?person=${encodeURIComponent(person)}&period=${encodeURIComponent(period)}`);
+        if (cancelled) return;
+        const body = await r.json();
+        if (cancelled) return;
+        if (!r.ok) { setError(body.error ?? `HTTP ${r.status}`); return; }
+        setView(body as PersonView);
+      } catch {
+        if (!cancelled) setError("Failed to load view.");
+      }
     })();
     return () => { cancelled = true; };
-  }, [person, period, loadView]);
+  }, [person, period]);
 
   return (
     <div className="p-6 space-y-4">
