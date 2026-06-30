@@ -123,25 +123,48 @@ interface PersonView {
   period: Period;
   timeline: TimelineEntry[];   // { ts, isoTime, channel, text, permalink }
   summary: {
-    jira?:    { issueKeys: string[]; count: number; points: number };
-    github?:  { commits: number; additions: number; deletions: number;
-                prsOpened: number; prsMerged: number };
-    fieldQa?: { days: number; flightMinutes: number };
-    bonus?:   { settledUah: number; trips: number };
+    jira?:   { issueKeys: string[]; count: number; points: number };
+    github?: { commits: number; additions: number; deletions: number;
+               prsOpened: number; prsMerged: number };
+    field?:  { trips: number; flightDays: number; flightMinutes: number;
+               netUah: number };
   };
 }
 ```
 
+Identity → source matching:
+
+| Source        | Report (committed/DB) | Matched on                                   |
+| ------------- | --------------------- | -------------------------------------------- |
+| Slack         | `schema.slackMessages`| `authorId === person.slackId`                |
+| jira summary  | `jira`                | `UserRow.accountId === person.jiraAccount`   |
+| github summary| `github`              | contributor `login === person.githubLogin`   |
+| field summary | `field-bonus`         | roster name (from `person.rosterInitial`)    |
+
+There is **no per-person #field-qa source**: the committed `field-qa` report is a per-day
+aggregate (`{date, flightHours, airborneMinutes, flights}`) with no operator dimension. The
+per-person field picture lives in the **field-bonus** report instead: `people[]` is
+`PersonBonus[]` keyed by roster *name* (`{name, trips, net, …}`), and `days[]` carries
+`roster: string[]` + `deployMin`/`videoMin`. So the single `field` summary block is built
+from the field-bonus report — `netUah`/`trips` from the person's `PersonBonus`,
+`flightDays`/`flightMinutes` by summing `days[]` where `roster` includes the person.
+
+The roster name is resolved from `person.rosterInitial` via `resolveInitial`
+(`lib/fieldRoster.ts`) — note `person.name` is the canonical display name (e.g.
+"Oleksandr K"), which is *not* the Cyrillic roster name (e.g. "Олександр"); the join is by
+roster name, not display name.
+
 Assembly rules:
 
-- **timeline**: keep messages authored by this person — `authorId === person.slackId`, plus,
-  in #field-qa, messages whose roster authorship resolves to `person.rosterInitial`. Sort
-  ascending by `isoTime`. Drop tombstoned (`deleted`) messages.
+- **timeline**: keep messages authored by this person — `authorId === person.slackId`. Sort
+  ascending by `isoTime` (`ts`). Drop tombstoned (`deleted`) messages. (#field-qa authorship
+  is by Slack `authorId` like every other channel; the Cyrillic *initials inside* a report's
+  text are a per-day roster, not the message author, so they are not used for timeline
+  attribution.)
 - **summary blocks**: each block is populated **only if** the person carries the matching
-  identity field **and** a committed report exists for the period; matched by `jiraAccount`
-  / `githubLogin` / `rosterInitial`. A missing identity or a missing report → the block is
-  simply absent (the console's "committed by default, no live fetch" convention). `who`
-  never triggers a live recompute to fill a gap.
+  identity field **and** a committed report exists for the period. A missing identity or a
+  missing report → the block is simply absent (the console's "committed by default, no live
+  fetch" convention). `who` never triggers a live recompute to fill a gap.
 
 ## 4. CLI surface — `npm run who`
 
@@ -182,10 +205,11 @@ The repo's discipline — logic lives in pure `lib/` modules with unit tests:
 
 - `lib/people.test.ts` — `personByQuery` (exact, unique-substring, ambiguous, unknown);
   reverse lookups; optional-field handling.
-- `lib/who.test.ts` — timeline filter + merge + sort across channels; #field-qa roster
-  authorship attribution; tombstone exclusion; summary attach when identity+report present;
-  block absence when identity missing or report missing; `--unlinked` detection (identities
-  in data but not in the registry).
+- `lib/who.test.ts` — timeline filter (by `authorId`) + merge + sort across channels;
+  tombstone exclusion; jira/github/field summary attach when identity+report present; field
+  block built from field-bonus by roster name resolved from `rosterInitial`; block absence
+  when identity missing or report missing; `--unlinked` detection (identities in data but not
+  in the registry).
 - Scaffold matching is pure and tested; the live `users.list` fetch is a thin, untested
   shell (consistent with the other CLIs).
 
