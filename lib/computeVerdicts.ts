@@ -13,7 +13,7 @@ import { readReportJson, writeReport, periodKey } from "./reports";
 import { readChannelMessages } from "./slackMirror";
 import { hasDatasetNotice } from "./datasetNotice";
 import { verdictForDay, type DayVerdict } from "./fieldDayVerdict";
-import { applyResolution, readResolutions } from "./resolutions";
+import { applyResolution, deriveDatasetStatus, readResolutions } from "./resolutions";
 import { addWorkingDays } from "./workdays";
 import { buildReport, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
 import { todayInFieldTz } from "./syncChannels";
@@ -82,15 +82,18 @@ export async function computeVerdicts(
     const videoMinutes = Math.round((videoMinutesByDate.get(date) ?? 0) * 10) / 10;
     const windowEnd = addWorkingDays(date, GRACE_WORKING_DAYS);
     const datasetPosted = hasDatasetNotice(datasetMessages, date, windowEnd);
+    const { status: datasetStatus, note: datasetNote } = deriveDatasetStatus(datasetPosted, date, resolutions);
     const base = verdictForDay({
       flightDate: date,
       airborneMinutes,
       videoMinutes,
-      datasetPosted,
+      datasetStatus,
       today,
       graceWorkingDays: GRACE_WORKING_DAYS,
     });
-    return applyResolution(base, resolutions);
+    // Surface the verbatim waiver/decline reason in the verdict reasons.
+    const withNote = datasetNote ? { ...base, reasons: [...base.reasons, datasetNote] } : base;
+    return applyResolution(withNote, resolutions);
   });
 
   const report = buildReport(days, period, today, GRACE_WORKING_DAYS);
