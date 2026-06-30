@@ -60,11 +60,6 @@ export async function upsertResolution(resolution: Resolution): Promise<void> {
     .onConflictDoUpdate({ target: [schema.resolutions.date, schema.resolutions.axis], set: values });
 }
 
-/** The resolution for a flight day (any axis), if any. Pure. */
-export function resolutionFor(date: string, resolutions: Resolution[]): Resolution | undefined {
-  return resolutions.find((r) => r.date === date);
-}
-
 /**
  * Derive the dataset axis status from the live #datasets signal + the dataset-
  * scoped (or whole-day) resolutions. A stated reason WAIVES; an admin veto on a

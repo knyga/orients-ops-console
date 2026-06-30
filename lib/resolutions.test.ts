@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyResolution, deriveDatasetStatus, resolutionFor, type Resolution } from "./resolutions";
+import { applyResolution, deriveDatasetStatus, type Resolution } from "./resolutions";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const res = (over: Partial<Resolution>): Resolution => ({
@@ -53,10 +53,6 @@ describe("resolutionFor / applyResolution (legacy day-axis tests)", () => {
     expect(out.reasons.join(" ")).toMatch(/rejected.*not acceptable/);
   });
 
-  it("resolutionFor returns the matching resolution or undefined", () => {
-    expect(resolutionFor("2026-06-13", [res({})])?.note).toMatch(/force majeure/);
-    expect(resolutionFor("2026-06-14", [res({})])).toBeUndefined();
-  });
 });
 
 // ── New tests for Task 2 ──────────────────────────────────────────────────────
