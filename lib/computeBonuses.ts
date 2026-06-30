@@ -13,6 +13,7 @@ import { parseMonth } from "./fieldReports";
 import { computeBonuses, type BonusReport, type LossRecord } from "./fieldBonus";
 import { extractLoss } from "./lossExtract";
 import { readAliases, mergeAliases } from "./rosterAliases";
+import { readRosterCorrections } from "./rosterCorrections";
 import { SEED_ALIASES } from "./fieldRoster";
 import { todayInFieldTz } from "./syncChannels";
 import { toCsv } from "../scripts/fieldBonusReport";
@@ -46,7 +47,8 @@ export async function computeBonusReport(
   }
   log(`field-bonus: ${losses.filter((l) => !l.found).length} unrecovered loss(es)`);
 
-  const report = computeBonuses({ period, reports, videoMinutesByDate, losses });
+  const corrections = await readRosterCorrections();
+  const report = computeBonuses({ period, reports, videoMinutesByDate, losses, corrections });
 
   if (opts.write) {
     const { key } = await writeReport("field-bonus", period, { json: JSON.stringify(report), csv: toCsv(report) });

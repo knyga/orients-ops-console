@@ -7,6 +7,7 @@
  */
 import type { FieldReport } from "./fieldReports";
 import type { Period } from "./period";
+import { applyRosterCorrection, type RosterCorrection } from "./rosterCorrection";
 
 export const TRIP = 700;
 export const EARLY = 200;
@@ -40,8 +41,10 @@ export function computeBonuses(input: {
   reports: FieldReport[];
   videoMinutesByDate: Record<string, number>;
   losses: LossRecord[];
+  corrections?: RosterCorrection[];
 }): BonusReport {
-  const { period, reports, videoMinutesByDate, losses } = input;
+  const { period, reports, videoMinutesByDate, losses, corrections = [] } = input;
+  const correctionFor = (date: string) => corrections.find((c) => c.date === date);
   const flags: Flag[] = [];
   const days: DayBonus[] = [];
 
@@ -56,14 +59,17 @@ export function computeBonuses(input: {
     const early = counted && sm != null && sm <= EARLY_CUTOFF_MIN;
     const weekend = counted && isWeekend(r.flightDate);
     const reason = counted ? "counted" : !hoursOk ? "deploy<3h" : "video<2min";
-    days.push({ date: r.flightDate, roster: r.roster, deployMin: r.deployMin, videoMin, counted, early, weekend, reason });
+    // Effective crew = parsed roster overridden by any approver correction.
+    const eff = applyRosterCorrection(r.roster, counted, correctionFor(r.flightDate));
+    days.push({ date: r.flightDate, roster: eff.roster, deployMin: r.deployMin, videoMin, counted, early, weekend, reason });
   }
 
-  // Per-person tallies from counted days.
+  // Per-person tallies — honour per-person eligibility overrides.
   const tally = new Map<string, { trips: number; early: number; weekend: number; dates: string[] }>();
   for (const d of days) {
-    if (!d.counted) continue;
-    for (const name of d.roster) {
+    const eff = applyRosterCorrection(d.roster, d.counted, correctionFor(d.date));
+    for (const { name, counted } of eff.perPerson) {
+      if (!counted) continue;
       const t = tally.get(name) ?? { trips: 0, early: 0, weekend: 0, dates: [] };
       t.trips += 1; if (d.early) t.early += 1; if (d.weekend) t.weekend += 1; t.dates.push(d.date);
       tally.set(name, t);

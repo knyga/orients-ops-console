@@ -50,3 +50,27 @@ describe("computeBonuses", () => {
     expect(r.total).toBe(0);
   });
 });
+
+describe("computeBonuses with roster corrections", () => {
+  const period = { start: "2026-06-01", end: "2026-06-30" };
+  // One qualifying day (deploy ≥ 180m, video ≥ 2m): both crew get a trip.
+  const reports = [
+    rep({ flightDate: "2026-06-10", roster: ["Андріан", "Любомир"], start: "08:00", end: "12:00", deployMin: 240 }),
+  ];
+  const videoMinutesByDate = { "2026-06-10": 30 };
+
+  it("uses a corrected crew", () => {
+    const r = computeBonuses({ period, reports, videoMinutesByDate, losses: [], corrections: [{ date: "2026-06-10", roster: ["Тарас"], note: "n", by: "Oleksandr K", source: "s", recordedAt: "r" }] });
+    expect(r.people.map((p) => p.name)).toEqual(["Тарас"]);
+  });
+
+  it("drops a person marked not_counted from the tally", () => {
+    const r = computeBonuses({ period, reports, videoMinutesByDate, losses: [], corrections: [{ date: "2026-06-10", eligibility: { Любомир: "not_counted" }, note: "n", by: "Oleksandr K", source: "s", recordedAt: "r" }] });
+    expect(r.people.map((p) => p.name)).toEqual(["Андріан"]);
+  });
+
+  it("works unchanged when no corrections are passed", () => {
+    const r = computeBonuses({ period, reports, videoMinutesByDate, losses: [] });
+    expect(r.people.map((p) => p.name).sort()).toEqual(["Андріан", "Любомир"]);
+  });
+});
