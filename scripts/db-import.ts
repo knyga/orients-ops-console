@@ -48,7 +48,9 @@ async function importAgentState(): Promise<void> {
   const resFile = join(ROOT, "resolutions", "store.json");
   if (existsSync(resFile)) {
     const resolutions = JSON.parse(readFileSync(resFile, "utf8")) as Resolution[];
-    for (const r of resolutions) await upsertResolution(r);
+    // Legacy store.json rows predate the axis field; default them to the
+    // whole-day axis explicitly (rather than relying on the DB column default).
+    for (const r of resolutions) await upsertResolution({ ...r, axis: r.axis ?? "day" });
     console.log(`imported resolutions/store.json (${resolutions.length} resolution(s))`);
   }
 

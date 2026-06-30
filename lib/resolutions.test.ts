@@ -23,7 +23,7 @@ const needsReview: DayVerdict = {
   reasons: ["video < 50%"],
 };
 
-describe("resolutionFor / applyResolution (legacy day-axis tests)", () => {
+describe("applyResolution (legacy day-axis tests)", () => {
   it("flips NEEDS_REVIEW → ACCEPTED_EXCEPTION when a day-axis resolution exists for the day", () => {
     const out = applyResolution(needsReview, [res({})]);
     expect(out.status).toBe("ACCEPTED_EXCEPTION");
@@ -76,8 +76,15 @@ describe("deriveDatasetStatus", () => {
     expect(d.status).toBe("WAIVED");
     expect(d.note).toContain("fog");
   });
-  it("no notice, dataset-axis rejection → DECLINED", () => {
-    expect(deriveDatasetStatus(false, "2026-06-10", [R({ decision: "rejected" })]).status).toBe("DECLINED");
+  it("no notice, dataset-axis rejection → DECLINED with the verbatim note", () => {
+    const d = deriveDatasetStatus(false, "2026-06-10", [R({ decision: "rejected" })]);
+    expect(d.status).toBe("DECLINED");
+    expect(d.note).toContain("fog");
+  });
+  it("no notice, day-axis rejection → DECLINED but no note (applyResolution surfaces it, avoiding a duplicate)", () => {
+    const d = deriveDatasetStatus(false, "2026-06-10", [R({ axis: "day", decision: "rejected" })]);
+    expect(d.status).toBe("DECLINED");
+    expect(d.note).toBeUndefined();
   });
   it("no notice, nothing recorded → MISSING", () => {
     expect(deriveDatasetStatus(false, "2026-06-10", []).status).toBe("MISSING");

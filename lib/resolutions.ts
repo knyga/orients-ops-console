@@ -78,8 +78,14 @@ export function deriveDatasetStatus(
   const exception = forDate.find((r) => r.decision === "accepted_exception");
 
   if (!datasetPosted && rejected) {
-    const who = rejected.by ? ` (${rejected.by})` : "";
-    return { status: "DECLINED", note: `dataset reason declined${who}: ${rejected.note}` };
+    // A day-axis rejection's note is already surfaced by applyResolution; only
+    // attach the verbatim note here for a dataset-axis decline (which
+    // applyResolution ignores) — avoids the same reason appearing twice.
+    if (rejected.axis === "dataset") {
+      const who = rejected.by ? ` (${rejected.by})` : "";
+      return { status: "DECLINED", note: `dataset reason declined${who}: ${rejected.note}` };
+    }
+    return { status: "DECLINED" };
   }
   if (datasetPosted) return { status: "POSTED" };
   if (exception) {
