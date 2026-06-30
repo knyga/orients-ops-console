@@ -18,7 +18,7 @@ export interface FieldSummary { trips: number; flightDays: number; flightMinutes
 export interface WhoSources {
   messages: StoredMessage[];
   jira: { rows: { accountId: string | null; issueKeys: string[]; storyPoints: number }[] } | null;
-  github: { contributors: { login: string; commits: number; additions: number; deletions: number; prsOpened: number; prsMerged: number }[] } | null;
+  github: { contributors: { login: string | null; commits: number; additions: number; deletions: number; prsOpened: number; prsMerged: number }[] } | null;
   bonus: { people: { name: string; trips: number; net: number }[]; days: { date: string; roster: string[]; deployMin: number | null }[] } | null;
 }
 
@@ -77,7 +77,7 @@ export function findUnlinked(sources: WhoSources, people: Person[]): UnlinkedRep
     .filter((a): a is string => a !== null && !personForJiraAccount(a, people)));
   const github = uniq((sources.github?.contributors ?? [])
     .map((c) => c.login)
-    .filter((l) => !personForGithubLogin(l, people)));
+    .filter((l): l is string => l !== null && !personForGithubLogin(l, people)));
   // A roster name is "linked" if some person's rosterInitial resolves to it.
   const linkedRosterNames = new Set(
     people

@@ -102,4 +102,18 @@ describe("findUnlinked", () => {
     expect(r.github).toEqual(["petro-x"]);
     expect(r.roster).toEqual(["Невідомий"]); // "Олександр" is linked via О; "Невідомий" is not
   });
+
+  it("excludes null github logins (commits with no linked account) from the hygiene list", () => {
+    const sources: WhoSources = {
+      messages: [],
+      jira: null,
+      github: { contributors: [
+        { login: null, commits: 7, additions: 0, deletions: 0, prsOpened: 0, prsMerged: 0 },
+        { login: "petro-x", commits: 1, additions: 0, deletions: 0, prsOpened: 0, prsMerged: 0 },
+      ] },
+      bonus: null,
+    };
+    const r = findUnlinked(sources, [OLEKS]);
+    expect(r.github).toEqual(["petro-x"]); // a bare null must never appear
+  });
 });
