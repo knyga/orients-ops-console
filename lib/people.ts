@@ -28,11 +28,9 @@ export interface Person {
 // intentionally omitted — add a person when they gain a cross-source identity.
 export const PEOPLE: Person[] = [
   // Leadership / engineering
-  // jira: both "Oleksandr Knyga" (primary) and a bare "Oleksandr" are this person;
-  // the Person.jiraAccount join keys on one id, so only the primary joins today.
-  // rosterInitial "О" (Олександр) is deliberately NOT set here — unconfirmed whether
-  // the field "Олександр" is the CEO or "Олександр Сорока" (slack U08G4HURRCP).
-  { name: "Oleksandr K", role: "CEO/CTO", slackId: "U08G4EC244X", jiraAccount: "Oleksandr Knyga" },
+  // Confirmed 2026-06-30: rosterInitial "О" (Олександр field crew) is this person;
+  // the bare jira "Oleksandr" (2025) is a DIFFERENT person, Oleksandr Soroka (below).
+  { name: "Oleksandr K", role: "CEO/CTO", slackId: "U08G4EC244X", jiraAccount: "Oleksandr Knyga", rosterInitial: "О" },
   { name: "Bohdan Forostianyi", role: "Head of Engineering", slackId: "U08G4HZQTTR", jiraAccount: "Bohdan Forostianyi", githubLogin: "forobohd-orients" },
 
   // Developers (Slack + Jira + GitHub where present)
@@ -53,6 +51,8 @@ export const PEOPLE: Person[] = [
   // alt slack U0ANQ8FB6DT, U08NWFTAZFE ("Dmytro R")
   { name: "Dmytro Rozdobudko", role: "developer", slackId: "U08PXFRLGAX", jiraAccount: "dmytro.rozdobudko" },
   { name: "Ruslan B", role: "developer", slackId: "U08G4HTFG6B", jiraAccount: "Ruslan" },
+  // the bare jira "Oleksandr" (1 issue, 2025-05) is this person, not the CEO (confirmed 2026-06-30)
+  { name: "Oleksandr Soroka", role: "developer", slackId: "U08G4HURRCP", jiraAccount: "Oleksandr" },
 
   // Field operators (Slack + roster initial; Jira where present)
   { name: "Andrian Korchynskiy", role: "field operator", slackId: "U09AAVAEE6L", jiraAccount: "Andrian Korchynskiy", rosterInitial: "А" },
