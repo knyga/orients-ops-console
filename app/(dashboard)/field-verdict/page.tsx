@@ -153,12 +153,13 @@ export default function FieldVerdictPage() {
                 <th className="px-3 py-2 text-right">Ratio</th>
                 <th className="px-3 py-2 text-center">Dataset</th>
                 <th className="px-3 py-2">Reasons</th>
+                <th className="px-3 py-2">Crew</th>
               </tr>
             </thead>
             <tbody>
               {!report || report.days.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
                     {report ? "No flight days in this period." : "Select a committed report."}
                   </td>
                 </tr>
@@ -182,6 +183,9 @@ export default function FieldVerdictPage() {
                         {{ POSTED: "✓", WAIVED: "📝", MISSING: "✗", DECLINED: "⛔" }[d.datasetStatus]}
                       </td>
                       <td className="px-3 py-2 text-slate-500">{d.reasons.join("; ")}</td>
+                      <td className="px-3 py-2 text-slate-700">
+                        {[...d.roster, ...d.unknownInitials.map((u) => `?${u}`)].join(", ") || "—"}
+                      </td>
                     </tr>
                   );
                 })
