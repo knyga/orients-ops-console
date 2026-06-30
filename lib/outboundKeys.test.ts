@@ -9,6 +9,8 @@ import {
   contentRev,
   decideReserve,
   detectOrigin,
+  rosterAckKey,
+  rosterEditKey,
   verdictKey,
   webhookFailureKey,
 } from "./outboundKeys";
@@ -74,5 +76,12 @@ describe("decideReserve", () => {
       won: true,
       existingTs: "3.3",
     });
+  });
+});
+
+describe("roster outbound keys", () => {
+  it("namespaces edit + ack by date and rev", () => {
+    expect(rosterEditKey("2026-06-10", "abc")).toBe("roster-edit:2026-06-10:abc");
+    expect(rosterAckKey("2026-06-10", "abc")).toBe("roster-ack:2026-06-10:abc");
   });
 });
