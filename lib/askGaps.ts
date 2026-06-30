@@ -54,7 +54,7 @@ export function gapsForDay(day: DayVerdict): Gap[] {
     });
   }
 
-  if (!day.datasetPosted) {
+  if (day.datasetStatus === "MISSING") {
     gaps.push({
       gapType: "no_dataset",
       date: day.date,
