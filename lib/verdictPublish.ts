@@ -19,6 +19,21 @@ const ICON: Record<string, string> = {
   ACCEPTED_EXCEPTION: "🟡",
 };
 
+export const ROSTER_MARKER = "👥 У полі: ";
+
+/** Append the crew suffix line. Empty roster → body unchanged. Pure. */
+export function withRosterSuffix(body: string, roster: string[]): string {
+  if (roster.length === 0) return body;
+  return `${body}\n${ROSTER_MARKER}${roster.join(", ")}.`;
+}
+
+/** Split a published message into body + crew suffix at the last crew marker. Pure. */
+export function splitRosterSuffix(text: string): { body: string; rosterLine: string | null } {
+  const idx = text.lastIndexOf(`\n${ROSTER_MARKER}`);
+  if (idx === -1) return { body: text, rosterLine: null };
+  return { body: text.slice(0, idx), rosterLine: text.slice(idx + 1) };
+}
+
 /** Days the bot will publish a verdict for (settled + actionable). */
 export function publishableDays(days: DayVerdict[]): DayVerdict[] {
   return days.filter(
@@ -83,7 +98,7 @@ export function formatDayMessage(day: DayVerdict): string {
   const ds = datasetMarker(day.datasetStatus);
 
   if (day.status === "ACCEPTED") {
-    return `✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`;
+    return withRosterSuffix(`✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`, day.roster);
   }
   if (day.status === "ACCEPTED_EXCEPTION") {
     // Machine gaps are rebuilt in Ukrainian (the English strings in day.reasons
@@ -94,10 +109,10 @@ export function formatDayMessage(day: DayVerdict): string {
       ? day.reasons[day.reasons.length - 1].replace(/^exception/, "виняток")
       : "";
     const parts = [...ukrainianGaps(day), note].filter(Boolean);
-    return `🟡 ${date} — прийнято (виняток): ${parts.join("; ")}.`;
+    return withRosterSuffix(`🟡 ${date} — прийнято (виняток): ${parts.join("; ")}.`, day.roster);
   }
   // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
-  return `${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} (відео ${vid} хв / ${air} хв у повітрі, ${ds}).`;
+  return withRosterSuffix(`${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} (відео ${vid} хв / ${air} хв у повітрі, ${ds}).`, day.roster);
 }
 
 /**
