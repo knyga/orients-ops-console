@@ -13,11 +13,14 @@ import { addWorkingDays } from "./workdays";
 
 export type VerdictStatus = "ACCEPTED" | "PENDING" | "NEEDS_REVIEW" | "ACCEPTED_EXCEPTION" | "REJECTED";
 
+/** The dataset axis outcome for a flight day (see the dataset-acceptance spec). */
+export type DatasetStatus = "POSTED" | "WAIVED" | "MISSING" | "DECLINED";
+
 export interface VerdictInput {
   flightDate: string;        // YYYY-MM-DD
   airborneMinutes: number;
   videoMinutes: number;
-  datasetPosted: boolean;
+  datasetStatus: DatasetStatus;
   today: string;             // YYYY-MM-DD
   graceWorkingDays: number;
 }
@@ -28,15 +31,16 @@ export interface DayVerdict {
   airborneMinutes: number;
   videoMinutes: number;
   ratio: number | null;
-  datasetPosted: boolean;
+  datasetStatus: DatasetStatus;
   withinGrace: boolean;
   reasons: string[];
 }
 
 export function verdictForDay(input: VerdictInput): DayVerdict {
-  const { flightDate, airborneMinutes, videoMinutes, datasetPosted, today, graceWorkingDays } = input;
+  const { flightDate, airborneMinutes, videoMinutes, datasetStatus, today, graceWorkingDays } = input;
   const ratio = airborneMinutes > 0 ? videoMinutes / airborneMinutes : null;
   const videoOk = ratio !== null && ratio >= MIN_RATIO;
+  const datasetOk = datasetStatus === "POSTED" || datasetStatus === "WAIVED";
   const windowEnd = addWorkingDays(flightDate, graceWorkingDays);
   const withinGrace = today <= windowEnd;
 
@@ -48,10 +52,14 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
         : `video ${videoMinutes.toFixed(0)}m is ${(ratio * 100).toFixed(0)}% of airborne ${airborneMinutes.toFixed(0)}m (< 50%)`,
     );
   }
-  if (!datasetPosted) reasons.push("no #datasets notice for the day");
+  if (datasetStatus === "MISSING") reasons.push("no #datasets notice for the day");
+  if (datasetStatus === "WAIVED") reasons.push("no dataset — reason accepted (waived)");
+  if (datasetStatus === "DECLINED") reasons.push("dataset reason declined by an admin");
 
   let status: VerdictStatus;
-  if (videoOk && datasetPosted) {
+  if (datasetStatus === "DECLINED") {
+    status = "REJECTED";
+  } else if (videoOk && datasetOk) {
     status = "ACCEPTED";
   } else if (withinGrace) {
     status = "PENDING";
@@ -59,14 +67,5 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
     status = "NEEDS_REVIEW";
   }
 
-  return {
-    date: flightDate,
-    status,
-    airborneMinutes,
-    videoMinutes,
-    ratio,
-    datasetPosted,
-    withinGrace,
-    reasons,
-  };
+  return { date: flightDate, status, airborneMinutes, videoMinutes, ratio, datasetStatus, withinGrace, reasons };
 }
