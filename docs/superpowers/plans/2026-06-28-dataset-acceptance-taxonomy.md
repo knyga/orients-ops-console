@@ -16,7 +16,7 @@
 - `lib/computeVerdicts.ts`, `lib/applyAnswer.ts`, `lib/applyApproval.ts` are `server-only` — do not import them from client code; verify them via `npx tsc --noEmit` + a CLI run, not unit tests.
 - `DatasetStatus` values are exactly `"POSTED" | "WAIVED" | "MISSING" | "DECLINED"` (uppercase).
 - `ResolutionAxis` values are exactly `"dataset" | "video" | "day"` (lowercase); legacy rows backfill to `"day"`.
-- Slack markers verbatim: `POSTED → "dataset ✓"`, `WAIVED → "dataset 📝 waived"`, `MISSING → "no dataset"`, `DECLINED → "dataset ⛔ declined"`.
+- Slack markers (Ukrainian — `lib/verdictPublish.ts` is team-facing) verbatim: `POSTED → "датасет ✓"`, `WAIVED → "датасет 📝 виняток"`, `MISSING → "без датасету"`, `DECLINED → "датасет ⛔ відхилено"`. The CLI table/CSV and web view stay English/internal (icons only).
 - Run a single test file with `npx vitest run <path>`; the whole suite with `npm test`; type-check with `npx tsc --noEmit`.
 - Commit after each task.
 
@@ -593,12 +593,12 @@ it("CSV header carries datasetStatus and the row prints the status", () => {
 });
 ```
 
-In `lib/verdictPublish.test.ts`:
+In `lib/verdictPublish.test.ts` (this file's messages are **Ukrainian**):
 
 ```ts
-it("renders the waived dataset marker", () => {
+it("renders the waived dataset marker (Ukrainian)", () => {
   const msg = formatDayMessage({ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [] });
-  expect(msg).toContain("dataset 📝 waived");
+  expect(msg).toContain("датасет 📝 виняток");
 });
 ```
 
@@ -639,28 +639,38 @@ In `formatTable`, replace the `${d.datasetPosted ? "✓ " : "✗ "}` cell with:
 
 (keep it in the same template-literal position; the column header `DS` stays.)
 
-- [ ] **Step 3b: Update `lib/verdictPublish.ts`**
+- [ ] **Step 3b: Update `lib/verdictPublish.ts` (Ukrainian — team-facing)**
 
-Replace the `const ds = ...` line in `formatDayMessage` with a marker helper. Add above `formatDayMessage`:
+This module renders **Ukrainian** team posts. Two spots reference the old boolean and must move to `datasetStatus`:
 
-```ts
-function datasetMarker(status: DayVerdict["datasetStatus"]): string {
-  switch (status) {
-    case "POSTED": return "dataset ✓";
-    case "WAIVED": return "dataset 📝 waived";
-    case "DECLINED": return "dataset ⛔ declined";
-    default: return "no dataset";
-  }
-}
-```
-
-and change the body line to:
+(i) Replace the marker line in `formatDayMessage` — currently
+`const ds = day.datasetPosted ? "датасет ✓" : "без датасету";` — with a helper call:
 
 ```ts
   const ds = datasetMarker(day.datasetStatus);
 ```
 
-(The `${ds}` interpolations in the ACCEPTED / NEEDS_REVIEW messages stay as-is.)
+and add this helper above `formatDayMessage` (markers verbatim per Global Constraints):
+
+```ts
+function datasetMarker(status: DayVerdict["datasetStatus"]): string {
+  switch (status) {
+    case "POSTED": return "датасет ✓";
+    case "WAIVED": return "датасет 📝 виняток";
+    case "DECLINED": return "датасет ⛔ відхилено";
+    default: return "без датасету"; // MISSING
+  }
+}
+```
+
+(ii) In the `ukrainianGaps(day)` helper, the dataset gap is gated on the boolean — change
+`if (!day.datasetPosted) gaps.push("немає повідомлення про датасет за цей день");` to:
+
+```ts
+  if (day.datasetStatus === "MISSING") gaps.push("немає повідомлення про датасет за цей день");
+```
+
+The `${ds}` interpolations in the ACCEPTED / NEEDS_REVIEW / ACCEPTED_EXCEPTION messages stay as-is. The English `day.reasons` remain internal (web/reports) and must NOT leak into these posts — unchanged behavior.
 
 - [ ] **Step 3c: Update `app/(dashboard)/field-verdict/page.tsx`**
 
