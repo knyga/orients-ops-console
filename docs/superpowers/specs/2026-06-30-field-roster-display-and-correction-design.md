@@ -10,6 +10,12 @@ The published per-flight-day verdict (e.g. `✅ 2026-06-13 — прийнято 
 
 The roster already exists internally: `FieldReport.roster: string[]` is parsed from the #field-qa "Звіт" reports (`lib/fieldReports.ts`, initials resolved via `lib/fieldRoster.ts` + DB aliases) and carried per-day as `DayBonus.roster` by `field-bonus`. But `DayVerdict` — the object that gets published — has no roster field, and there is no path to correct the crew.
 
+## Sequencing dependency (added 2026-06-30)
+
+The verdict layer is **mid-migration**: `DayVerdict` already moved from `datasetPosted: boolean` to a `DatasetStatus` enum (`POSTED|WAIVED|MISSING|DECLINED`, see the dataset-acceptance taxonomy), but its consumers (`computeVerdicts`, `verdictPublish`, `fieldVerdictReport`, `askGaps`, the web page, several tests) were not all updated — `npx tsc --noEmit` reports ~30 errors and `lib/resolutions.ts` is uncommitted. `npm test` stays green only because Vitest does not typecheck.
+
+This roster feature is **additive and orthogonal** to the dataset axis, but it edits the same files. **Execution is gated:** do not start coding until the `datasetPosted → datasetStatus` migration has landed, the tree typechecks clean (`npx tsc --noEmit` → 0 errors), and `lib/resolutions.ts` is committed. Implement in an isolated git worktree. All code below targets the **post-migration** shapes; where it touches `formatDayMessage` / the table / the web row, it **wraps** the existing body rather than rewriting the dataset wording, so it composes with whatever the migration settles on.
+
 ## Decisions (from brainstorming)
 
 1. **Correction scope:** roster **+ per-day bonus eligibility** — a thread reply can add/remove/replace the crew *and* mark a person counted/not-counted for that day's bonus (overriding the per-day gate per person). The verdict numbers (airborne/video/dataset) are **not** corrected here — that stays the existing `accepted_exception`/`rejected` override path.
@@ -52,7 +58,7 @@ export interface DayVerdict {
   airborneMinutes: number;
   videoMinutes: number;
   ratio: number | null;
-  datasetPosted: boolean;
+  datasetStatus: DatasetStatus;  // post-migration enum (unchanged by this feature)
   withinGrace: boolean;
   reasons: string[];
   roster: string[];            // NEW — resolved crew names for the day (corrected if a correction exists)
