@@ -28,6 +28,7 @@ import { FIELD_TIMEZONE } from "../lib/reconcile";
 import { readReportJson, periodKey } from "../lib/reports";
 import { readPublished, recordPublished, writePublished } from "../lib/published";
 import { computeBackfillPlan } from "../lib/backfillPublished";
+import { backfillEditKey, contentRev } from "../lib/outboundKeys";
 import type { DayVerdict } from "../lib/fieldDayVerdict";
 import { parseArgs, resolvePeriod, type Period } from "./fieldPublishReport";
 import { formatDryRun } from "./fieldBackfillReport";
@@ -100,7 +101,12 @@ async function main(): Promise<void> {
   let nextLog = log;
   let edited = 0;
   for (const u of updates) {
-    await updateMessage(channel.id, u.ts, u.newText);
+    await updateMessage(channel.id, u.ts, u.newText, {
+      key: backfillEditKey(u.date, contentRev(u.newText)),
+      feature: "verdict",
+      channel: channel.name,
+      trigger: "cli",
+    });
     // Rewrite the stored text so a re-run is a no-op (idempotency).
     nextLog = recordPublished(nextLog, { ...log[u.date], text: u.newText });
     await writePublished(period, nextLog); // persist after each so a mid-run failure is not lost

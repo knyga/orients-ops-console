@@ -34,6 +34,14 @@ export const webhookFailureKey = (date: string, kind: string, rev: string): stri
 export const bonusThreadKey = (date: string): string => `bonus-thread:${date}`;
 export const bonusDmKey = (date: string, slackId: string): string =>
   `bonus-dm:${date}:${slackId}`;
+/**
+ * One-time backfill edit of a published verdict (rewrite to the current Ukrainian
+ * format). Keyed by the new text's `contentRev` so the same edit dedups on re-run
+ * but a different target re-edits — and namespaced apart from `verdictKey` so it
+ * never collides with the original post's reservation (which would skip the edit).
+ */
+export const backfillEditKey = (date: string, rev: string): string =>
+  `backfill-edit:${date}:${rev}`;
 
 /**
  * Decide the reserve outcome. We win (and should send) when our INSERT landed,
