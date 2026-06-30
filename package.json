@@ -26,6 +26,7 @@
     "sent": "node --conditions=react-server --import tsx scripts/sent.ts",
     "backfill-outbound": "node --conditions=react-server --import tsx scripts/backfill-outbound.ts",
     "field-bonus": "node --conditions=react-server --import tsx scripts/field-bonus.ts",
+    "who": "node --conditions=react-server --import tsx scripts/who.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:import": "node --conditions=react-server --import tsx scripts/db-import.ts"
