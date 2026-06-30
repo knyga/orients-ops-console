@@ -5,7 +5,7 @@
  * and passes them in (the lib/reconcile.ts discipline).
  */
 import type { Person } from "./people";
-import { personForSlackId, personForJiraAccount, personForGithubLogin, personForInitial } from "./people";
+import { personForSlackId, personForJiraAccount, personForGithubLogin } from "./people";
 import { resolveInitial } from "./fieldRoster";
 import type { Period } from "./period";
 import type { StoredMessage } from "./slackMirror";
