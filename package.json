@@ -13,6 +13,7 @@
     "github": "node --conditions=react-server --import tsx scripts/github.ts",
     "jira": "node --conditions=react-server --import tsx scripts/jira.ts",
     "jira-write": "node --conditions=react-server --import tsx scripts/jira-write.ts",
+    "agent": "node --conditions=react-server --import tsx scripts/agent.ts",
     "fieldops": "node --conditions=react-server --import tsx scripts/fieldops.ts",
     "field-qa": "node --conditions=react-server --import tsx scripts/fieldQa.ts",
     "policy": "node --conditions=react-server --import tsx scripts/policy.ts",
