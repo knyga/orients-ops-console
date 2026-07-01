@@ -25,6 +25,7 @@
     "field-approvals": "node --conditions=react-server --import tsx scripts/field-approvals.ts",
     "field-roster": "node --conditions=react-server --import tsx scripts/field-roster.ts",
     "field-instructions": "node --conditions=react-server --import tsx scripts/field-instructions.ts",
+    "field-crew": "node --conditions=react-server --import tsx scripts/field-crew.ts",
     "field-nightly": "node --conditions=react-server --import tsx scripts/field-nightly.ts",
     "sent": "node --conditions=react-server --import tsx scripts/sent.ts",
     "backfill-outbound": "node --conditions=react-server --import tsx scripts/backfill-outbound.ts",
