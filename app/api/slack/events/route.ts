@@ -129,6 +129,7 @@ export async function POST(req: Request): Promise<Response> {
         channel: "dm",
         trigger: "webhook",
       });
+      console.log(`slack events: dm-help replied to ${parsed.userId} in ${parsed.channelId}`);
       return ack({ handled: "dm-help", user: parsed.userId });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
