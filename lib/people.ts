@@ -17,6 +17,9 @@ export interface Person {
   role: string;
   slackId?: string;
   jiraAccount?: string;
+  /** Jira Cloud accountId (required to set a real assignee). Distinct from
+   *  jiraAccount, which is only a display name/username. Unset for now. */
+  jiraAccountId?: string;
   githubLogin?: string;
   rosterInitial?: string;
 }
