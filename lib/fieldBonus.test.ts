@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeBonuses } from "./fieldBonus";
+import { computeBonuses, roundVideoMin } from "./fieldBonus";
 import type { FieldReport } from "./fieldReports";
 
 const rep = (o: Partial<FieldReport> & { flightDate: string }): FieldReport => ({
@@ -96,6 +96,23 @@ describe("computeBonuses", () => {
       reports: [rep({ flightDate: "2026-05-01" })],
       videoMinutesByDate: { "2026-05-01": 9 },
       losses: [],
+    });
+    expect(r.total).toBe(700);
+    expect(r.voidedDays).toEqual([]);
+  });
+});
+
+describe("roundVideoMin gate boundary", () => {
+  it("rounds a raw value just under 2 up to 2.0", () => {
+    expect(roundVideoMin(1.96)).toBe(2);
+  });
+  it("counts a day whose raw video rounds up to the 2-min gate when the drone-count report is present", () => {
+    const r = computeBonuses({
+      period: { start: "2026-05-01", end: "2026-05-31" },
+      reports: [rep({ flightDate: "2026-05-01" })],
+      videoMinutesByDate: { "2026-05-01": 1.96 },
+      losses: [],
+      droneCountByDate: { "2026-05-01": true },
     });
     expect(r.total).toBe(700);
     expect(r.voidedDays).toEqual([]);

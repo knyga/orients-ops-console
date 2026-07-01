@@ -11,7 +11,7 @@ import { classifyDroneCount } from "./droneCountReport";
 import { readChannelMessages } from "./slackMirror";
 import { writeReport } from "./reports";
 import { parseMonth } from "./fieldReports";
-import { computeBonuses, type BonusReport, type LossRecord } from "./fieldBonus";
+import { computeBonuses, roundVideoMin, MIN_DEPLOY_MIN, MIN_VIDEO_MIN, type BonusReport, type LossRecord } from "./fieldBonus";
 import { extractLoss } from "./lossExtract";
 import { readAliases, mergeAliases } from "./rosterAliases";
 import { readRosterCorrections } from "./rosterCorrections";
@@ -50,6 +50,8 @@ export async function computeBonusReport(
 
   // Drone-count gate: a day counts only if a drone-count report was posted in
   // #field-qa that day. Classify only otherwise-counted days (bounds Claude calls).
+  // Drone-count posts are bucketed by their Slack POST day (same-day by design;
+  // see spec Risk #1) — intentionally NOT lagged like videoFlightDate above.
   const msgKyivDate = (ts: string) => videoUploadDate(new Date(Number(ts) * 1000).toISOString());
   const textByDate = new Map<string, string[]>();
   for (const m of messages) {
@@ -60,8 +62,10 @@ export async function computeBonusReport(
   }
   const droneCountByDate: Record<string, boolean> = {};
   for (const r of reports) {
-    const videoMin = videoMinutesByDate[r.flightDate] ?? 0;
-    const otherwiseCounted = r.deployMin != null && r.deployMin >= 180 && videoMin >= 2;
+    // Use the SAME rounded video value + constants as the pure calculator so the
+    // classify-eligibility test here can never drift from computeBonuses' gate.
+    const videoMin = roundVideoMin(videoMinutesByDate[r.flightDate] ?? 0);
+    const otherwiseCounted = r.deployMin != null && r.deployMin >= MIN_DEPLOY_MIN && videoMin >= MIN_VIDEO_MIN;
     if (!otherwiseCounted) continue;
     const dayText = (textByDate.get(r.flightDate) ?? []).join("\n\n");
     const cls = await classifyDroneCount(dayText);

@@ -14,6 +14,8 @@ export const EARLY = 200;
 export const WEEKEND = 300;
 export const MIN_DEPLOY_MIN = 180;
 export const MIN_VIDEO_MIN = 2;
+/** Round raw video minutes to 1 decimal — the single source of the video-gate value, used by both the calculator and the orchestration so their gate tests can't drift. */
+export function roundVideoMin(raw: number): number { return Math.round(raw * 10) / 10; }
 export const EARLY_CUTOFF_MIN = 12 * 60 + 30; // 12:30
 export const LOSS_WINDOW = 12;
 export const TEAM_LOSS_CUTOFF = 3;
@@ -51,7 +53,7 @@ export function computeBonuses(input: {
 
   for (const r of reports) {
     for (const u of r.unknownInitials) flags.push({ kind: "unknown_initial", date: r.flightDate, detail: u });
-    const videoMin = Math.round((videoMinutesByDate[r.flightDate] ?? 0) * 10) / 10;
+    const videoMin = roundVideoMin(videoMinutesByDate[r.flightDate] ?? 0);
     const hoursOk = r.deployMin != null && r.deployMin >= MIN_DEPLOY_MIN;
     const videoOk = videoMin >= MIN_VIDEO_MIN;
     const droneCountReported = droneCountByDate == null || droneCountByDate[r.flightDate] === true;
