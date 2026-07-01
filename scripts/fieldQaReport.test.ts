@@ -63,6 +63,16 @@ describe("validateDays", () => {
     expect(r[0].sourceTs).toBe("100.1");
     expect(r.find((d) => d.date === "2026-06-03")!.flew).toBe(false);
   });
+
+  it("drops a contradictory flew:true / 0-airborne reading (never masquerades as no-fly)", () => {
+    const r = validateDays([
+      day("2026-06-07", 900), // normal flown
+      day("2026-06-08", 0, { flew: true }), // flew but 0 airborne — malformed read, dropped
+      day("2026-06-09", 0), // genuine no-fly (flew:false) — kept
+    ]);
+    expect(r.map((d) => d.date)).toEqual(["2026-06-07", "2026-06-09"]);
+    expect(r.find((d) => d.date === "2026-06-09")!.flew).toBe(false);
+  });
 });
 
 describe("toInputsCsv", () => {

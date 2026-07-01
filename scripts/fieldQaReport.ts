@@ -86,13 +86,19 @@ export function resolvePeriod(args: ParsedArgs, today: string): Period {
  * non-finite/negative airborneSeconds, dedupe by date keeping the first
  * occurrence (and, on a tie, the lexicographically smallest sourceTs), and sort
  * ascending by date. Does NOT sum airborne across duplicates — keeps one reading
- * per day. Telemetry-confirmed no-fly days (airborneSeconds 0) are KEPT — a known
- * zero is data, not absence; toInputsCsv/buildReport treat them appropriately.
+ * per day. Telemetry-confirmed no-fly days (flew:false, airborneSeconds 0) are
+ * KEPT — a known zero is data, not absence; toInputsCsv/buildReport treat them
+ * appropriately. Invariant: every KEPT airborne-0 day has flew:false, so a 0 in
+ * the report unambiguously means "did not fly". A contradictory flew:true reading
+ * with no positive airborne figure is a malformed/incomplete telemetry read and is
+ * dropped (a real "flew but airborne unknown" day resurfaces via the "Звіт"
+ * deployment-window path as airborneReported:false).
  */
 export function validateDays(days: ExtractedDay[]): ExtractedDay[] {
   const byDate = new Map<string, ExtractedDay>();
   for (const d of days) {
     if (!DATE_RE.test(d.date) || !Number.isFinite(d.airborneSeconds) || d.airborneSeconds < 0) continue;
+    if (d.flew && d.airborneSeconds <= 0) continue; // "flew" but no airborne figure → malformed, not a no-fly day
     const existing = byDate.get(d.date);
     if (!existing) {
       byDate.set(d.date, { ...d });
