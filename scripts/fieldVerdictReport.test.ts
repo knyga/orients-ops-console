@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReport, formatTable, parseArgs, resolvePeriod, summarize, toCsv } from "./fieldVerdictReport";
+import { buildReport, formatTable, mergeFlightDays, parseArgs, resolvePeriod, summarize, toCsv, type FlightDayInput } from "./fieldVerdictReport";
 import type { DayVerdict } from "../lib/fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
@@ -66,5 +66,35 @@ describe("crew column", () => {
     expect(formatTable(report)).toContain("Андріан");
     expect(formatTable(report)).toContain("?Ж");
     expect(toCsv(report)).toContain("Андріан");
+  });
+});
+
+describe("mergeFlightDays", () => {
+  const p = (flightDate: string, deployMin: number | null, start: string | null = null, end: string | null = null) =>
+    ({ flightDate, deployMin, start, end });
+
+  it("includes airborne-report dates as reported, preserving minutes", () => {
+    const out = mergeFlightDays(new Map([["2026-06-01", 36.8]]), []);
+    expect(out).toEqual([{ date: "2026-06-01", airborneMinutes: 36.8, airborneReported: true, deployWindow: undefined }]);
+  });
+
+  it("adds a parsed-only date WITH a deployment window as not-reported (airborne 0) + its window", () => {
+    const out = mergeFlightDays(new Map(), [p("2026-06-21", 180, "17:00", "20:00")]);
+    expect(out).toEqual([{ date: "2026-06-21", airborneMinutes: 0, airborneReported: false, deployWindow: { start: "17:00", end: "20:00" } }]);
+  });
+
+  it("excludes a parsed date with no deployment window (deployMin null)", () => {
+    const out = mergeFlightDays(new Map(), [p("2026-06-21", null)]);
+    expect(out).toEqual([]);
+  });
+
+  it("gives the airborne report precedence for a date present in both", () => {
+    const out = mergeFlightDays(new Map([["2026-06-21", 40]]), [p("2026-06-21", 180, "17:00", "20:00")]);
+    expect(out).toEqual([{ date: "2026-06-21", airborneMinutes: 40, airborneReported: true, deployWindow: { start: "17:00", end: "20:00" } }]);
+  });
+
+  it("sorts the union ascending by date", () => {
+    const out = mergeFlightDays(new Map([["2026-06-05", 30]]), [p("2026-06-02", 120, "10:00", "12:00")]);
+    expect(out.map((d) => d.date)).toEqual(["2026-06-02", "2026-06-05"]);
   });
 });

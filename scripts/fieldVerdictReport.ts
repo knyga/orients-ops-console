@@ -37,6 +37,13 @@ export interface VerdictReport {
   summary: VerdictSummary;
 }
 
+export interface FlightDayInput {
+  date: string;
+  airborneMinutes: number;
+  airborneReported: boolean;
+  deployWindow?: { start: string; end: string };
+}
+
 export function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = { format: "json", write: false };
   for (let i = 0; i < argv.length; i += 1) {
@@ -78,6 +85,35 @@ export function summarize(days: DayVerdict[]): VerdictSummary {
 
 export function buildReport(days: DayVerdict[], period: Period, runDate: string, graceWorkingDays: number): VerdictReport {
   return { period, runDate, graceWorkingDays, days, summary: summarize(days) };
+}
+
+/**
+ * Ordered flight days = union of dates with a committed airborne figure and dates
+ * with a parsed "Звіт" that has a deployment window (deployMin != null). An
+ * airborne-report date keeps airborneReported=true and its real minutes (precedence);
+ * a parsed-only date gets airborneMinutes=0, airborneReported=false. deployWindow is
+ * attached whenever the parsed report for that date has both start and end.
+ */
+export function mergeFlightDays(
+  airborneByDate: Map<string, number>,
+  parsed: { flightDate: string; deployMin: number | null; start: string | null; end: string | null }[],
+): FlightDayInput[] {
+  const windowByDate = new Map<string, { start: string; end: string }>();
+  for (const r of parsed) {
+    if (r.start && r.end) windowByDate.set(r.flightDate, { start: r.start, end: r.end });
+  }
+  const dates = new Set<string>(airborneByDate.keys());
+  for (const r of parsed) {
+    if (r.deployMin != null) dates.add(r.flightDate);
+  }
+  return [...dates]
+    .sort((a, b) => a.localeCompare(b))
+    .map((date) => ({
+      date,
+      airborneMinutes: airborneByDate.get(date) ?? 0,
+      airborneReported: airborneByDate.has(date),
+      deployWindow: windowByDate.get(date),
+    }));
 }
 
 function csvField(value: string): string {
