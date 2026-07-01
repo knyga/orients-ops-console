@@ -13,6 +13,7 @@ const day = (over: Partial<DayVerdict>): DayVerdict => ({
   reasons: [],
   roster: [],
   unknownInitials: [],
+  airborneReported: true,
   ...over,
 });
 
