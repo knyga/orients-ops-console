@@ -27,8 +27,7 @@ whole period.
 Run these in order (all default to the current Kyiv month if dates are omitted):
 
 ```bash
-npm run slack-sync                                   # mirror #field-qa (reports + drone-count posts)
-npm run field-qa -- --start 2026-06-01 --end 2026-06-30 --write   # parse flight-hours Звіт
+npm run slack-sync                                   # mirror #field-qa (Звіт reports + drone-count posts)
 npm run field-bonus -- --start 2026-06-01 --end 2026-06-30 --write # compute + commit the report
 ```
 
