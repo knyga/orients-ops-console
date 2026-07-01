@@ -15,6 +15,7 @@ import { windowMonths } from "./nightlyWindow";
 import { extractFieldQa } from "./fieldQaExtract";
 import { computeVerdicts } from "./computeVerdicts";
 import { publishSettledDays } from "./publishVerdicts";
+import { periodKey, readReportJson } from "./reports";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { APPROVERS } from "./approvers";
 import { openDm, postMessage } from "./slack";
@@ -73,11 +74,29 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
     stage = "extract/verdict";
     const window = windowMonths(today);
     const computed = [];
-    for (const wm of window) {
+    for (const [i, wm] of window.entries()) {
       const period = { start: wm.start, end: wm.end, timezone: FIELD_TIMEZONE };
-      const ex = await extractFieldQa(period, { write: true, onLog: log });
+      // Always re-extract the NEWEST (current) month. For older catch-up months,
+      // reuse the committed field-qa report when it already exists: re-running the
+      // Claude vision extraction over a whole prior month on every boundary day is
+      // the dominant cost and blows the Hobby 60s function cap. computeVerdicts
+      // reads that committed report either way, so publishing still catches up; a
+      // late-arriving prior-month report is picked up once its report is absent.
+      const isNewest = i === window.length - 1;
+      let extractedDays: number;
+      if (!isNewest) {
+        const existing = await readReportJson<{ days: unknown[] }>("field-qa", periodKey(period));
+        if (existing) {
+          extractedDays = existing.days.length;
+          log(`field-nightly: reusing committed field-qa/${periodKey(period)} (${extractedDays} days) — skip re-extraction`);
+        } else {
+          extractedDays = (await extractFieldQa(period, { write: true, onLog: log })).days.length;
+        }
+      } else {
+        extractedDays = (await extractFieldQa(period, { write: true, onLog: log })).days.length;
+      }
       const report = await computeVerdicts(period, { today, write: true, onLog: log });
-      computed.push({ period, extractedDays: ex.days.length, report });
+      computed.push({ period, extractedDays, report });
     }
 
     // 3. Per window month: publish settled days (only when publishing for real).
