@@ -4,7 +4,7 @@ import type { BonusReport } from "../lib/fieldBonus";
 import type { DayBonus } from "../lib/fieldBonus";
 
 const report: BonusReport = {
-  period: { start: "2026-05-01", end: "2026-05-31" }, days: [], penalties: [], teamZeroed: false, flags: [], total: 700,
+  period: { start: "2026-05-01", end: "2026-05-31" }, days: [], penalties: [], voidedDays: [], teamZeroed: false, flags: [], total: 700,
   people: [{ name: "Андріан", trips: 1, early: 0, weekend: 0, gross: 700, penaltyPct: 0, net: 700 }],
 };
 
