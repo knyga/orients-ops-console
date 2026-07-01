@@ -1,3 +1,11 @@
 {
-  "sources": []
+  "sources": [
+    {
+      "id": "field-ops-crew",
+      "url": "https://docs.google.com/spreadsheets/d/17xiqiAX9sjevoXR9eJhSeugpqel7h4_QyIgC89nRkK8/edit?gid=99809516",
+      "type": "sheet",
+      "dest": "reports/drive/field-ops-crew.csv",
+      "gid": "99809516"
+    }
+  ]
 }
