@@ -17,6 +17,12 @@ import { jiraTools } from "./tools/jira";
 const MODEL = "claude-sonnet-5";
 const MAX_ITERS = 8;
 const BUDGET_MS = 50_000;
+// On claude-sonnet-5, omitting `thinking` runs ADAPTIVE thinking, and max_tokens is a
+// hard ceiling over thinking + answer combined. 1024 risks a reasoning-heavy turn
+// spending the whole budget on thinking and returning truncated/empty text. Set thinking
+// explicitly (version-independent — the omission default differs across models) and give
+// max_tokens headroom; still well under the ~16K non-streaming HTTP-timeout threshold.
+const MAX_TOKENS = 4096;
 
 const SYSTEM = [
   "Ти — асистент інженерної команди Orients у Slack. Ти вмієш шукати і змінювати задачі в Jira через інструменти.",
@@ -73,7 +79,8 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
     }
     const resp = await client.messages.create({
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: MAX_TOKENS,
+      thinking: { type: "adaptive" },
       system: SYSTEM,
       tools: anthropicTools,
       messages,
