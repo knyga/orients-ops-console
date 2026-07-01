@@ -26,7 +26,8 @@ export const APPROVAL_TOOL: Anthropic.Tool = {
         description:
           "approve = the day is fine / the miss is acceptable (accept it); " +
           "disapprove = the day is NOT acceptable (reject it); " +
-          "unclear = the reply doesn't decide",
+          "unclear = the reply doesn't decide — a question, or a factual " +
+          "clarification/explanation of the gap that does not itself accept or reject it",
       },
       reason: { type: "string", description: "Short factual summary of the approver's reasoning" },
     },
@@ -53,7 +54,11 @@ export function buildApprovalPrompt(verdictMessage: string, reply: string): stri
     `  "форс-мажор, зараховуємо").`,
     `- "disapprove": they say it's NOT acceptable / must be redone / rejected`,
     `  (e.g. "ні, так не можна", "не зараховуємо", "треба перезняти").`,
-    `- "unclear": a question or comment that doesn't decide.`,
+    `- "unclear": a question, or a factual clarification/explanation that does not`,
+    `  itself accept or reject the day. Explaining the gap is NOT approval`,
+    `  (e.g. "час у повітрі був нульовим", "датасети не записались по невідомим`,
+    `  причинам") — only an explicit "it's acceptable / зараховуємо / approve" is.`,
+    `  When in doubt between approve and unclear, choose unclear.`,
     `Return only the tool call.`,
   ].join("\n");
 }

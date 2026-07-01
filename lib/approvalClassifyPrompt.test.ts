@@ -21,4 +21,14 @@ describe("buildApprovalPrompt", () => {
     expect(p).toMatch(/classify_approval/);
     expect(p).toMatch(/Return only the tool call/);
   });
+
+  it("instructs that a factual clarification is NOT approval (must be unclear)", () => {
+    const p = buildApprovalPrompt(
+      "⚠️ 2026-06-21 — needs review: airborne time not stated, datasets missing",
+      "час в повітрі був нульовим просто APP",
+    );
+    // A bare explanation of the gap must not be read as an approval.
+    expect(p).toMatch(/clarification|explanation/i);
+    expect(p).toMatch(/is NOT approval/);
+  });
 });

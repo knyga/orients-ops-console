@@ -29,6 +29,20 @@ export const approvalEditKey = (date: string, rev: string): string =>
   `approval-edit:${date}:${rev}`;
 export const approvalAckKey = (date: string, rev: string): string =>
   `approval-ack:${date}:${rev}`;
+/**
+ * Dedup keys for an approver override's verdict edit + threaded ack. Keyed by the
+ * DECISION, not the reason text: Claude re-generates the reason (differently) on
+ * each Slack event redelivery, so a content hash would let the same reply
+ * double-post. Decision-keying makes a redelivered event dedup to one send, while
+ * a genuine flip (accept → reject) still changes the key and reposts.
+ */
+export const approvalOutboundKeys = (
+  date: string,
+  decision: string,
+): { editKey: string; ackKey: string } => ({
+  editKey: approvalEditKey(date, decision),
+  ackKey: approvalAckKey(date, decision),
+});
 export const webhookFailureKey = (date: string, kind: string, rev: string): string =>
   `webhook-failure:${date}:${kind}:${rev}`;
 export const bonusThreadKey = (date: string): string => `bonus-thread:${date}`;

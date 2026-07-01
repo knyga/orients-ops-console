@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   approvalAckKey,
   approvalEditKey,
+  approvalOutboundKeys,
   askKey,
   backfillEditKey,
   bonusDmKey,
@@ -27,6 +28,26 @@ describe("key builders", () => {
     expect(bonusThreadKey("2026-06-04")).toBe("bonus-thread:2026-06-04");
     expect(bonusDmKey("2026-06-04", "U123")).toBe("bonus-dm:2026-06-04:U123");
     expect(backfillEditKey("2026-06-01", "abc")).toBe("backfill-edit:2026-06-01:abc");
+  });
+});
+
+describe("approvalOutboundKeys", () => {
+  it("derives edit+ack keys from (date, decision), independent of reason wording", () => {
+    // The deciding factor is the decision — NOT the reason text, which Claude
+    // re-generates (differently) on each webhook redelivery. Same decision must
+    // dedup to one send; a flip to the other decision must repost.
+    expect(approvalOutboundKeys("2026-06-21", "accepted_exception")).toEqual({
+      editKey: "approval-edit:2026-06-21:accepted_exception",
+      ackKey: "approval-ack:2026-06-21:accepted_exception",
+    });
+    expect(approvalOutboundKeys("2026-06-21", "rejected")).toEqual({
+      editKey: "approval-edit:2026-06-21:rejected",
+      ackKey: "approval-ack:2026-06-21:rejected",
+    });
+    // A flip changes both keys (so it reposts).
+    expect(approvalOutboundKeys("2026-06-21", "accepted_exception").ackKey).not.toBe(
+      approvalOutboundKeys("2026-06-21", "rejected").ackKey,
+    );
   });
 });
 

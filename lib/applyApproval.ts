@@ -8,7 +8,7 @@
 import "server-only";
 import { classifyApproval } from "./approvalClassify";
 import { postMessage, updateMessage } from "./slack";
-import { approvalAckKey, approvalEditKey, contentRev, type SendTrigger } from "./outboundKeys";
+import { approvalOutboundKeys, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { writePublished, type PublishedEntry } from "./published";
 import { upsertResolution, type ResolutionDecision } from "./resolutions";
@@ -69,9 +69,12 @@ export async function applyApproverDecision(
   const { body, rosterLine } = splitRosterSuffix(entry.text);
   const { updatedText: struck, replyText } = formatOverride(body, decision, by, reason);
   const updatedText = rosterLine ? `${struck}\n${rosterLine}` : struck;
-  const editRev = contentRev(updatedText);
+  // Key the edit + ack by the DECISION, not the (non-deterministic) reason text,
+  // so a redelivered Slack event dedups to a single post while a genuine flip
+  // (accept → reject) still reposts. See lib/outboundKeys.ts.
+  const { editKey, ackKey } = approvalOutboundKeys(entry.date, decision);
   await updateMessage(channel.id, entry.ts, updatedText, {
-    key: approvalEditKey(entry.date, editRev),
+    key: editKey,
     feature: "approval",
     channel: channel.name,
     trigger,
@@ -80,7 +83,7 @@ export async function applyApproverDecision(
     channel.id,
     replyText,
     {
-      key: approvalAckKey(entry.date, contentRev(replyText)),
+      key: ackKey,
       feature: "approval",
       channel: channel.name,
       trigger,
