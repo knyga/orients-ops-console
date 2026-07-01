@@ -42,7 +42,7 @@ OAuth v2 bot flow (strictly more work for the same identity result).
 
 ### Flow (authorization-code)
 
-1. Unauthenticated request → `middleware.ts` redirects pages to `/login`
+1. Unauthenticated request → the root proxy (`proxy.ts`, Next 16's renamed middleware) redirects pages to `/login`
    (API routes get `401 JSON`).
 2. `/login` renders a single **"Sign in with Slack"** button linking to
    `GET /api/auth/login`. If `?denied=1` is present, it shows an
@@ -83,7 +83,7 @@ verification is deferred as optional hardening.
 - Cookie attributes: `httpOnly`, `Secure`, `SameSite=Lax`, `Path=/`,
   `Max-Age=604800`.
 
-### Enforcement — `middleware.ts`
+### Enforcement — `proxy.ts` (Next 16's renamed middleware)
 
 - Matcher covers all routes **except** these bypass paths:
   - `/api/cron/*`, `/api/slack/*` — own auth,
@@ -104,7 +104,7 @@ verification is deferred as optional hardening.
 | `lib/auth.ts` | **pure, unit-tested** | `signSession`, `verifySession` (constant-time), `decodeIdToken`, `isAllowed`. No `server-only` (CLI-safe). |
 | `lib/allowedUsers.ts` | data | Seeded with the two approver ids; shaped like `lib/approvers.ts`. |
 | `lib/slackOidc.ts` | `server-only` | `buildAuthorizeUrl`, `exchangeCode`. Reads `SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`. Token never reaches the browser. |
-| `middleware.ts` | enforcement | Edge runtime; Web Crypto HMAC verify; bypass matcher. |
+| `proxy.ts` | enforcement | Next 16's renamed middleware. Edge runtime; Web Crypto HMAC verify; bypass matcher. |
 | `app/login/page.tsx` | UI | Single Slack button; `denied` state. |
 | `app/api/auth/login/route.ts` | route | state/nonce + redirect to Slack. |
 | `app/api/auth/callback/route.ts` | route | code exchange, claim validation, allowlist check, session mint. |
@@ -154,7 +154,7 @@ URL `<AUTH_BASE_URL>/api/auth/callback` under OAuth & Permissions.
 
 ## Rollout
 
-1. Land the code (gate is active as soon as `middleware.ts` ships).
+1. Land the code (gate is active as soon as `proxy.ts` ships).
 2. Set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `AUTH_SECRET`, `AUTH_BASE_URL`
    in Vercel + local `.env`.
 3. Configure the Slack app's OIDC scopes + redirect URL.

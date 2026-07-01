@@ -921,7 +921,7 @@ git commit -m "feat(auth): access CLI (list allowlist + verify session) — seco
 In `CLAUDE.md`, in the `## Commands` list, add a bullet (after the `backfill-outbound` mention or near the other CLIs):
 
 ```markdown
-- `npm run access -- <list|verify>` — inspect the console auth gate. `list` prints the Slack-user-id allowlist (`lib/allowedUsers.ts`); `--format table` for a human view. `verify <cookie-value>` decodes/validates a session cookie. The console gates all dashboard pages + data API routes behind a Slack OIDC login (`middleware.ts`); machine endpoints (`/api/cron/*`, `/api/slack/*`) keep their own auth. (See `docs/superpowers/specs/2026-06-30-slack-auth-gate-design.md`.)
+- `npm run access -- <list|verify>` — inspect the console auth gate. `list` prints the Slack-user-id allowlist (`lib/allowedUsers.ts`); `--format table` for a human view. `verify <cookie-value>` decodes/validates a session cookie. The console gates all dashboard pages + data API routes behind a Slack OIDC login (`proxy.ts`, Next 16's renamed middleware); machine endpoints (`/api/cron/*`, `/api/slack/*`) keep their own auth. (See `docs/superpowers/specs/2026-06-30-slack-auth-gate-design.md`.)
 ```
 
 - [ ] **Step 2: Run the full test suite**
