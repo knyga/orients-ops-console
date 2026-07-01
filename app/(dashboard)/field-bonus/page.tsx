@@ -196,6 +196,26 @@ export default function FieldBonusPage() {
             </section>
           )}
 
+          {/* Voided days audit */}
+          {report.voidedDays && report.voidedDays.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+              <h2 className="text-sm font-semibold text-amber-900">
+                Voided days — no drone-count report in #field-qa ({report.voidedDays.length})
+              </h2>
+              <p className="mt-1 text-xs text-amber-700">
+                These days met the 3h + 2min gate but had no drone-count/production report, so
+                the whole crew earns nothing for the day.
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-amber-900">
+                {report.voidedDays.map((d) => (
+                  <li key={d.date} className="tabular-nums">
+                    {d.date} — {d.roster.join(", ") || "(no crew parsed)"}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Flags panel */}
           {report.flags.length > 0 && (
             <section className="space-y-2">
