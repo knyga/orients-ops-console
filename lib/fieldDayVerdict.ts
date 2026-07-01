@@ -62,7 +62,7 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
     reasons.push(
       ratio === null
         ? airborneReported
-          ? "no airborne time recorded for the day"
+          ? "drones did not fly (0 flights, 0 min airborne)"
           : "flight reported but airborne time not recorded"
         : `video ${videoMinutes.toFixed(0)}m is ${(ratio * 100).toFixed(0)}% of airborne ${airborneMinutes.toFixed(0)}m (< 50%)`,
     );

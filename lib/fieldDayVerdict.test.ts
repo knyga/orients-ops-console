@@ -83,9 +83,12 @@ describe("verdictForDay", () => {
     expect(v.reasons).toContain("flight reported but airborne time not recorded");
   });
 
-  it("keeps the plain no-airborne reason when airborne is genuinely absent from the report", () => {
+  it("labels a telemetry-confirmed no-fly day (airborne reported as 0) as did-not-fly", () => {
     const v = verdictForDay({ ...base, airborneMinutes: 0, videoMinutes: 0, today: "2026-06-30" });
-    expect(v.reasons).toContain("no airborne time recorded for the day");
+    expect(v.status).toBe("NEEDS_REVIEW");
+    expect(v.airborneReported).toBe(true); // defaulted true → reported 0
+    expect(v.reasons).toContain("drones did not fly (0 flights, 0 min airborne)");
+    expect(v.reasons).not.toContain("no airborne time recorded for the day");
   });
 });
 
