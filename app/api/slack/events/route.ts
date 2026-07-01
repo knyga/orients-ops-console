@@ -10,9 +10,11 @@
  *
  * The effect runs INLINE (awaited before the response). It's a Neon lookup +
  * one Claude classify + Slack edit/ack (~2-3s); Next's `after()` proved
- * unreliable on Vercel (the deferred work silently didn't run), so we do the
- * work synchronously. The whole flow is idempotent (override marker / ask-state
- * guards), so if the ack ever exceeds Slack's 3s window the retry is a no-op.
+ * unreliable on Vercel, so we do the work synchronously. Each Slack event is
+ * claimed by its `event_id` (lib/slackEventClaim) BEFORE any effect and
+ * processed at most once, so Slack's at-least-once redelivery can never
+ * re-classify or flip an already-decided day. The decision-keyed outbound dedup
+ * (lib/outboundKeys) is a second layer on the resulting edit/ack.
  *
  * The 200 response carries a small diagnostic body (handled / applied / error).
  * Slack only checks the 2xx status and ignores the body; it lets an operator
@@ -28,25 +30,11 @@ import { applyAnswerReply } from "@/lib/applyAnswer";
 import { permalinkFor, postMessage } from "@/lib/slack";
 import { formatWebhookFailureNotice } from "@/lib/webhookNotice";
 import { contentRev, webhookFailureKey } from "@/lib/outboundKeys";
+import { parseSlackEvent, type SlackEventBody } from "@/lib/slackEventParse";
+import { claimSlackEvent } from "@/lib/slackEventClaim";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-/** Minimal shape of the Slack event envelope + message event we consume. */
-interface SlackEventBody {
-  type?: string;
-  challenge?: string;
-  event?: {
-    type?: string;
-    subtype?: string;
-    bot_id?: string;
-    user?: string;
-    text?: string;
-    ts?: string;
-    thread_ts?: string;
-    channel?: string;
-  };
-}
 
 /** Always a 2xx for Slack; the JSON body is diagnostic (Slack ignores it). */
 function ack(detail: Record<string, unknown>): Response {
@@ -117,40 +105,36 @@ export async function POST(req: Request): Promise<Response> {
     return new Response("bad request", { status: 400 });
   }
 
-  if (body.type === "url_verification") {
-    return Response.json({ challenge: body.challenge });
+  const parsed = parseSlackEvent(body);
+  if (parsed.kind === "challenge") return Response.json({ challenge: parsed.challenge });
+  if (parsed.kind === "skip") return ack({ skipped: parsed.reason });
+
+  const channel = TRACKED_CHANNELS.find((c) => c.id === parsed.channelId);
+  if (!channel) return ack({ skipped: "untracked-channel", channel: parsed.channelId });
+
+  // Event-id idempotency: Slack delivers at-least-once and retries any delivery
+  // it doesn't see 2xx'd within 3s, reusing the same event_id. Claim it once
+  // (atomic) so a redelivery never re-classifies and flips an already-decided
+  // day. At-most-once: we keep the claim even if the effect below fails — a
+  // transient failure recovers via the in-thread notice + a manual
+  // `field-approvals` re-run, not via Slack's retry.
+  if (parsed.eventId) {
+    const fresh = await claimSlackEvent(parsed.eventId, new Date().toISOString(), {
+      eventType: "message",
+    });
+    if (!fresh) {
+      console.log(`slack events: duplicate event_id=${parsed.eventId} — skipping`);
+      return ack({ skipped: "duplicate-event", event_id: parsed.eventId });
+    }
+  } else {
+    console.warn("slack events: event_callback without event_id — processing without dedup");
   }
-  if (body.type !== "event_callback") return ack({ skipped: "not-event-callback" });
 
-  const e = body.event;
-  console.log(
-    `slack events: event type=${e?.type} subtype=${e?.subtype ?? "-"} bot=${e?.bot_id ?? "-"} user=${e?.user ?? "-"} ch=${e?.channel ?? "-"} thread_ts=${e?.thread_ts ?? "-"} ts=${e?.ts ?? "-"}`,
-  );
-
-  // Only human thread REPLIES in a tracked channel.
-  if (
-    !(
-      e?.type === "message" &&
-      !e.subtype &&
-      !e.bot_id &&
-      e.user &&
-      e.ts &&
-      e.thread_ts &&
-      e.thread_ts !== e.ts &&
-      e.channel
-    )
-  ) {
-    return ack({ skipped: "filter" });
-  }
-
-  const channel = TRACKED_CHANNELS.find((c) => c.id === e.channel);
-  if (!channel) return ack({ skipped: "untracked-channel", channel: e.channel });
-
-  const replyPermalink = permalinkFor(channel.id, e.ts);
-  const replyText = e.text ?? "";
-  const userId = e.user;
-  const threadTs = e.thread_ts;
-  const replyTs = e.ts;
+  const replyPermalink = permalinkFor(channel.id, parsed.replyTs);
+  const replyText = parsed.replyText;
+  const userId = parsed.userId;
+  const threadTs = parsed.threadTs;
+  const replyTs = parsed.replyTs;
 
   try {
     // S7: an authorized approver overriding a published verdict.
