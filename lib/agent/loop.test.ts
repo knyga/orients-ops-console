@@ -65,4 +65,17 @@ describe("runAgent", () => {
     expect(res.kind).toBe("error");
     expect(res.text).toContain("не встиг");
   });
+
+  it("stops with an error text when wall-clock budget is exceeded", async () => {
+    // Counter-based now: first call returns 0, subsequent calls return 60_000 to exceed BUDGET_MS (50_000).
+    let callCount = 0;
+    const clockNow = () => (callCount++ === 0 ? 0 : 60_000);
+    // Provide a tool_use response so the loop tries to iterate (otherwise it would return text on first response).
+    const client = fakeClient([
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "demo_read", input: {} }] },
+    ]);
+    const res = await runAgent("test", { client, tools: [readTool], now: clockNow });
+    expect(res.kind).toBe("error");
+    expect(res.text).toContain("не встиг");
+  });
 });

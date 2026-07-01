@@ -83,6 +83,7 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
       return { kind: "text", text: textOf(resp.content) };
     }
     // A write tool_use → confirm-first Proposal; stop the loop immediately.
+    // If a turn mixes read and write tool_uses, the loop stops at the write and does NOT execute the reads.
     const write = uses.find((u) => findTool(tools, u.name)?.kind === "write");
     if (write) {
       const tool = findTool(tools, write.name)!;
