@@ -1,5 +1,13 @@
 # Telemetry-Confirmed No-Fly Days Implementation Plan
 
+> **Status: EXECUTED — commits `c35d487`..`bc3c8f8` on `main`.** Canonical plan for this
+> feature; consolidates the parallel `no-fly-telemetry-days.md` plan (unimplemented). As-built
+> deviations from the tasks below: (1) the extraction drop-guard removal landed in
+> `lib/fieldQaExtract.ts` (a concurrent refactor `e04c8ac` moved extraction there from
+> `scripts/fieldQa.ts`); (2) an extra commit `33426b8` drops contradictory `flew:true/0`
+> reads (final-review finding); (3) an extra commit `bc3c8f8` normalizes no-fly `flights` to
+> 0. See the design doc's "Alternatives considered & as-built" for the full rationale.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop discarding a telemetry-confirmed 0-airborne day so the field-verdict pipeline surfaces it as a NEEDS_REVIEW "no-fly" day with honest Ukrainian wording, instead of mislabeling it "час у повітрі не вказано".

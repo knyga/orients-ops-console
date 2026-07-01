@@ -1,7 +1,14 @@
 # Read telemetry to distinguish a confirmed no-fly day from missing airborne time
 
 **Date:** 2026-07-01
-**Status:** Design (approved, pre-implementation)
+**Status:** SHIPPED (commits `c35d487`..`bc3c8f8` on `main`)
+
+> **Canonical design record for telemetry no-fly days.** This consolidates a parallel
+> design that existed briefly (`no-fly-telemetry-days-design.md` + its plan, unimplemented)
+> — its distinct ideas and the reasons the shipped approach diverged are captured under
+> "Alternatives considered & as-built" at the end. The predecessor
+> `surface-no-airborne-flight-days-design.md` (the *no-telemetry* deployment-window case)
+> remains its own shipped feature.
 
 ## Problem
 
@@ -159,6 +166,52 @@ The local Slack mirror is frozen at 06-20 in the working environment, and a `sla
 run did not advance it. Re-verifying step 5's live re-read and backfill (that 06-21's card
 is fetched and the live message is actually rewritten) must be an **explicit verification
 step in the plan**, not assumed. In production the mirror/live fetch will contain 06-21.
+
+## Alternatives considered & as-built (consolidated from the parallel `no-fly-telemetry-days` design)
+
+A parallel design (`no-fly-telemetry-days-design.md`, unimplemented) reached the same
+problem framing but proposed a different mechanism. Both are recorded here; the shipped
+choice is noted with its reason.
+
+- **Threading `flew`/`flights` into `DayVerdict`/`VerdictInput` (parallel) vs. inferring
+  no-fly from `airborneReported && airborneMinutes === 0` (shipped).** The parallel design
+  added optional `flew`/`flights` to the verdict and branched the reason on `flew === false`.
+  Shipped approach did **not** touch `DayVerdict`: since `ratio === null ⟺ airborneMinutes
+  === 0` and a report `0` now only originates from a telemetry no-fly day, `airborneReported
+  && ratio === null` already uniquely identifies "did not fly". Reason: smaller surface, no
+  `DayVerdict` schema change, no test-mock churn (YAGNI). Enforcing the invariant is what
+  makes this safe — see next point.
+- **The `flew:true / airborneSeconds ≤ 0` malformed read.** The parallel design's
+  `validateDays` kept **every** `airborneSeconds >= 0` row regardless of `flew`, which would
+  let a contradictory `{flew:true, 0}` reading (missing/misparsed `Час в повітрі` line,
+  decimal seconds) become a false "did not fly" verdict. The shipped `validateDays`
+  **drops** `flew && airborneSeconds <= 0`, so every kept airborne-0 row is genuinely
+  `flew:false` — the invariant the inference relies on. (A real "flew but airborne unknown"
+  day still resurfaces via the Звіт deployment-window path as `airborneReported:false`.)
+  This was raised by the final code review and fixed (`33426b8`).
+- **Wording.** Parallel: `за телеметрією 0 польотів за день` + `(звіт повідомляє про виліт
+  … — розбіжність)`. Shipped: `за телеметрією польотів не було (0 хв у повітрі)` +
+  `, хоча у звіті — виїзд {start}–{end}`, and the NEEDS_REVIEW tail drops the redundant
+  `/ 0 хв у повітрі` for airborne-0 days (`tail = airborneReported && airborneMinutes > 0`).
+- **`flights` normalization.** No-fly `ReportDay` rows carry `flights: 0` (buildReport
+  forces it) so the stored report never contradicts the hardcoded "0 flights" reason
+  (`bc3c8f8`). The parallel design's optional `flew` CSV column on the field-qa report was
+  **not** shipped (deferred, YAGNI — the report JSON carries `flew`; no consumer needs a CSV
+  column).
+- **Extraction location.** A concurrent refactor (`e04c8ac`) lifted the extraction out of
+  `scripts/fieldQa.ts` into `lib/fieldQaExtract.ts` (shared with the `field-nightly` cron),
+  so the drop-guard removal landed there, not in the CLI script as originally written.
+
+**06-21 outcome (verified end-to-end, 2026-07-01):** re-running the pipeline, 06-21
+extracts as `flew:false, airborne 0` and — via a peer approver-instruction (`Bohdan
+Forostianyi: "Тому, ок"`) — computes **ACCEPTED_EXCEPTION** with the no-fly wording, crew
+Андріан/Сергій. The Slack mirror is **DB-backed** (the frozen `data/slack/*.json` was a red
+herring). The live 06-21 message was already struck-through + accepted by the approver-
+override flow; `field-backfill` **deliberately skips overridden days**, and per user
+decision the live message was **left as-is** (the durable fix covers all future no-fly
+days). Composes cleanly with the concurrent airborne-override feature: `computeVerdicts`
+does `mergeFlightDays(overlayAirborne(reportAirborne, overrides), …)` — an override wins per
+its date, a no-fly day with no override keeps its 0.
 
 ## References
 
