@@ -61,8 +61,10 @@ export async function extractFieldQa(
       const { base64, mediaType } = await downloadFileBase64(image.urlPrivate);
       a = await extractAirborne(base64, mediaType);
     }
-    if (!a.flew || a.airborneSeconds <= 0) continue;
-    extracted.push({ date, airborneSeconds: a.airborneSeconds, flights: a.flights, sourceTs: m.ts });
+    // Keep telemetry-confirmed no-fly days (flew:false / 0 sec) — a known zero is
+    // data, not absence. validateDays/buildReport keep them; toInputsCsv still
+    // excludes them from the flight-hours feed.
+    extracted.push({ date, airborneSeconds: a.airborneSeconds, flights: a.flights, flew: a.flew, sourceTs: m.ts });
   }
 
   const days = validateDays(extracted);
