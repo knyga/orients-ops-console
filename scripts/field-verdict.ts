@@ -12,7 +12,7 @@
  *  - exceptions                       ← the resolutions store
  * `--write` persists reports/field-verdict/<period>.{json,csv}.
  *
- * The computation is shared with /api/cron/verdict via lib/computeVerdicts.
+ * The computation is shared with the nightly cron (/api/cron/field-nightly) via lib/computeVerdicts.
  * Runs under `--conditions=react-server` so the server-only Vimeo import resolves.
  */
 import { computeVerdicts, todayInFieldTz } from "../lib/computeVerdicts";

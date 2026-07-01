@@ -1,7 +1,8 @@
 /**
  * Shared field-day verdict computation. SERVER-ONLY (fetches live Vimeo). One
  * source of truth for the verdict pass, called by BOTH the `field-verdict` CLI
- * and the `/api/cron/verdict` route. Inputs: airborne minutes ← committed
+ * and the nightly pipeline (`lib/runNightly` / `/api/cron/field-nightly`).
+ * Inputs: airborne minutes ← committed
  * field-qa report (S2), video minutes ← live Vimeo attributed by name date,
  * #datasets notices ← the Slack mirror, exceptions ← the resolutions store.
  * With `write`, persists reports/field-verdict/<period>.{json,csv}.

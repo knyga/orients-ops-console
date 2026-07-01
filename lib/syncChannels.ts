@@ -1,7 +1,8 @@
 /**
  * Shared Slack-mirror sync orchestration. SERVER-ONLY (fetches live Slack). One
  * source of truth for the per-channel sync, called by BOTH the `slack-sync` CLI
- * and the `/api/cron/sync` route. The pure merge/tombstone core stays in
+ * and the nightly pipeline (`lib/runNightly` / `/api/cron/field-nightly`).
+ * The pure merge/tombstone core stays in
  * lib/slackMirror; this just drives it per channel. Each channel syncs
  * independently — one failure never aborts the others, and a channel's cursor
  * advances only on its own success.

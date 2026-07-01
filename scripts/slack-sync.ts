@@ -12,8 +12,8 @@
  * [lastSync − window, now] and tombstones messages that vanished from that window.
  * Each channel is synced independently — one failure does not abort the others;
  * a channel's cursor advances only on its own success. Exits non-zero if any
- * channel failed. The per-channel sync logic is shared with /api/cron/sync via
- * lib/syncChannels.
+ * channel failed. The per-channel sync logic is shared with the nightly cron
+ * (/api/cron/field-nightly) via lib/syncChannels.
  *
  * Runs only under Node with `--conditions=react-server` (see package.json) so the
  * `server-only` import in ../lib/slack resolves to its empty module.
