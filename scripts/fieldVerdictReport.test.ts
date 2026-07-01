@@ -98,3 +98,40 @@ describe("mergeFlightDays", () => {
     expect(out.map((d) => d.date)).toEqual(["2026-06-02", "2026-06-05"]);
   });
 });
+
+describe("airborne n/a rendering", () => {
+  const mkDay = (over: Partial<DayVerdict> = {}) => ({
+    date: "2026-06-21", status: "NEEDS_REVIEW" as const, airborneMinutes: 0, videoMinutes: 0,
+    ratio: null, datasetStatus: "MISSING" as const, withinGrace: false, reasons: [],
+    roster: [], unknownInitials: [], airborneReported: false, ...over,
+  });
+
+  it("CSV shows n/a when airborne was not reported", () => {
+    const csv = toCsv(buildReport([mkDay()], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3));
+    const row = csv.split("\n").find((l) => l.startsWith("2026-06-21"))!;
+    expect(row.split(",")[2]).toBe("n/a"); // airborneMinutes column
+  });
+
+  it("CSV shows the number when airborne was reported", () => {
+    const d = mkDay({ airborneMinutes: 42, airborneReported: true });
+    const csv = toCsv(buildReport([d], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3));
+    const row = csv.split("\n").find((l) => l.startsWith("2026-06-21"))!;
+    expect(row.split(",")[2]).toBe("42");
+  });
+
+  it("table shows n/a when airborne was not reported", () => {
+    const table = formatTable(buildReport([mkDay()], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3));
+    const row = table.split("\n").find((l) => l.startsWith("2026-06-21"))!;
+    const fields = row.split(/\s+/);
+    // Air(m) column comes after Date, emoji, and Status
+    expect(fields[3]).toBe("n/a");
+  });
+
+  it("table shows the number when airborne was reported", () => {
+    const d = mkDay({ airborneMinutes: 42, airborneReported: true });
+    const table = formatTable(buildReport([d], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3));
+    const row = table.split("\n").find((l) => l.startsWith("2026-06-21"))!;
+    const fields = row.split(/\s+/);
+    expect(fields[3]).toBe("42");
+  });
+});

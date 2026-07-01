@@ -126,7 +126,7 @@ export function toCsv(report: VerdictReport): string {
     lines.push([
       d.date,
       d.status,
-      String(d.airborneMinutes),
+      d.airborneReported ? String(d.airborneMinutes) : "n/a",
       String(d.videoMinutes),
       d.ratio === null ? "" : d.ratio.toFixed(3),
       d.datasetStatus,
@@ -164,7 +164,7 @@ export function formatTable(report: VerdictReport): string {
     for (const d of report.days) {
       const crew = [...d.roster, ...d.unknownInitials.map((u) => `?${u}`)].join(", ");
       lines.push(
-        `${d.date}   ${((STATUS_ICON[d.status] ?? "") + " " + d.status).padEnd(18)}   ${String(d.airborneMinutes).padStart(6)}  ${String(d.videoMinutes).padStart(6)}  ${(d.ratio === null ? "—" : d.ratio.toFixed(2)).padStart(5)}  ${((DATASET_ICON[d.datasetStatus] ?? "?") + " ").padEnd(2)}  ${crew.padEnd(20)}  ${d.reasons.join("; ")}`,
+        `${d.date}   ${((STATUS_ICON[d.status] ?? "") + " " + d.status).padEnd(18)}   ${(d.airborneReported ? String(d.airborneMinutes) : "n/a").padStart(6)}  ${String(d.videoMinutes).padStart(6)}  ${(d.ratio === null ? "—" : d.ratio.toFixed(2)).padStart(5)}  ${((DATASET_ICON[d.datasetStatus] ?? "?") + " ").padEnd(2)}  ${crew.padEnd(20)}  ${d.reasons.join("; ")}`,
       );
     }
   }
