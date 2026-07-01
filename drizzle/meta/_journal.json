@@ -43,6 +43,13 @@
       "when": 1782825076256,
       "tag": "0005_rapid_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782914750782,
+      "tag": "0006_mixed_thing",
+      "breakpoints": true
     }
   ]
 }
