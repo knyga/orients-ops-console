@@ -26,6 +26,7 @@
     "field-roster": "node --conditions=react-server --import tsx scripts/field-roster.ts",
     "sent": "node --conditions=react-server --import tsx scripts/sent.ts",
     "backfill-outbound": "node --conditions=react-server --import tsx scripts/backfill-outbound.ts",
+    "access": "node --conditions=react-server --import tsx scripts/access.ts",
     "field-bonus": "node --conditions=react-server --import tsx scripts/field-bonus.ts",
     "who": "node --conditions=react-server --import tsx scripts/who.ts",
     "people:scaffold": "node --conditions=react-server --import tsx scripts/people.ts",
