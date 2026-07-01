@@ -16,7 +16,7 @@
 - Writes are **DRY-RUN by default** in the CLI; a real Jira write requires the explicit `--yes` flag (house pattern, mirrors `field-publish`).
 - Jira Cloud v3 create/comment bodies use **ADF** (Atlassian Document Format), not plain strings.
 - Frequent commits: one per task.
-- Two config values are operator-supplied via env (`JIRA_DEFAULT_PROJECT`, `JIRA_MRLAB_PROJECT`); tests inject config explicitly so logic is fully covered without them.
+- The default project is hardcoded to `ATP` (the team's board `orients.atlassian.net/.../projects/ATP`), so **no new Vercel env var** is needed for it (`JIRA_DEFAULT_PROJECT` may override). Only `JIRA_MRLAB_PROJECT` (the Mr Lab key) is operator-supplied. Tests inject config explicitly so logic is fully covered without them.
 
 ---
 
@@ -34,7 +34,8 @@ Encodes Bohdan's rule: Любомир / Андріан / Тарас → the **Mr
 - Produces:
   - `interface RoutingConfig { defaultProject: string; mrLabProject: string; mrLabPeople: string[] }`
   - `const MRLAB_PEOPLE: string[]` — canonical names `["Liubomyr Zaiats", "Andrian Korchynskiy", "Taras Panasyuk"]`
-  - `function routingConfigFromEnv(): RoutingConfig` — reads `JIRA_DEFAULT_PROJECT`, `JIRA_MRLAB_PROJECT`; throws if either missing; `mrLabPeople` defaults to `MRLAB_PEOPLE`.
+  - `const DEFAULT_PROJECT: string` — `"ATP"` (the team's default board `orients.atlassian.net/.../projects/ATP`; hardcoded so **no new Vercel env var is needed** for the default project).
+  - `function routingConfigFromEnv(): RoutingConfig` — `defaultProject` = `process.env.JIRA_DEFAULT_PROJECT ?? DEFAULT_PROJECT`; `mrLabProject` = `process.env.JIRA_MRLAB_PROJECT` (throws only if THAT is missing); `mrLabPeople` defaults to `MRLAB_PEOPLE`.
   - `interface IssueRouting { projectKey: string; assignInDescription: boolean; jiraAccountId: string | null }`
   - `function routeIssue(person: Person, cfg: RoutingConfig): IssueRouting`
 
@@ -132,10 +133,14 @@ export const MRLAB_PEOPLE: string[] = [
   "Taras Panasyuk",
 ];
 
+/** Team default board is ATP (orients.atlassian.net/.../projects/ATP). Hardcoded
+ *  so no new Vercel env var is needed for the default project; JIRA_DEFAULT_PROJECT
+ *  can still override it. */
+export const DEFAULT_PROJECT = "ATP";
+
 export function routingConfigFromEnv(): RoutingConfig {
-  const defaultProject = process.env.JIRA_DEFAULT_PROJECT;
+  const defaultProject = process.env.JIRA_DEFAULT_PROJECT ?? DEFAULT_PROJECT;
   const mrLabProject = process.env.JIRA_MRLAB_PROJECT;
-  if (!defaultProject) throw new Error("JIRA_DEFAULT_PROJECT is not set on the server.");
   if (!mrLabProject) throw new Error("JIRA_MRLAB_PROJECT is not set on the server.");
   return { defaultProject, mrLabProject, mrLabPeople: MRLAB_PEOPLE };
 }
@@ -549,19 +554,19 @@ main().catch((err) => {
 
 Run:
 ```bash
-JIRA_BASE_URL=https://ex.atlassian.net JIRA_EMAIL=b@ex.com JIRA_API_TOKEN=t \
-JIRA_PROJECT_KEYS=OPS JIRA_STORY_POINTS_FIELD=customfield_10016 \
-JIRA_DEFAULT_PROJECT=OPS JIRA_MRLAB_PROJECT=MRLAB \
+JIRA_BASE_URL=https://orients.atlassian.net JIRA_EMAIL=b@ex.com JIRA_API_TOKEN=t \
+JIRA_PROJECT_KEYS=ATP JIRA_STORY_POINTS_FIELD=customfield_10016 \
+JIRA_MRLAB_PROJECT=MRLAB \
 npm run jira-write -- create --for "Taras" --summary "Fix export" --desc "broken CSV"
 ```
-Expected: prints a DRY-RUN plan with `"project": "MRLAB"` and `"assignee": "(in description) Taras Panasyuk"`, and does NOT hit the network. (Confirms routing + description composition end-to-end.)
+Expected: prints a DRY-RUN plan with `"project": "MRLAB"` and `"assignee": "(in description) Taras Panasyuk"`, and does NOT hit the network. (Confirms Mr-Lab routing + description composition; note `JIRA_DEFAULT_PROJECT` is unset yet the default is `ATP`.) Then repeat with `--for "Denys"` and confirm `"project": "ATP"` to verify the default path.
 
 - [ ] **Step 4: Document the command in `CLAUDE.md`**
 
 Add under `## Commands` (after the `npm run jira` bullet):
 
 ```markdown
-- `npm run jira-write -- create --for "<person>" --summary "<text>" [--desc "<text>"] [--yes]` — create a Jira ticket for a person, applying the Mr-Lab routing rule (`lib/jiraRouting.ts`): Любомир/Андріан/Тарас → the Mr Lab project with the assignee named in the description; everyone else → the default project (real assignee only when the person has a `jiraAccountId`). **DRY-RUN by default** (prints the resolved plan, touches nothing); `--yes` creates it and prints the key + URL. Needs `JIRA_*` env incl. `JIRA_DEFAULT_PROJECT` + `JIRA_MRLAB_PROJECT`. Deterministic (no LLM); the conversational agent (Phase B) reuses the same `lib/jira.ts` write client. (Phase A of the Slack conversational agent — see `docs/superpowers/specs/2026-07-01-slack-conversational-agent-design.md`.)
+- `npm run jira-write -- create --for "<person>" --summary "<text>" [--desc "<text>"] [--yes]` — create a Jira ticket for a person, applying the Mr-Lab routing rule (`lib/jiraRouting.ts`): Любомир/Андріан/Тарас → the Mr Lab project with the assignee named in the description; everyone else → the default project `ATP` (real assignee only when the person has a `jiraAccountId`). **DRY-RUN by default** (prints the resolved plan, touches nothing); `--yes` creates it and prints the key + URL. Needs `JIRA_*` env; the default project is hardcoded to `ATP` (override with `JIRA_DEFAULT_PROJECT`), so only `JIRA_MRLAB_PROJECT` must be added for Mr-Lab creates. Deterministic (no LLM); the conversational agent (Phase B) reuses the same `lib/jira.ts` write client. (Phase A of the Slack conversational agent — see `docs/superpowers/specs/2026-07-01-slack-conversational-agent-design.md`.)
 ```
 
 - [ ] **Step 5: Commit**
@@ -592,5 +597,5 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ## Open items (carried from the spec; operator input)
 
-- Set `JIRA_DEFAULT_PROJECT` (default project key) and `JIRA_MRLAB_PROJECT` (the "Mr Lab" project key) in `.env` / Vercel before a real `--yes` create.
+- Default project is hardcoded to `ATP` — no Vercel change needed for it. Set `JIRA_MRLAB_PROJECT` (the "Mr Lab" project key, still unknown) in `.env` / Vercel before a real `--yes` create for Любомир/Андріан/Тарас. Non-Mr-Lab creates to `ATP` work with no new env.
 - Later data task: populate `Person.jiraAccountId` for non-Mr-Lab developers to enable real Jira assignees (until then they are named in the description — safe).
