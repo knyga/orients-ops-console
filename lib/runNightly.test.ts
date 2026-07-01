@@ -57,16 +57,17 @@ describe("runNightly", () => {
     expect(computeVerdicts).toHaveBeenCalledTimes(2);
   });
 
-  it("boundary with a cached catch-up report: reuses it and skips re-extracting that month", async () => {
-    // Previous month (2026-06) already has a committed field-qa report; current (2026-07) does not.
+  it("boundary with cached catch-up reports: reuses them and skips both re-extraction and recompute", async () => {
+    // Previous month (2026-06) already has committed field-qa + field-verdict reports; current (2026-07) does not.
     readReportJson.mockImplementation(async (_feature: string, key: string) =>
       key === "2026-06" ? { days: [{}, {}, {}] } : null,
     );
     const res = await runNightly({ publish: true, today: "2026-07-02" });
     expect(extractFieldQa).toHaveBeenCalledTimes(1); // only the newest (current) month
-    expect(computeVerdicts).toHaveBeenCalledTimes(2); // both still recomputed + published
+    expect(computeVerdicts).toHaveBeenCalledTimes(1); // June's verdict is reused, not recomputed
+    expect(publishSettledDays).toHaveBeenCalledTimes(2); // both months still publish (catch-up preserved)
     const june = res.months.find((m) => m.period.start === "2026-06-01");
-    expect(june?.extractedDays).toBe(3); // day count came from the reused report
+    expect(june?.extractedDays).toBe(3); // day count came from the reused field-qa report
   });
 
   it("short-circuits on extract failure: DMs the operator, does not publish, rethrows", async () => {

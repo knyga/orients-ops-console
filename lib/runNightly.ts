@@ -16,6 +16,7 @@ import { extractFieldQa } from "./fieldQaExtract";
 import { computeVerdicts } from "./computeVerdicts";
 import { publishSettledDays } from "./publishVerdicts";
 import { periodKey, readReportJson } from "./reports";
+import type { VerdictReport } from "../scripts/fieldVerdictReport";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { APPROVERS } from "./approvers";
 import { openDm, postMessage } from "./slack";
@@ -76,26 +77,33 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
     const computed = [];
     for (const [i, wm] of window.entries()) {
       const period = { start: wm.start, end: wm.end, timezone: FIELD_TIMEZONE };
-      // Always re-extract the NEWEST (current) month. For older catch-up months,
-      // reuse the committed field-qa report when it already exists: re-running the
-      // Claude vision extraction over a whole prior month on every boundary day is
-      // the dominant cost and blows the Hobby 60s function cap. computeVerdicts
-      // reads that committed report either way, so publishing still catches up; a
-      // late-arriving prior-month report is picked up once its report is absent.
+      const key = periodKey(period);
       const isNewest = i === window.length - 1;
       let extractedDays: number;
-      if (!isNewest) {
-        const existing = await readReportJson<{ days: unknown[] }>("field-qa", periodKey(period));
-        if (existing) {
-          extractedDays = existing.days.length;
-          log(`field-nightly: reusing committed field-qa/${periodKey(period)} (${extractedDays} days) — skip re-extraction`);
+      let report: VerdictReport;
+      if (isNewest) {
+        // The active month: always re-extract + recompute (its verdicts change daily).
+        extractedDays = (await extractFieldQa(period, { write: true, onLog: log })).days.length;
+        report = await computeVerdicts(period, { today, write: true, onLog: log });
+      } else {
+        // Catch-up (prior) month: on every boundary day this used to re-run the
+        // whole month through Claude vision extraction AND a fresh Vimeo verdict
+        // recompute — the dominant cost that blew the Hobby 60s cap. Prior-month
+        // reports are already committed and stable by month-end, so reuse them:
+        // read the committed field-qa (day count) + field-verdict (the days to
+        // publish) instead. Publishing still catches up any unpublished settled
+        // day. Fall back to a full fresh pass only if a report is missing.
+        const committedVerdict = await readReportJson<VerdictReport>("field-verdict", key);
+        const committedFieldQa = await readReportJson<{ days: unknown[] }>("field-qa", key);
+        if (committedVerdict && committedFieldQa) {
+          extractedDays = committedFieldQa.days.length;
+          report = committedVerdict;
+          log(`field-nightly: reusing committed field-qa + field-verdict for ${key} — skip re-extraction & recompute`);
         } else {
           extractedDays = (await extractFieldQa(period, { write: true, onLog: log })).days.length;
+          report = await computeVerdicts(period, { today, write: true, onLog: log });
         }
-      } else {
-        extractedDays = (await extractFieldQa(period, { write: true, onLog: log })).days.length;
       }
-      const report = await computeVerdicts(period, { today, write: true, onLog: log });
       computed.push({ period, extractedDays, report });
     }
 
