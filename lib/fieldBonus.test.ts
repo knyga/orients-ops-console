@@ -49,6 +49,57 @@ describe("computeBonuses", () => {
     expect(r.teamZeroed).toBe(true);
     expect(r.total).toBe(0);
   });
+  it("voids an otherwise-counted day with no drone-count report (that day, whole crew)", () => {
+    const r = computeBonuses({
+      period,
+      reports: [rep({ flightDate: "2026-05-01", roster: ["Андріан", "Данило"] })],
+      videoMinutesByDate: { "2026-05-01": 9 },
+      losses: [],
+      droneCountByDate: { "2026-05-01": false },
+    });
+    expect(r.people).toEqual([]);
+    expect(r.total).toBe(0);
+    expect(r.days[0].reason).toBe("no-drone-count");
+    expect(r.flags).toContainEqual({ kind: "no_drone_count", date: "2026-05-01", detail: expect.any(String) });
+    expect(r.voidedDays).toEqual([{ date: "2026-05-01", roster: ["Андріан", "Данило"], reason: "no-drone-count" }]);
+  });
+
+  it("pays normally when the drone-count report is present", () => {
+    const r = computeBonuses({
+      period,
+      reports: [rep({ flightDate: "2026-05-01" })],
+      videoMinutesByDate: { "2026-05-01": 9 },
+      losses: [],
+      droneCountByDate: { "2026-05-01": true },
+    });
+    expect(r.total).toBe(700);
+    expect(r.voidedDays).toEqual([]);
+    expect(r.flags.find((f) => f.kind === "no_drone_count")).toBeUndefined();
+  });
+
+  it("keeps the hours reason (no drone-count flag) when the day already fails deploy<3h", () => {
+    const r = computeBonuses({
+      period,
+      reports: [rep({ flightDate: "2026-05-02", start: "14:00", end: "16:30", deployMin: 150 })],
+      videoMinutesByDate: { "2026-05-02": 9 },
+      losses: [],
+      droneCountByDate: {}, // present but missing this date
+    });
+    expect(r.days[0].reason).toBe("deploy<3h");
+    expect(r.flags.find((f) => f.kind === "no_drone_count")).toBeUndefined();
+    expect(r.voidedDays).toEqual([]);
+  });
+
+  it("leaves the gate disabled when droneCountByDate is omitted (backward compatible)", () => {
+    const r = computeBonuses({
+      period,
+      reports: [rep({ flightDate: "2026-05-01" })],
+      videoMinutesByDate: { "2026-05-01": 9 },
+      losses: [],
+    });
+    expect(r.total).toBe(700);
+    expect(r.voidedDays).toEqual([]);
+  });
 });
 
 describe("computeBonuses with roster corrections", () => {
