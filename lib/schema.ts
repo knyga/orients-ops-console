@@ -125,6 +125,14 @@ export const outboundMessages = pgTable(
   ],
 );
 
+/** Slack event-id dedup: process each Events API delivery at most once. */
+export const slackEventsSeen = pgTable("slack_events_seen", {
+  eventId: text("event_id").primaryKey(), // Slack's stable event_id (reused across retries)
+  seenAt: text("seen_at").notNull(), // ISO of first claim
+  eventType: text("event_type"), // inner event.type (audit)
+  outcome: text("outcome"), // short result tag (audit)
+});
+
 /** Durable roster initial→name aliases (e.g. resolved "М"→"Максим"). */
 export const rosterAliases = pgTable("roster_aliases", {
   initial: text("initial").primaryKey(),
