@@ -34,6 +34,18 @@ export function splitRosterSuffix(text: string): { body: string; rosterLine: str
   return { body: text.slice(0, idx), rosterLine: text.slice(idx + 1) };
 }
 
+/** Parse the crew names from a published message's crew suffix ([] when none). Pure. */
+export function parseRosterSuffix(text: string): string[] {
+  const { rosterLine } = splitRosterSuffix(text);
+  if (!rosterLine) return [];
+  return rosterLine
+    .slice(ROSTER_MARKER.length)
+    .replace(/\.\s*$/, "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 /** Days the bot will publish a verdict for (settled + actionable). */
 export function publishableDays(days: DayVerdict[]): DayVerdict[] {
   return days.filter(

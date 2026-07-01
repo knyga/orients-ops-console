@@ -50,6 +50,20 @@
       "when": 1782914750782,
       "tag": "0006_mixed_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782916499504,
+      "tag": "0007_rainy_siren",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782916616827,
+      "tag": "0008_ambitious_energizer",
+      "breakpoints": true
     }
   ]
 }

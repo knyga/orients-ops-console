@@ -57,6 +57,11 @@ export const bonusDmKey = (date: string, slackId: string): string =>
 export const backfillEditKey = (date: string, rev: string): string =>
   `backfill-edit:${date}:${rev}`;
 
+/** Confirm-first instruction: threaded ack for the dataset/video/airborne axes
+ *  (crew uses rosterAckKey, day uses approvalAckKey). Keyed by content-rev. */
+export const instructionAckKey = (date: string, axis: string, rev: string): string =>
+  `instruction-ack:${date}:${axis}:${rev}`;
+
 /** Roster correction (S-roster): edit the verdict's crew suffix + threaded ack. */
 export const rosterEditKey = (date: string, rev: string): string =>
   `roster-edit:${date}:${rev}`;
