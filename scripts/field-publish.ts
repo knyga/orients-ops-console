@@ -17,18 +17,16 @@
  *
  * Runs under `--conditions=react-server` so the server-only Slack import resolves.
  */
-import { postMessage } from "../lib/slack";
-import { verdictKey } from "../lib/outboundKeys";
 import { TRACKED_CHANNELS } from "../lib/slackChannels";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
 import { readReportJson, periodKey } from "../lib/reports";
-import { readPublished, recordPublished, writePublished } from "../lib/published";
+import { readPublished } from "../lib/published";
+import { publishSettledDays } from "../lib/publishVerdicts";
 import type { DayVerdict } from "../lib/fieldDayVerdict";
 import {
   buildPlan,
   formatDryRun,
   parseArgs,
-  pendingItems,
   resolvePeriod,
   type Period,
 } from "./fieldPublishReport";
@@ -63,7 +61,6 @@ async function main(): Promise<void> {
 
   const log = await readPublished(period);
   const plan = buildPlan(report.days, log);
-  const pending = pendingItems(plan);
 
   // Dry-run (default): print exactly what would be posted; write nothing.
   if (!args.publish) {
@@ -84,32 +81,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (pending.length === 0) {
+  // The real-post loop is the shared lib/publishVerdicts (also used by the cron);
+  // "cli" preserves the audit-log origin for hand-run publishes.
+  const { posted, skipped } = await publishSettledDays(report.days, channel, period, {
+    onLog: (m) => process.stderr.write(`${m}\n`),
+    trigger: "cli",
+  });
+  if (posted.length === 0) {
     process.stderr.write("field-publish: nothing new to post (all publishable days already published).\n");
     return;
   }
-
-  let nextLog = log;
-  let posted = 0;
-  for (const item of pending) {
-    const ts = await postMessage(channel.id, item.text, {
-      key: verdictKey(periodKey(period), item.date),
-      feature: "verdict",
-      channel: channel.name,
-      trigger: "cli",
-    });
-    nextLog = recordPublished(nextLog, {
-      date: item.date,
-      channel: channel.name,
-      text: item.text,
-      postedAt: new Date().toISOString(),
-      ts,
-    });
-    await writePublished(period, nextLog); // persist after each post so a mid-run failure is not lost
-    posted += 1;
-    process.stderr.write(`field-publish: posted ${item.date} to #${channel.name} (ts ${ts})\n`);
-  }
-  process.stderr.write(`field-publish: posted ${posted} verdict(s) to #${channel.name}.\n`);
+  process.stderr.write(
+    `field-publish: posted ${posted.length} verdict(s) to #${channel.name} (skipped ${skipped.length}).\n`,
+  );
 }
 
 main().catch((error: unknown) => {
