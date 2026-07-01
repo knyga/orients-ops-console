@@ -61,6 +61,35 @@ describe("formatDayMessage", () => {
     expect(msg).toContain("немає записаного часу в повітрі за день");
   });
 
+  it("NEEDS_REVIEW airborne-unknown day: honest wording + deploy window, no '0 хв у повітрі'", () => {
+    const msg = formatDayMessage(day({
+      status: "NEEDS_REVIEW",
+      airborneMinutes: 0,
+      videoMinutes: 0,
+      ratio: null,
+      datasetStatus: "MISSING",
+      airborneReported: false,
+      deployWindow: { start: "17:00", end: "20:00" },
+      roster: ["Андріан", "Сергій"],
+    }));
+    expect(msg).toContain("політ відбувся (17:00–20:00), але час у повітрі не вказано");
+    expect(msg).not.toContain("хв у повітрі,"); // trailing parenthetical dropped the airborne clause
+    expect(msg).not.toContain("0 хв у повітрі");
+    expect(msg).toContain("👥 У полі: Андріан, Сергій.");
+  });
+
+  it("NEEDS_REVIEW with a real airborne figure still shows the airborne clause", () => {
+    const msg = formatDayMessage(day({
+      status: "NEEDS_REVIEW",
+      airborneMinutes: 85,
+      videoMinutes: 0,
+      ratio: 0,
+      datasetStatus: "MISSING",
+      airborneReported: true,
+    }));
+    expect(msg).toContain("85 хв у повітрі");
+  });
+
   it("formats an ACCEPTED_EXCEPTION day, passing a bare human reason through verbatim", () => {
     const msg = formatDayMessage(
       day({ date: "2026-06-13", status: "ACCEPTED_EXCEPTION", reasons: ["форс-мажор: гроза"] }),

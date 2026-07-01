@@ -112,7 +112,10 @@ export function formatDayMessage(day: DayVerdict): string {
     return withRosterSuffix(`🟡 ${date} — прийнято (виняток): ${parts.join("; ")}.`, day.roster);
   }
   // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
-  return withRosterSuffix(`${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} (відео ${vid} хв / ${air} хв у повітрі, ${ds}).`, day.roster);
+  const tail = day.airborneReported
+    ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
+    : `(відео ${vid} хв, ${ds})`;
+  return withRosterSuffix(`${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} ${tail}.`, day.roster);
 }
 
 /**
@@ -127,11 +130,15 @@ function ukrainianGaps(day: DayVerdict): string[] {
   const gaps: string[] = [];
   const videoOk = day.ratio !== null && day.ratio >= MIN_RATIO;
   if (!videoOk) {
-    gaps.push(
-      day.ratio === null
-        ? "немає записаного часу в повітрі за день"
-        : `відео ${vid} хв — лише ${pct} від ${air} хв у повітрі (< 50%)`,
-    );
+    if (day.ratio === null) {
+      gaps.push(
+        day.airborneReported
+          ? "немає записаного часу в повітрі за день"
+          : `політ відбувся${day.deployWindow ? ` (${day.deployWindow.start}–${day.deployWindow.end})` : ""}, але час у повітрі не вказано`,
+      );
+    } else {
+      gaps.push(`відео ${vid} хв — лише ${pct} від ${air} хв у повітрі (< 50%)`);
+    }
   }
   if (day.datasetStatus === "MISSING") gaps.push("немає повідомлення про датасет за цей день");
   return gaps;
