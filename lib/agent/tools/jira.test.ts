@@ -8,14 +8,8 @@ const { searchIssues, createIssue, addComment, updateIssue, transitionIssue } = 
   transitionIssue: vi.fn(),
 }));
 
-const { routeIssue, routingConfigFromEnv } = vi.hoisted(() => ({
-  routeIssue: vi.fn(),
-  routingConfigFromEnv: vi.fn(),
-}));
-
 vi.mock("@/lib/jira", () => ({ searchIssues, createIssue, addComment, updateIssue, transitionIssue }));
-vi.mock("@/lib/jiraRouting", () => ({ routeIssue, routingConfigFromEnv }));
-// peopleByQuery is NOT mocked — it uses the real registry so we test real routing
+// lib/jiraRouting and lib/people are NOT mocked — they use real routing + registry to test integration
 
 import { jiraTools, jiraCreateProposal } from "./jira";
 import { findTool } from "./registry";
@@ -49,14 +43,6 @@ describe("jira_search tool", () => {
 
 describe("jiraCreateProposal (Mr-Lab routing)", () => {
   it("routes Тарас to MRLAB with assignee in the description echo", async () => {
-    routingConfigFromEnv.mockReturnValue({
-      defaultProjectKey: "ATP",
-      defaultAssignee: null,
-      mrLabProject: "MRLAB",
-      mrLabPeople: [{ name: "Taras Panasyuk", role: "field operator", slackId: "U123", jiraAccount: "taras.panasyuk" }],
-    });
-    routeIssue.mockReturnValue({ projectKey: "MRLAB", assignInDescription: true, jiraAccountId: null });
-
     const p = await jiraCreateProposal({ person: "Taras", summary: "Fix export", description: "broken CSV" });
     expect(p.kind).toBe("jira_create");
     expect(p.echoUk).toContain("MRLAB");
@@ -64,13 +50,6 @@ describe("jiraCreateProposal (Mr-Lab routing)", () => {
   });
 
   it("apply() POSTs and returns the created key + url", async () => {
-    routingConfigFromEnv.mockReturnValue({
-      defaultProjectKey: "ATP",
-      defaultAssignee: null,
-      mrLabProject: "MRLAB",
-      mrLabPeople: [{ name: "Taras Panasyuk", role: "field operator", slackId: "U123", jiraAccount: "taras.panasyuk" }],
-    });
-    routeIssue.mockReturnValue({ projectKey: "MRLAB", assignInDescription: true, jiraAccountId: null });
     createIssue.mockResolvedValue({ key: "MRLAB-3", url: "https://ex.atlassian.net/browse/MRLAB-3" });
 
     const p = await jiraCreateProposal({ person: "Taras", summary: "S", description: "" });
