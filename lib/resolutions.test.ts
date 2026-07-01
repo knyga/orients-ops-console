@@ -92,8 +92,10 @@ describe("deriveDatasetStatus", () => {
   it("a video-axis exception does NOT waive the dataset", () => {
     expect(deriveDatasetStatus(false, "2026-06-10", [R({ axis: "video" })]).status).toBe("MISSING");
   });
-  it("a day-axis exception waives the dataset (whole-day forgiveness)", () => {
-    expect(deriveDatasetStatus(false, "2026-06-10", [R({ axis: "day" })]).status).toBe("WAIVED");
+  it("a day-axis exception waives the dataset (whole-day forgiveness) but carries no note (applyResolution surfaces it)", () => {
+    const d = deriveDatasetStatus(false, "2026-06-10", [R({ axis: "day" })]);
+    expect(d.status).toBe("WAIVED");
+    expect(d.note).toBeUndefined();
   });
   it("posted but day-axis rejected → still POSTED here (day veto handled by applyResolution)", () => {
     expect(deriveDatasetStatus(true, "2026-06-10", [R({ axis: "day", decision: "rejected" })]).status).toBe("POSTED");

@@ -89,8 +89,16 @@ export function deriveDatasetStatus(
   }
   if (datasetPosted) return { status: "POSTED" };
   if (exception) {
-    const who = exception.by ? ` (${exception.by})` : "";
-    return { status: "WAIVED", note: `dataset waived${who}: ${exception.note}` };
+    // Symmetric to the decline branch: a day-axis exception's note is surfaced by
+    // applyResolution (when it flips NEEDS_REVIEW → ACCEPTED_EXCEPTION), so only
+    // attach the verbatim note here for a dataset-axis waiver (which
+    // applyResolution ignores). The generic "reason accepted (waived)" reason
+    // from verdictForDay still explains an already-ACCEPTED day.
+    if (exception.axis === "dataset") {
+      const who = exception.by ? ` (${exception.by})` : "";
+      return { status: "WAIVED", note: `dataset waived${who}: ${exception.note}` };
+    }
+    return { status: "WAIVED" };
   }
   return { status: "MISSING" };
 }
