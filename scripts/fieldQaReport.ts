@@ -130,7 +130,7 @@ export function buildReport(
     date: d.date,
     flightHours: round2(d.airborneSeconds / 3600),
     airborneMinutes: round2(d.airborneSeconds / 60),
-    flights: d.flights,
+    flights: d.flew ? d.flights : 0, // a no-fly day carries 0 flights (no phantom count)
     flew: d.flew,
     permalink: permalinkByTs.get(d.sourceTs) ?? "",
   }));

@@ -110,6 +110,7 @@ describe("buildReport", () => {
     const noFly = report.days.find((d) => d.date === "2026-06-19")!;
     expect(noFly.flew).toBe(false);
     expect(noFly.airborneMinutes).toBe(0);
+    expect(noFly.flights).toBe(0); // no-fly ⇒ 0 flights (never a phantom count)
     expect(report.totals.days).toBe(1); // only the flown day counts
   });
 });
