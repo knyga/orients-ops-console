@@ -66,4 +66,43 @@ describe("parseSlackEvent", () => {
     expect(r.kind).toBe("actionable");
     if (r.kind === "actionable") expect(r.eventId).toBeNull();
   });
+
+  const dm = {
+    type: "message" as const,
+    channel_type: "im" as const,
+    user: "U08G4EC244X",
+    text: "допомога",
+    ts: "1782899951.295969",
+    channel: "D0123DM",
+  };
+
+  it("returns dm for a human DM (channel_type im, no thread)", () => {
+    expect(parseSlackEvent({ type: "event_callback", event_id: "Ev9", event: dm })).toEqual({
+      kind: "dm",
+      eventId: "Ev9",
+      channelId: "D0123DM",
+      userId: "U08G4EC244X",
+      text: "допомога",
+      ts: "1782899951.295969",
+    });
+  });
+
+  it("returns dm even when the DM message text is empty", () => {
+    const r = parseSlackEvent({ type: "event_callback", event: { ...dm, text: undefined } });
+    expect(r.kind).toBe("dm");
+    if (r.kind === "dm") expect(r.text).toBe("");
+  });
+
+  it("skips a bot DM (bot_id) so the help reply never loops", () => {
+    expect(
+      parseSlackEvent({ type: "event_callback", event: { ...dm, bot_id: "B1" } }).kind,
+    ).toBe("skip");
+  });
+
+  it("skips a DM with a subtype (edit/join/etc)", () => {
+    expect(
+      parseSlackEvent({ type: "event_callback", event: { ...dm, subtype: "message_changed" } })
+        .kind,
+    ).toBe("skip");
+  });
 });

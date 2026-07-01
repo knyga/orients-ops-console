@@ -9,6 +9,7 @@ import {
   bonusThreadKey,
   contentRev,
   decideReserve,
+  dmHelpKey,
   detectOrigin,
   rosterAckKey,
   rosterEditKey,
@@ -28,6 +29,7 @@ describe("key builders", () => {
     expect(bonusThreadKey("2026-06-04")).toBe("bonus-thread:2026-06-04");
     expect(bonusDmKey("2026-06-04", "U123")).toBe("bonus-dm:2026-06-04:U123");
     expect(backfillEditKey("2026-06-01", "abc")).toBe("backfill-edit:2026-06-01:abc");
+    expect(dmHelpKey("U123", "1782899951.295969")).toBe("help:U123:1782899951.295969");
   });
 });
 

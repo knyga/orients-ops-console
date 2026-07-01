@@ -45,6 +45,12 @@ export const approvalOutboundKeys = (
 });
 export const webhookFailureKey = (date: string, kind: string, rev: string): string =>
   `webhook-failure:${date}:${kind}:${rev}`;
+/**
+ * DM help reply, keyed on the triggering message's ts so each distinct DM gets
+ * exactly one reply: a Slack redelivery of the same event dedups to one send,
+ * while a genuinely new DM (new ts) re-replies.
+ */
+export const dmHelpKey = (userId: string, ts: string): string => `help:${userId}:${ts}`;
 export const bonusThreadKey = (date: string): string => `bonus-thread:${date}`;
 export const bonusDmKey = (date: string, slackId: string): string =>
   `bonus-dm:${date}:${slackId}`;

@@ -17,12 +17,14 @@ export interface SlackEventBody {
     ts?: string;
     thread_ts?: string;
     channel?: string;
+    channel_type?: string;
   };
 }
 
 export type ParsedSlackEvent =
   | { kind: "challenge"; challenge: string }
   | { kind: "skip"; reason: string }
+  | { kind: "dm"; eventId: string | null; channelId: string; userId: string; text: string; ts: string }
   | {
       kind: "actionable";
       eventId: string | null;
@@ -41,6 +43,19 @@ export function parseSlackEvent(body: SlackEventBody): ParsedSlackEvent {
     return { kind: "skip", reason: "not-event-callback" };
   }
   const e = body.event;
+  // A human DM to the bot (channel_type "im"): reply with the help text. Checked
+  // before the thread-reply filter because a DM has no thread_ts. Bot posts and
+  // edits/joins are excluded so the help reply never loops.
+  if (e?.type === "message" && e.channel_type === "im" && !e.subtype && !e.bot_id && e.user && e.ts && e.channel) {
+    return {
+      kind: "dm",
+      eventId: body.event_id ?? null,
+      channelId: e.channel,
+      userId: e.user,
+      text: e.text ?? "",
+      ts: e.ts,
+    };
+  }
   // Only human thread REPLIES (not bot posts, edits/joins, or top-level messages).
   if (
     !(

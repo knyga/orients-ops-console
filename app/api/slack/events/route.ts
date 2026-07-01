@@ -29,7 +29,8 @@ import { applyInstructionReply } from "@/lib/applyInstructionReply";
 import { applyAnswerReply } from "@/lib/applyAnswer";
 import { permalinkFor, postMessage } from "@/lib/slack";
 import { formatWebhookFailureNotice } from "@/lib/webhookNotice";
-import { contentRev, webhookFailureKey } from "@/lib/outboundKeys";
+import { formatDmHelp } from "@/lib/dmHelp";
+import { contentRev, dmHelpKey, webhookFailureKey } from "@/lib/outboundKeys";
 import { parseSlackEvent, type SlackEventBody } from "@/lib/slackEventParse";
 import { claimSlackEvent } from "@/lib/slackEventClaim";
 
@@ -108,6 +109,33 @@ export async function POST(req: Request): Promise<Response> {
   const parsed = parseSlackEvent(body);
   if (parsed.kind === "challenge") return Response.json({ challenge: parsed.challenge });
   if (parsed.kind === "skip") return ack({ skipped: parsed.reason });
+
+  // A human DM to the bot → reply once with the help cheat sheet. Info-only (a DM
+  // never mutates verdict data); handled before the tracked-channel lookup because
+  // the DM channel is not a tracked channel. Keyed on the incoming ts so a Slack
+  // redelivery dedups to one reply while a new DM re-replies. The bot's own reply
+  // carries a bot_id, so the parser filters it — no echo loop.
+  if (parsed.kind === "dm") {
+    if (parsed.eventId) {
+      const fresh = await claimSlackEvent(parsed.eventId, new Date().toISOString(), {
+        eventType: "message",
+      });
+      if (!fresh) return ack({ skipped: "duplicate-event", event_id: parsed.eventId });
+    }
+    try {
+      await postMessage(parsed.channelId, formatDmHelp(), {
+        key: dmHelpKey(parsed.userId, parsed.ts),
+        feature: "help",
+        channel: "dm",
+        trigger: "webhook",
+      });
+      return ack({ handled: "dm-help", user: parsed.userId });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("slack events: dm-help post failed:", err);
+      return ack({ handled: "dm-help", error: message });
+    }
+  }
 
   const channel = TRACKED_CHANNELS.find((c) => c.id === parsed.channelId);
   if (!channel) return ack({ skipped: "untracked-channel", channel: parsed.channelId });
