@@ -169,3 +169,116 @@ export async function fetchResolvedIssues(
 
   return collected;
 }
+
+const CONTENT_TYPE = "application/json";
+
+/** Minimal plain-text → Atlassian Document Format. Blank lines split paragraphs.
+ *  Jira Cloud v3 requires ADF for description/comment bodies (plain strings 400). */
+export function textToAdf(text: string): object {
+  const paras = text.split(/\n\s*\n/).map((p) => p.replace(/\n/g, " ").trim());
+  const content = (paras.length ? paras : [""]).map((p) => ({
+    type: "paragraph",
+    content: p ? [{ type: "text", text: p }] : [],
+  }));
+  return { type: "doc", version: 1, content };
+}
+
+async function jiraWrite(
+  path: string,
+  method: "POST" | "PUT",
+  body: unknown,
+): Promise<unknown> {
+  const cfg = config();
+  const res = await fetch(`${cfg.baseUrl}${path}`, {
+    method,
+    headers: {
+      Accept: API_VERSION,
+      "Content-Type": CONTENT_TYPE,
+      Authorization: authHeader(cfg),
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new JiraError(
+      `Jira API returned ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 300)}` : ""}`,
+      res.status,
+    );
+  }
+  const raw = await res.text();
+  return raw ? JSON.parse(raw) : {};
+}
+
+export interface CreateIssueInput {
+  projectKey: string;
+  summary: string;
+  description: string;
+  issueType?: string;
+  assigneeAccountId?: string | null;
+}
+export interface CreatedIssue {
+  key: string;
+  url: string;
+}
+
+export async function createIssue(input: CreateIssueInput): Promise<CreatedIssue> {
+  const fields: Record<string, unknown> = {
+    project: { key: input.projectKey },
+    summary: input.summary,
+    issuetype: { name: input.issueType ?? "Task" },
+    description: textToAdf(input.description),
+  };
+  if (input.assigneeAccountId) fields.assignee = { accountId: input.assigneeAccountId };
+  const out = (await jiraWrite("/rest/api/3/issue", "POST", { fields })) as { key: string };
+  return { key: out.key, url: `${config().baseUrl}/browse/${out.key}` };
+}
+
+export async function addComment(key: string, body: string): Promise<void> {
+  await jiraWrite(`/rest/api/3/issue/${key}/comment`, "POST", { body: textToAdf(body) });
+}
+
+export async function updateIssue(key: string, fields: Record<string, unknown>): Promise<void> {
+  await jiraWrite(`/rest/api/3/issue/${key}`, "PUT", { fields });
+}
+
+export async function transitionIssue(key: string, transitionId: string): Promise<void> {
+  await jiraWrite(`/rest/api/3/issue/${key}/transitions`, "POST", {
+    transition: { id: transitionId },
+  });
+}
+
+export interface SearchRow {
+  key: string;
+  summary: string;
+  status: string;
+}
+
+export async function searchIssues(jql: string, max = 20): Promise<SearchRow[]> {
+  const cfg = config();
+  const params = new URLSearchParams({
+    jql,
+    maxResults: String(max),
+    fields: ["summary", "status"].join(","),
+  });
+  const url = `${cfg.baseUrl}/rest/api/3/search/jql?${params.toString()}`;
+  const res = await fetch(url, {
+    headers: { Accept: API_VERSION, Authorization: authHeader(cfg) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new JiraError(
+      `Jira API returned ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 300)}` : ""}`,
+      res.status,
+    );
+  }
+  const page = (await res.json()) as {
+    issues?: { key: string; fields?: { summary?: string; status?: { name?: string } } }[];
+  };
+  return (page.issues ?? []).map((i) => ({
+    key: i.key,
+    summary: i.fields?.summary ?? "",
+    status: i.fields?.status?.name ?? "",
+  }));
+}
