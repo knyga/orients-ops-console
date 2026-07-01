@@ -16,6 +16,18 @@ export interface RosterCorrection {
   recordedAt: string;
 }
 
+/**
+ * Source precedence: a bulk crew-sheet import (`field-ops-sheet`) must NOT
+ * overwrite an approver/manual correction (any other source). Approver decisions
+ * are authoritative — so a re-import of the tracking sheet can never silently
+ * regress a confirmed correction (e.g. the 2026-06-25 [Влад, Тарас] fix). A
+ * fresh day, or one whose only correction is itself a sheet write, updates
+ * freely; a non-sheet write is never blocked. Pure.
+ */
+export function sheetImportShouldSkip(existingSource: string | undefined, incomingSource: string): boolean {
+  return incomingSource === "field-ops-sheet" && existingSource !== undefined && existingSource !== "field-ops-sheet";
+}
+
 export function applyRosterCorrection(
   parsedRoster: string[],
   dayCounted: boolean,

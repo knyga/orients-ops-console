@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { applyRosterCorrection, type RosterCorrection } from "./rosterCorrection";
+import { applyRosterCorrection, sheetImportShouldSkip, type RosterCorrection } from "./rosterCorrection";
 
 const c = (over: Partial<RosterCorrection>): RosterCorrection => ({
   date: "2026-06-10", note: "n", by: "Oleksandr K", source: "slack", recordedAt: "2026-06-30T00:00:00Z", ...over,
+});
+
+describe("sheetImportShouldSkip", () => {
+  it("skips a field-ops-sheet write over an existing manual/approver correction", () => {
+    expect(sheetImportShouldSkip("manual", "field-ops-sheet")).toBe(true);
+    expect(sheetImportShouldSkip("https://slack…/p123", "field-ops-sheet")).toBe(true);
+    expect(sheetImportShouldSkip("slack", "field-ops-sheet")).toBe(true);
+  });
+  it("allows a field-ops-sheet write when none exists or the existing is also a sheet write", () => {
+    expect(sheetImportShouldSkip(undefined, "field-ops-sheet")).toBe(false);
+    expect(sheetImportShouldSkip("field-ops-sheet", "field-ops-sheet")).toBe(false);
+  });
+  it("never blocks a non-sheet (approver/manual) write", () => {
+    expect(sheetImportShouldSkip("field-ops-sheet", "manual")).toBe(false);
+    expect(sheetImportShouldSkip("manual", "slack")).toBe(false);
+  });
 });
 
 describe("applyRosterCorrection", () => {

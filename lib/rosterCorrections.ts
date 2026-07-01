@@ -4,8 +4,9 @@
  * `roster_corrections` Postgres table; read by the verdict (display) and the
  * bonus calc. NOT server-only (CLIs import it, like lib/resolutions.ts).
  */
+import { eq } from "drizzle-orm";
 import { db, schema } from "./db";
-import type { RosterCorrection } from "./rosterCorrection";
+import { sheetImportShouldSkip, type RosterCorrection } from "./rosterCorrection";
 
 function toCorrection(r: typeof schema.rosterCorrections.$inferSelect): RosterCorrection {
   return {
@@ -25,6 +26,16 @@ export async function readRosterCorrections(): Promise<RosterCorrection[]> {
 }
 
 export async function upsertRosterCorrection(c: RosterCorrection): Promise<void> {
+  // Source precedence: a bulk crew-sheet import never clobbers an approver/manual
+  // correction (see sheetImportShouldSkip). Cheap guard — one keyed read.
+  if (c.source === "field-ops-sheet") {
+    const existing = await db
+      .select({ source: schema.rosterCorrections.source })
+      .from(schema.rosterCorrections)
+      .where(eq(schema.rosterCorrections.date, c.date));
+    if (existing.length > 0 && sheetImportShouldSkip(existing[0].source, c.source)) return;
+  }
+
   const values = {
     date: c.date,
     roster: c.roster ?? null,
