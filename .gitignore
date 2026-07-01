@@ -19,3 +19,6 @@ docs/Personal Field Metrics */
 
 # macOS junk
 .DS_Store
+
+# Local Claude Code settings (per-machine; never commit)
+.claude/settings.local.json
