@@ -25,7 +25,7 @@ import { TRACKED_CHANNELS } from "@/lib/slackChannels";
 import { findPublishedByTs } from "@/lib/published";
 import { findAskByTs } from "@/lib/asks";
 import { approverFor, isApprover } from "@/lib/approvers";
-import { applyApproverReply } from "@/lib/applyApproval";
+import { applyInstructionReply } from "@/lib/applyInstructionReply";
 import { applyAnswerReply } from "@/lib/applyAnswer";
 import { permalinkFor, postMessage } from "@/lib/slack";
 import { formatWebhookFailureNotice } from "@/lib/webhookNotice";
@@ -137,13 +137,15 @@ export async function POST(req: Request): Promise<Response> {
   const replyTs = parsed.replyTs;
 
   try {
-    // S7: an authorized approver overriding a published verdict.
+    // S7 (confirm-first): an authorized approver instructing a data change on a
+    // published verdict. The bot echoes the change and applies it ONLY once the
+    // approver confirms in-thread (a question/comment is a silent no-op).
     const pub = await findPublishedByTs(threadTs);
     console.log(`slack events: findPublishedByTs → ${pub ? pub.entry.date : "null"}; isApprover(${userId})=${isApprover(userId)}`);
     if (pub && isApprover(userId)) {
       const approver = approverFor(userId)!;
       try {
-        const result = await applyApproverReply({
+        const result = await applyInstructionReply({
           entry: pub.entry,
           period: pub.period,
           replyText,
@@ -152,11 +154,12 @@ export async function POST(req: Request): Promise<Response> {
           replyTs,
           trigger: "webhook",
         });
-        console.log(`slack events: applyApproverReply → applied=${result.applied} alreadyAcked=${result.alreadyAcked}`);
-        return ack({ handled: "approver", date: pub.entry.date, ...result });
+        console.log(`slack events: applyInstructionReply → handled=${result.handled} applied=${result.applied ?? "-"} intent=${result.intent ?? "-"}`);
+        return ack({ date: pub.entry.date, ...result });
       } catch (err) {
-        // Recognised an approver override but couldn't apply it — make it visible.
-        return await failVisibly(channel, threadTs, "approver", pub.entry.date, err);
+        // Recognised an approver instruction but couldn't classify/apply it —
+        // make it visible (this fires loudly if ANTHROPIC_API_KEY is missing).
+        return await failVisibly(channel, threadTs, "instruction", pub.entry.date, err);
       }
     }
 

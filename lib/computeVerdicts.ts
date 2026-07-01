@@ -20,6 +20,7 @@ import { parseMonth } from "./fieldReports";
 import { readAliases, mergeAliases } from "./rosterAliases";
 import { SEED_ALIASES } from "./fieldRoster";
 import { readRosterCorrections } from "./rosterCorrections";
+import { overlayAirborne, readAirborneOverrides } from "./airborneOverrides";
 import { applyRosterCorrection } from "./rosterCorrection";
 import { buildReport, mergeFlightDays, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
 import { todayInFieldTz } from "./syncChannels";
@@ -62,7 +63,12 @@ export async function computeVerdicts(
       `field-verdict: no committed field-qa report for ${periodKey(period)} — run \`npm run field-qa -- --start ${period.start} --end ${period.end} --write\` first.`,
     );
   }
-  const airborneByDate = new Map<string, number>((fq?.days ?? []).map((d) => [d.date, d.airborneMinutes]));
+  // Approver airborne-minutes overrides win over (and can surface a date absent
+  // from) the committed field-qa figure.
+  const airborneByDate = overlayAirborne(
+    new Map<string, number>((fq?.days ?? []).map((d) => [d.date, d.airborneMinutes])),
+    await readAirborneOverrides(),
+  );
 
   // 2. Video minutes per flight day — live Vimeo, attributed by name date.
   const videos = await fetchVideosInPeriod(period.start, period.end);

@@ -6,7 +6,7 @@
  *
  * Not server-only: the CLIs and API routes both import this. See lib/db.ts.
  */
-import { boolean, index, integer, jsonb, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, primaryKey, real, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /** The Slack mirror — one row per (channel, ts), including thread replies. */
 export const slackMessages = pgTable(
@@ -65,6 +65,43 @@ export const rosterCorrections = pgTable("roster_corrections", {
   source: text("source").notNull(),
   recordedAt: text("recorded_at").notNull(),
 });
+
+/** Approver airborne-minutes overrides, keyed by flight date (corrects the figure
+ *  the day is judged against when the #field-qa report is wrong/absent). */
+export const airborneOverrides = pgTable("airborne_overrides", {
+  date: text("date").primaryKey(),
+  minutes: real("minutes").notNull(),
+  note: text("note").notNull(),
+  by: text("by").notNull(),
+  source: text("source").notNull(),
+  recordedAt: text("recorded_at").notNull(),
+});
+
+/** Confirm-first data-overwrite proposals from approver verdict-thread instructions.
+ *  The bot stores a PROPOSED proposal, echoes it, and applies only on confirmation.
+ *  Unique (source_reply_ts) → idempotent under Slack event redelivery. */
+export const proposals = pgTable(
+  "proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    threadTs: text("thread_ts").notNull(), // verdict thread root
+    channel: text("channel").notNull(), // tracked channel NAME
+    date: text("date").notNull(), // flight day the proposal targets
+    axis: text("axis").notNull(), // crew|eligibility|day|dataset|video|airborne
+    payload: jsonb("payload").notNull(), // the classified change
+    summaryUk: text("summary_uk").notNull(), // Ukrainian echo of the change
+    proposedBy: text("proposed_by").notNull(), // approver name
+    sourceReplyTs: text("source_reply_ts").notNull(), // the approver reply that triggered it
+    state: text("state").notNull(), // PROPOSED|CONFIRMED|CANCELLED|SUPERSEDED
+    createdAt: text("created_at").notNull(),
+    resolvedAt: text("resolved_at"),
+  },
+  (t) => [
+    uniqueIndex("proposals_source_reply_ts").on(t.sourceReplyTs),
+    index("proposals_thread_ts_state").on(t.threadTs, t.state),
+    index("proposals_date").on(t.date),
+  ],
+);
 
 /** Published verdicts (idempotency + thread root for approver overrides). */
 export const published = pgTable(
