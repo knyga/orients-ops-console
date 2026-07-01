@@ -63,11 +63,25 @@ bad data. (Time-staggered separate crons cannot promise this ordering or short-c
 { "crons": [ { "path": "/api/cron/field-nightly", "schedule": "30 6 * * *" } ] }
 ```
 
-The route sets `export const maxDuration = 300` (Claude + Vimeo + Slack posts ≈ 30–90s).
-**Open dependency:** this requires a Vercel plan that permits `maxDuration` > 60s — to confirm
-before implementation. If the plan caps duration, fall back to two chained routes
-(`field-nightly-compute` @06:30 doing sync+extract+verdict, `field-nightly-publish` @06:45 doing
-publish), accepting the weaker cross-route ordering guarantee.
+**Plan constraint (confirmed 2026-07-01):** the project lives on the personal team
+`knyga's projects` — a **Vercel Hobby** account. Hobby caps serverless functions at **60s**,
+allows **at most 2 cron jobs**, and runs crons **once per day** (best-effort timing). Our
+once-daily single-cron design fits all three, but the function must complete within **60s**, so
+the route sets `export const maxDuration = 60` (not 300).
+
+The full chain must therefore fit 60s: incremental sync (~5s) + field-qa extract (the one Claude
+call — the risk) + verdict compute (Vimeo fetch, ~5s) + a handful of Slack posts. The extract
+runs over the **whole window month** (§3), consistent with the CLI's period-based semantics —
+`extractFieldQa` always writes a *complete* month report, so a partial-window extract that
+clobbers earlier days is explicitly avoided. A month of #field-qa "Звіт" posts is a small,
+short-message corpus (the same full-month extract the CLI ran on 2026-07-01 completed comfortably),
+so one Claude call is expected to sit well under budget. During the first-5-days boundary the two
+window months are extracted in **separate** calls (each writes its own month report).
+
+**Fallback:** if the chain still risks exceeding 60s in practice, split into two of the two
+allowed Hobby crons — `field-nightly-compute` (sync+extract+verdict) then
+`field-nightly-publish` (publish) — accepting the weaker cross-route ordering guarantee. Prefer
+the single consolidated route unless measurement forces the split.
 
 Guarded by `CRON_SECRET` via the existing `isAuthorizedCron` helper.
 
