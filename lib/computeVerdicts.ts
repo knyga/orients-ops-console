@@ -20,7 +20,7 @@ import { readAliases, mergeAliases } from "./rosterAliases";
 import { SEED_ALIASES } from "./fieldRoster";
 import { readRosterCorrections } from "./rosterCorrections";
 import { applyRosterCorrection } from "./rosterCorrection";
-import { buildReport, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
+import { buildReport, mergeFlightDays, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
 import { todayInFieldTz } from "./syncChannels";
 
 export const GRACE_WORKING_DAYS = 3;
@@ -83,13 +83,18 @@ export async function computeVerdicts(
   // 5. Crew per flight day — parsed from the #field-qa "Звіт" reports + corrections.
   const aliases = mergeAliases(SEED_ALIASES, await readAliases());
   const fieldQaMessages = (await readChannelMessages("field-qa", period)).filter((m) => !m.deleted);
-  const parsedByDate = new Map(parseMonth(fieldQaMessages, aliases).map((r) => [r.flightDate, r]));
+  const parsedReports = parseMonth(fieldQaMessages, aliases);
+  const parsedByDate = new Map(parsedReports.map((r) => [r.flightDate, r]));
   const corrections = await readRosterCorrections();
 
-  // Flight days = days the bot reported airborne time (the field-qa report).
-  const flightDates = [...airborneByDate.keys()].sort();
-  const days: DayVerdict[] = flightDates.map((date) => {
-    const airborneMinutes = airborneByDate.get(date) ?? 0;
+  // Flight days = union of days the bot reported airborne time AND days with a
+  // parsed "Звіт" that has a deployment window (deployMin != null). The latter
+  // surface as NEEDS_REVIEW ("flight reported but airborne time not recorded")
+  // instead of vanishing.
+  const flightDays = mergeFlightDays(airborneByDate, parsedReports);
+  const days: DayVerdict[] = flightDays.map((fd) => {
+    const date = fd.date;
+    const airborneMinutes = fd.airborneMinutes;
     const videoMinutes = Math.round((videoMinutesByDate.get(date) ?? 0) * 10) / 10;
     const windowEnd = addWorkingDays(date, GRACE_WORKING_DAYS);
     const datasetPosted = hasDatasetNotice(datasetMessages, date, windowEnd);
@@ -101,6 +106,8 @@ export async function computeVerdicts(
       datasetStatus,
       today,
       graceWorkingDays: GRACE_WORKING_DAYS,
+      airborneReported: fd.airborneReported,
+      deployWindow: fd.deployWindow,
     });
     // Surface the verbatim waiver/decline reason in the verdict reasons.
     const withNote = datasetNote ? { ...base, reasons: [...base.reasons, datasetNote] } : base;
