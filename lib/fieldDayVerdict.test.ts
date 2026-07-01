@@ -59,6 +59,34 @@ describe("verdictForDay", () => {
     expect(v.roster).toEqual([]);
     expect(v.unknownInitials).toEqual([]);
   });
+
+  it("defaults airborneReported to true (existing days unchanged)", () => {
+    const v = verdictForDay(base);
+    expect(v.airborneReported).toBe(true);
+    expect(v.deployWindow).toBeUndefined();
+  });
+
+  it("flags a flight reported with no airborne time and echoes the deploy window", () => {
+    const v = verdictForDay({
+      ...base,
+      airborneMinutes: 0,
+      videoMinutes: 0,
+      datasetStatus: "MISSING",
+      airborneReported: false,
+      deployWindow: { start: "17:00", end: "20:00" },
+      today: "2026-06-30", // past grace
+    });
+    expect(v.status).toBe("NEEDS_REVIEW");
+    expect(v.ratio).toBeNull();
+    expect(v.airborneReported).toBe(false);
+    expect(v.deployWindow).toEqual({ start: "17:00", end: "20:00" });
+    expect(v.reasons).toContain("flight reported but airborne time not recorded");
+  });
+
+  it("keeps the plain no-airborne reason when airborne is genuinely absent from the report", () => {
+    const v = verdictForDay({ ...base, airborneMinutes: 0, videoMinutes: 0, today: "2026-06-30" });
+    expect(v.reasons).toContain("no airborne time recorded for the day");
+  });
 });
 
 describe("verdictForDay with DatasetStatus", () => {

@@ -23,6 +23,10 @@ export interface VerdictInput {
   datasetStatus: DatasetStatus;
   today: string;             // YYYY-MM-DD
   graceWorkingDays: number;
+  /** false when the day was surfaced from a "Звіт" that reported no airborne time. Defaults true. */
+  airborneReported?: boolean;
+  /** Reported deployment window, when known (for the honest message). */
+  deployWindow?: { start: string; end: string };
 }
 
 export interface DayVerdict {
@@ -38,10 +42,15 @@ export interface DayVerdict {
   roster: string[];
   /** "Звіт" tokens that did not resolve to a name (internal surfaces only). */
   unknownInitials: string[];
+  /** false when the day was surfaced from a "Звіт" with no airborne figure. */
+  airborneReported: boolean;
+  /** Reported deployment window, when known. */
+  deployWindow?: { start: string; end: string };
 }
 
 export function verdictForDay(input: VerdictInput): DayVerdict {
   const { flightDate, airborneMinutes, videoMinutes, datasetStatus, today, graceWorkingDays } = input;
+  const airborneReported = input.airborneReported ?? true;
   const ratio = airborneMinutes > 0 ? videoMinutes / airborneMinutes : null;
   const videoOk = ratio !== null && ratio >= MIN_RATIO;
   const datasetOk = datasetStatus === "POSTED" || datasetStatus === "WAIVED";
@@ -52,7 +61,9 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
   if (!videoOk) {
     reasons.push(
       ratio === null
-        ? "no airborne time recorded for the day"
+        ? airborneReported
+          ? "no airborne time recorded for the day"
+          : "flight reported but airborne time not recorded"
         : `video ${videoMinutes.toFixed(0)}m is ${(ratio * 100).toFixed(0)}% of airborne ${airborneMinutes.toFixed(0)}m (< 50%)`,
     );
   }
@@ -71,5 +82,5 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
     status = "NEEDS_REVIEW";
   }
 
-  return { date: flightDate, status, airborneMinutes, videoMinutes, ratio, datasetStatus, withinGrace, reasons, roster: [], unknownInitials: [] };
+  return { date: flightDate, status, airborneMinutes, videoMinutes, ratio, datasetStatus, withinGrace, reasons, roster: [], unknownInitials: [], airborneReported, deployWindow: input.deployWindow };
 }
