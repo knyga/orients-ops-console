@@ -13,6 +13,8 @@ import { syncAllChannels, todayInFieldTz } from "./syncChannels";
 import { FIELD_TIMEZONE } from "./reconcile";
 import { windowMonths } from "./nightlyWindow";
 import { extractFieldQa } from "./fieldQaExtract";
+import { crewFromLiveSheet } from "./crewLive";
+import { applyCrewCorrections } from "./crewImport";
 import { computeVerdicts } from "./computeVerdicts";
 import { publishSettledDays } from "./publishVerdicts";
 import { periodKey, readReportJson } from "./reports";
@@ -75,12 +77,25 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
     // run); this is best-effort insurance since Hobby cron timing isn't exact.
     await syncAllChannels({ mode: "incremental", window: 7, channels: [datasetsChannel], onLog: log });
 
+    const window = windowMonths(today);
+
+    // 1b. Refresh per-day crew from the live tracking sheet into roster_corrections
+    // BEFORE the verdict pass (which reads them for the 👥 crew line + bonus).
+    // BEST-EFFORT: crew is display/attribution, not part of the acceptance gate,
+    // so a Drive hiccup must never block extract/verdict/publish — swallow + log,
+    // never touch `stage`. Approver/manual corrections are preserved by the guard.
+    try {
+      const crew = await crewFromLiveSheet();
+      await applyCrewCorrections(crew, { start: window[0].start, end: today }, { write: true, onLog: log });
+    } catch (e) {
+      log(`field-nightly: crew refresh skipped — ${e instanceof Error ? e.message : String(e)}`);
+    }
+
     // 2. Per window month: extract → verdict (compute even in dry-run; it does not post).
     // extractFieldQa's report period carries a timezone; computeVerdicts and
     // publishSettledDays only read start/end, so one timezone-carrying period is
     // safe for all three.
     stage = "extract/verdict";
-    const window = windowMonths(today);
     const computed = [];
     for (const [i, wm] of window.entries()) {
       const period = { start: wm.start, end: wm.end, timezone: FIELD_TIMEZONE };

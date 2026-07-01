@@ -17,12 +17,10 @@
 import { readFileSync } from "node:fs";
 import { parseManifest } from "../lib/driveManifest";
 import { crewByDate, parseCsv } from "../lib/crewSheet";
-import { readRosterCorrections, upsertRosterCorrection } from "../lib/rosterCorrections";
-import { sheetImportShouldSkip } from "../lib/rosterCorrection";
+import { applyCrewCorrections } from "../lib/crewImport";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const SOURCE = "field-ops-sheet";
 const CREW_SOURCE_ID = "field-ops-crew";
 
 function todayInFieldTz(): string {
@@ -63,33 +61,14 @@ async function main(): Promise<void> {
     throw new Error(`${source.dest} not found — run \`npm run drive -- pull --only ${CREW_SOURCE_ID}\` first.`);
   }
 
-  const all = crewByDate(parseCsv(csv));
-  const dates = [...all.keys()].filter((d) => d >= period.start && d <= period.end).sort();
-
-  const existing = new Map((await readRosterCorrections()).map((c) => [c.date, c.source]));
-  let applied = 0;
-  let kept = 0;
-  for (const date of dates) {
-    const crew = all.get(date)!;
-    const protectedByManual = existing.has(date) && sheetImportShouldSkip(existing.get(date), SOURCE);
-    const tag = protectedByManual ? "keep manual" : args.write ? "applying" : "would apply";
-    process.stdout.write(`• ${date} → [${crew.join(", ")}]  (${tag})\n`);
-    if (protectedByManual) { kept += 1; continue; }
-    if (args.write) {
-      await upsertRosterCorrection({
-        date,
-        roster: crew,
-        note: "Crew from the field-ops tracking sheet (Drive-synced).",
-        by: "field-ops sheet",
-        source: SOURCE,
-        recordedAt: new Date().toISOString(),
-      });
-      applied += 1;
-    }
-  }
+  const crew = crewByDate(parseCsv(csv));
+  const { applied, kept, days } = await applyCrewCorrections(crew, period, {
+    write: args.write,
+    onLog: (m) => process.stdout.write(`${m}\n`),
+  });
 
   if (args.write) process.stderr.write(`field-crew: wrote ${applied} day(s), kept ${kept} approver/manual. Re-run \`npm run field-verdict -- --write\` + \`npm run field-bonus\` to reflect.\n`);
-  else process.stderr.write(`field-crew: DRY RUN — ${dates.length} day(s) with crew (${kept} protected by an approver/manual correction). Re-run with --write to apply.\n`);
+  else process.stderr.write(`field-crew: DRY RUN — ${days} day(s) with crew (${kept} protected by an approver/manual correction). Re-run with --write to apply.\n`);
 }
 
 main().catch((error: unknown) => {
