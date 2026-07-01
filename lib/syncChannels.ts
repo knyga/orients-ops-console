@@ -154,19 +154,26 @@ export async function syncAllChannels(opts: SyncChannelsOptions): Promise<SyncRe
   const today = todayInFieldTz();
   const now = new Date().toISOString();
 
-  const summaries: ChannelSummary[] = [];
-  let failures = 0;
-  for (const channel of channels) {
-    try {
-      const s = await syncChannel(channel, opts, today, now);
-      log(`slack-sync: ${s.channel} — fetched ${s.fetched}, +${s.created} new, ~${s.updated} updated, †${s.tombstoned} tombstoned`);
-      summaries.push(s);
-    } catch (error) {
-      failures += 1;
-      const message = error instanceof Error ? error.message : String(error);
-      log(`slack-sync: ${channel.name} FAILED — ${message}`);
-      summaries.push({ channel: channel.name, fetched: 0, created: 0, updated: 0, tombstoned: 0, error: message });
-    }
-  }
+  // Channels are independent (own files + own cursor, keyed by name — no shared
+  // state), so sync them CONCURRENTLY rather than one-at-a-time. The cost is
+  // dozens of sequential Slack round-trips per channel (conversations.history +
+  // one conversations.replies per thread parent); serialized across ~7 channels
+  // that overran the 60s cron cap. Overlapping is safe: call() already backs off
+  // on 429. Promise.all preserves input order, and each channel keeps its own
+  // try/catch so one failure never aborts the others.
+  const summaries: ChannelSummary[] = await Promise.all(
+    channels.map(async (channel): Promise<ChannelSummary> => {
+      try {
+        const s = await syncChannel(channel, opts, today, now);
+        log(`slack-sync: ${s.channel} — fetched ${s.fetched}, +${s.created} new, ~${s.updated} updated, †${s.tombstoned} tombstoned`);
+        return s;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`slack-sync: ${channel.name} FAILED — ${message}`);
+        return { channel: channel.name, fetched: 0, created: 0, updated: 0, tombstoned: 0, error: message };
+      }
+    }),
+  );
+  const failures = summaries.filter((s) => s.error).length;
   return { summaries, failures };
 }
