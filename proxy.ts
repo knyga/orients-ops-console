@@ -3,14 +3,14 @@ import { verifySession } from "@/lib/auth";
 import { SESSION_COOKIE } from "@/lib/authCookies";
 
 /**
- * Auth gate. Every request matched by `config.matcher` (everything except the
+ * Auth gate proxy. Every request matched by `config.matcher` (everything except the
  * bypass paths + static assets) must carry a valid session cookie. Pages get a
  * 302 to /login; API routes get 401 JSON. Runs in the edge runtime — verifySession
  * uses Web Crypto only.
  *
  * Bypass (own auth / public): /api/auth/*, /api/cron/*, /api/slack/*, /login.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   const secret = process.env.AUTH_SECRET;
 
