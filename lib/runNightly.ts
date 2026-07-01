@@ -23,6 +23,7 @@ import { openDm, postMessage } from "./slack";
 import { formatNightlyFailureNotice } from "./nightlyNotice";
 
 const FIELD_QA = "field-qa";
+const DATASETS = "datasets";
 
 export interface NightlyMonthResult {
   period: { start: string; end: string };
@@ -62,11 +63,17 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
   const today = opts.today ?? todayInFieldTz();
   const channel = TRACKED_CHANNELS.find((c) => c.name === FIELD_QA);
   if (!channel) throw new Error(`field-nightly: no tracked channel "${FIELD_QA}"`);
+  const datasetsChannel = TRACKED_CHANNELS.find((c) => c.name === DATASETS);
+  if (!datasetsChannel) throw new Error(`field-nightly: no tracked channel "${DATASETS}"`);
 
   let stage = "sync";
   try {
-    // 1. Sync once for the whole run.
-    await syncAllChannels({ mode: "incremental", window: 7, onLog: log });
+    // 1. Sync only #datasets — the sole channel the verdict step reads from the
+    // mirror (for the dataset notice). #field-qa is fetched live by extract and
+    // Vimeo live by verdict, so they don't need a fresh mirror. The full
+    // all-channel mirror sync is the separate /api/cron/sync cron (the 06:00 UTC
+    // run); this is best-effort insurance since Hobby cron timing isn't exact.
+    await syncAllChannels({ mode: "incremental", window: 7, channels: [datasetsChannel], onLog: log });
 
     // 2. Per window month: extract → verdict (compute even in dry-run; it does not post).
     // extractFieldQa's report period carries a timezone; computeVerdicts and

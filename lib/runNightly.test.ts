@@ -36,9 +36,12 @@ beforeEach(() => {
 });
 
 describe("runNightly", () => {
-  it("mid-month: syncs once, processes the current month, publishes when publish=true", async () => {
+  it("mid-month: syncs once (datasets only), processes the current month, publishes when publish=true", async () => {
     const res = await runNightly({ publish: true, today: "2026-07-15" });
     expect(syncAllChannels).toHaveBeenCalledOnce();
+    expect(syncAllChannels).toHaveBeenCalledWith(
+      expect.objectContaining({ channels: [{ id: "C08KG802THU", name: "datasets" }] }),
+    );
     expect(res.months).toHaveLength(1);
     expect(res.months[0].posted).toEqual(["2026-07-14"]);
     expect(publishSettledDays).toHaveBeenCalledOnce();
