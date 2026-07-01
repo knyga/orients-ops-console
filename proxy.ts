@@ -32,5 +32,5 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Run on everything EXCEPT: the login flow, machine endpoints (own auth),
   // the login page, and Next static assets.
-  matcher: ["/((?!api/auth|api/cron|api/slack|login|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!(?:api/auth|api/cron|api/slack|login)(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
 };

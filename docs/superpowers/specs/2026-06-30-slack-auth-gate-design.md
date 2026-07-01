@@ -49,7 +49,7 @@ OAuth v2 bot flow (strictly more work for the same identity result).
    "not on the allowlist" message.
 3. `GET /api/auth/login`:
    - generates a random `state` and `nonce`,
-   - stores them in short-lived (10 min) signed httpOnly cookies,
+   - stores them in short-lived (10 min) httpOnly cookies,
    - redirects to `https://slack.com/openid/connect/authorize` with
      `client_id`, `scope=openid email profile`, `redirect_uri=<base>/api/auth/callback`,
      `state`, `nonce`, `response_type=code`.
@@ -132,7 +132,7 @@ Both share `lib/auth.ts` / `lib/allowedUsers.ts` — identical code path to the 
 
 - `SLACK_CLIENT_ID` — Slack app OAuth client id.
 - `SLACK_CLIENT_SECRET` — Slack app OAuth client secret (server-only).
-- `AUTH_SECRET` — random ≥32 bytes; HMAC key for the session + state/nonce cookies.
+- `AUTH_SECRET` — random ≥32 bytes; HMAC key for the session cookie (the state/nonce cookies are plain httpOnly).
 - `AUTH_BASE_URL` — public base URL used to build `redirect_uri` (e.g.
   `http://localhost:3003` locally, the Vercel URL in prod).
 
