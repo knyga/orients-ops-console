@@ -49,9 +49,9 @@ describe("buildPersonView summary", () => {
       bonus: {
         people: [{ name: "Олександр", trips: 2, net: 900 }],
         days: [
-          { date: "2026-06-05", roster: ["Олександр", "Андріан"], deployMin: 200 },
-          { date: "2026-06-06", roster: ["Андріан"], deployMin: 180 },
-          { date: "2026-06-07", roster: ["Олександр"], deployMin: 150 },
+          { date: "2026-06-05", roster: ["Олександр", "Андріан"], deployMin: 200, counted: true },
+          { date: "2026-06-06", roster: ["Андріан"], deployMin: 180, counted: true },
+          { date: "2026-06-07", roster: ["Олександр"], deployMin: 150, counted: true },
         ],
       },
     };
@@ -61,6 +61,25 @@ describe("buildPersonView summary", () => {
     // field: roster name "Олександр" resolved from rosterInitial "О"; flightDays/minutes
     // summed over days whose roster includes that name.
     expect(view.summary.field).toEqual({ trips: 2, flightDays: 2, flightMinutes: 350, netUah: 900 });
+  });
+
+  it("excludes voided days (no drone-count report) from flightDays/flightMinutes", () => {
+    const sources: WhoSources = {
+      messages: [],
+      jira: null,
+      github: null,
+      bonus: {
+        people: [{ name: "Олександр", trips: 1, net: 700 }],
+        days: [
+          { date: "2026-06-05", roster: ["Олександр"], deployMin: 200, counted: true },
+          { date: "2026-06-06", roster: ["Олександр"], deployMin: 240, counted: false }, // voided
+        ],
+      },
+    };
+    const view = buildPersonView(OLEKS, PERIOD, sources);
+    // The voided day matches the roster but earned nothing, so it must not
+    // inflate flightDays/flightMinutes (net/trips come from bonus.people).
+    expect(view.summary.field).toEqual({ trips: 1, flightDays: 1, flightMinutes: 200, netUah: 700 });
   });
 
   it("omits a block when the person lacks that identity", () => {

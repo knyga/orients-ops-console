@@ -19,7 +19,7 @@ export interface WhoSources {
   messages: StoredMessage[];
   jira: { rows: { accountId: string | null; issueKeys: string[]; storyPoints: number }[] } | null;
   github: { contributors: { login: string | null; commits: number; additions: number; deletions: number; prsOpened: number; prsMerged: number }[] } | null;
-  bonus: { people: { name: string; trips: number; net: number }[]; days: { date: string; roster: string[]; deployMin: number | null }[] } | null;
+  bonus: { people: { name: string; trips: number; net: number }[]; days: { date: string; roster: string[]; deployMin: number | null; counted: boolean }[] } | null;
 }
 
 export interface PersonView {
@@ -60,7 +60,9 @@ export function buildPersonView(person: Person, period: Period, sources: WhoSour
   if (rname && sources.bonus) {
     const pb = sources.bonus.people.find((p) => p.name === rname);
     if (pb) {
-      const myDays = sources.bonus.days.filter((d) => d.roster.includes(rname));
+      // Only days that actually counted — a voided day (e.g. no drone-count
+      // report) earned nothing, so it must not inflate flightDays/flightMinutes.
+      const myDays = sources.bonus.days.filter((d) => d.roster.includes(rname) && d.counted);
       const flightMinutes = myDays.reduce((sum, d) => sum + (d.deployMin ?? 0), 0);
       summary.field = { trips: pb.trips, flightDays: myDays.length, flightMinutes, netUah: pb.net };
     }
