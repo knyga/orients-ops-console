@@ -124,7 +124,7 @@ export function formatDayMessage(day: DayVerdict): string {
     return withRosterSuffix(`🟡 ${date} — прийнято (виняток): ${parts.join("; ")}.`, day.roster);
   }
   // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
-  const tail = day.airborneReported
+  const tail = day.airborneReported && day.airborneMinutes > 0
     ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
     : `(відео ${vid} хв, ${ds})`;
   return withRosterSuffix(`${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} ${tail}.`, day.roster);
@@ -145,7 +145,7 @@ function ukrainianGaps(day: DayVerdict): string[] {
     if (day.ratio === null) {
       gaps.push(
         day.airborneReported
-          ? "немає записаного часу в повітрі за день"
+          ? `за телеметрією польотів не було (0 хв у повітрі)${day.deployWindow ? `, хоча у звіті — виїзд ${day.deployWindow.start}–${day.deployWindow.end}` : ""}`
           : `політ відбувся${day.deployWindow ? ` (${day.deployWindow.start}–${day.deployWindow.end})` : ""}, але час у повітрі не вказано`,
       );
     } else {

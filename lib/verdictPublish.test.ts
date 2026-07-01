@@ -54,11 +54,24 @@ describe("formatDayMessage", () => {
     expect(msg).not.toContain("airborne");
   });
 
-  it("rebuilds the no-airborne gap in Ukrainian when ratio is null", () => {
+  it("rebuilds a telemetry no-fly gap in Ukrainian when airborne is a reported 0", () => {
     const msg = formatDayMessage(
-      day({ date: "2026-06-13", status: "NEEDS_REVIEW", airborneMinutes: 0, videoMinutes: 5, ratio: null, datasetStatus: "POSTED", reasons: ["no airborne time recorded for the day"] }),
+      day({ date: "2026-06-13", status: "NEEDS_REVIEW", airborneMinutes: 0, videoMinutes: 5, ratio: null, datasetStatus: "POSTED", reasons: ["drones did not fly (0 flights, 0 min airborne)"] }),
     );
-    expect(msg).toContain("немає записаного часу в повітрі за день");
+    expect(msg).toContain("за телеметрією польотів не було (0 хв у повітрі)");
+    expect(msg).not.toContain("немає записаного часу");
+  });
+
+  it("adds the Звіт-conflict clause + short tail when a no-fly day has a deploy window", () => {
+    const msg = formatDayMessage(day({
+      date: "2026-06-21", status: "NEEDS_REVIEW", airborneMinutes: 0, videoMinutes: 0, ratio: null,
+      datasetStatus: "MISSING", airborneReported: true, deployWindow: { start: "17:00", end: "20:00" },
+      roster: ["Андріан", "Сергій"],
+    }));
+    expect(msg).toContain("за телеметрією польотів не було (0 хв у повітрі), хоча у звіті — виїзд 17:00–20:00");
+    expect(msg).toContain("немає повідомлення про датасет");
+    expect(msg).not.toContain("/ 0 хв у повітрі"); // short tail — no redundant airborne clause
+    expect(msg).toContain("👥 У полі: Андріан, Сергій.");
   });
 
   it("NEEDS_REVIEW airborne-unknown day: honest wording + deploy window, no '0 хв у повітрі'", () => {
