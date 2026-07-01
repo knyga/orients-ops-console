@@ -21,6 +21,7 @@ export interface ExtractedDay {
   date: string;
   airborneSeconds: number;
   flights: number;
+  flew: boolean;
   sourceTs: string;
 }
 
@@ -29,6 +30,7 @@ export interface ReportDay {
   flightHours: number;
   airborneMinutes: number;
   flights: number;
+  flew: boolean;
   permalink: string;
 }
 
@@ -81,15 +83,16 @@ export function resolvePeriod(args: ParsedArgs, today: string): Period {
 
 /**
  * Validate LLM-extracted days: drop rows with a non-YYYY-MM-DD date or a
- * non-finite/non-positive airborneSeconds, dedupe by date keeping the first
+ * non-finite/negative airborneSeconds, dedupe by date keeping the first
  * occurrence (and, on a tie, the lexicographically smallest sourceTs), and sort
  * ascending by date. Does NOT sum airborne across duplicates — keeps one reading
- * per day.
+ * per day. Telemetry-confirmed no-fly days (airborneSeconds 0) are KEPT — a known
+ * zero is data, not absence; toInputsCsv/buildReport treat them appropriately.
  */
 export function validateDays(days: ExtractedDay[]): ExtractedDay[] {
   const byDate = new Map<string, ExtractedDay>();
   for (const d of days) {
-    if (!DATE_RE.test(d.date) || !Number.isFinite(d.airborneSeconds) || d.airborneSeconds <= 0) continue;
+    if (!DATE_RE.test(d.date) || !Number.isFinite(d.airborneSeconds) || d.airborneSeconds < 0) continue;
     const existing = byDate.get(d.date);
     if (!existing) {
       byDate.set(d.date, { ...d });
@@ -104,7 +107,10 @@ export function validateDays(days: ExtractedDay[]): ExtractedDay[] {
 /** The fieldops input contract: `date,flight_hours` header + one row per day. */
 export function toInputsCsv(days: ExtractedDay[]): string {
   const lines = ["date,flight_hours"];
-  for (const d of days) lines.push(`${d.date},${round2(d.airborneSeconds / 3600)}`);
+  for (const d of days) {
+    if (!d.flew || d.airborneSeconds <= 0) continue; // flight-hours feed: flown days only
+    lines.push(`${d.date},${round2(d.airborneSeconds / 3600)}`);
+  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -119,6 +125,7 @@ export function buildReport(
     flightHours: round2(d.airborneSeconds / 3600),
     airborneMinutes: round2(d.airborneSeconds / 60),
     flights: d.flights,
+    flew: d.flew,
     permalink: permalinkByTs.get(d.sourceTs) ?? "",
   }));
   const flightHours = round2(reportDays.reduce((sum, d) => sum + d.flightHours, 0));
@@ -126,7 +133,7 @@ export function buildReport(
     period,
     sourceChannel: "field-qa",
     days: reportDays,
-    totals: { days: reportDays.length, flightHours },
+    totals: { days: reportDays.filter((d) => d.flew).length, flightHours },
   };
 }
 
