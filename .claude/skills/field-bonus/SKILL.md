@@ -19,6 +19,8 @@ Answer per-person bonus questions using this repo's CLI. Recomputes bonuses from
 
 Any question like: "what did person X earn in May?", "how many trips qualified last month?", "which people hit the team cutoff?", "what's the raw bonus report?".
 
+For the whole-period payout report (totals + who gets paid + voided days), use the **bonus-report** skill.
+
 ## How to use
 
 Run the CLI (defaults to the current Kyiv month if you omit the dates):
