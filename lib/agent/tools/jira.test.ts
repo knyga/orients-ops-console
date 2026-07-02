@@ -63,6 +63,16 @@ describe("jiraCreateProposal (Mr-Lab routing)", () => {
     });
   });
 
+  it("sets params to the exact Mr-Lab create input", async () => {
+    const p = await jiraCreateProposal({ person: "Taras", summary: "Fix export", description: "broken CSV" });
+    expect(p.params).toEqual({
+      projectKey: "MRLAB",
+      summary: "Fix export",
+      description: "Виконавець: Taras Panasyuk\n\nbroken CSV",
+      assigneeAccountId: null,
+    });
+  });
+
   it("rejects an unknown person", async () => {
     await expect(jiraCreateProposal({ person: "Nobody McGhost", summary: "S", description: "" })).rejects.toThrow(
       /Unknown person/,

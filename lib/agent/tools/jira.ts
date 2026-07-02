@@ -6,9 +6,10 @@
  *
  * Reachable only under server-only conditions (lib/jira.ts). Needs JIRA_* env.
  */
-import { searchIssues, createIssue, addComment, updateIssue, transitionIssue } from "@/lib/jira";
+import { searchIssues } from "@/lib/jira";
 import { routeIssue, routingConfigFromEnv } from "@/lib/jiraRouting";
 import { personByQuery } from "@/lib/people";
+import { applyProposal } from "@/lib/proposalExecutor";
 import type { Proposal, Tool } from "./types";
 
 function str(args: Record<string, unknown>, key: string): string {
@@ -37,57 +38,48 @@ export async function jiraCreateProposal(args: Record<string, unknown>): Promise
   const description = routing.assignInDescription ? `Виконавець: ${person.name}\n\n${desc}`.trim() : desc;
   const assignee = routing.jiraAccountId ?? `(в описі) ${person.name}`;
 
+  const params = { projectKey: routing.projectKey, summary, description, assigneeAccountId: routing.jiraAccountId };
   return {
     kind: "jira_create",
+    params,
     echoUk: `📝 Створю задачу в проєкті ${routing.projectKey}, виконавець: ${assignee}\nЗаголовок: ${summary}\nОпис: ${description || "(порожній)"}\nСтворити? (так/ні)`,
-    apply: async () => {
-      const created = await createIssue({
-        projectKey: routing.projectKey,
-        summary,
-        description,
-        assigneeAccountId: routing.jiraAccountId,
-      });
-      return `✅ Створено ${created.key}: ${created.url}`;
-    },
+    apply: () => applyProposal("jira_create", params),
   };
 }
 
 async function jiraCommentProposal(args: Record<string, unknown>): Promise<Proposal> {
   const key = str(args, "key");
   const body = str(args, "body");
+  const params = { key, body };
   return {
     kind: "jira_comment",
+    params,
     echoUk: `📝 Додам коментар до ${key}:\n${body}\nДодати? (так/ні)`,
-    apply: async () => {
-      await addComment(key, body);
-      return `✅ Коментар додано до ${key}`;
-    },
+    apply: () => applyProposal("jira_comment", params),
   };
 }
 
 async function jiraTransitionProposal(args: Record<string, unknown>): Promise<Proposal> {
   const key = str(args, "key");
   const transitionId = str(args, "transitionId");
+  const params = { key, transitionId };
   return {
     kind: "jira_transition",
+    params,
     echoUk: `📝 Переведу ${key} (transition ${transitionId}).\nПродовжити? (так/ні)`,
-    apply: async () => {
-      await transitionIssue(key, transitionId);
-      return `✅ ${key} переведено`;
-    },
+    apply: () => applyProposal("jira_transition", params),
   };
 }
 
 async function jiraUpdateProposal(args: Record<string, unknown>): Promise<Proposal> {
   const key = str(args, "key");
   const fields = (args.fields ?? {}) as Record<string, unknown>;
+  const params = { key, fields };
   return {
     kind: "jira_update",
+    params,
     echoUk: `📝 Оновлю ${key}: ${JSON.stringify(fields)}\nПродовжити? (так/ні)`,
-    apply: async () => {
-      await updateIssue(key, fields);
-      return `✅ ${key} оновлено`;
-    },
+    apply: () => applyProposal("jira_update", params),
   };
 }
 
