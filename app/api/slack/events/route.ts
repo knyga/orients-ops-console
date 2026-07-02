@@ -16,13 +16,16 @@
  * re-classify or flip an already-decided day. The decision-keyed outbound dedup
  * (lib/outboundKeys) is a second layer on the resulting edit/ack.
  *
- * The conversational agent (DM / @mention), Phase C.2, does NOT run inline: the
- * loop can take well over Slack's 3s ack budget, so the webhook only claims the
- * event, posts a `🤔 думаю…` placeholder, and fires a non-awaited self-invoke to
+ * The conversational agent (DM / @mention / a plain thread follow-up in a known
+ * agent thread), Phase C.2, does NOT run inline: the loop can take well over
+ * Slack's 3s ack budget, so the webhook only claims the event, posts a
+ * `🤔 думаю…` placeholder, and fires a non-awaited self-invoke to
  * `/api/agent/run` (see `deferAgentTurn`) which does the real work and edits the
- * placeholder. A DM reply to a pending write proposal ("так"/"ні") is the
+ * placeholder. A reply to a pending write proposal ("так"/"ні") is the
  * exception — that decision is a fast DB flip + Slack post, so it's handled
- * inline in `handleDmAgent` without deferring.
+ * inline in `handleAgentConversation` without deferring. Outside a DM, only the
+ * original proposer's reply can drive that decision (requester-gating); anyone
+ * else's reply is silently ignored.
  *
  * The 200 response carries a small diagnostic body (handled / applied / error).
  * Slack only checks the 2xx status and ignores the body; it lets an operator
@@ -44,8 +47,9 @@ import { readPendingProposal, claimApply, setState } from "@/lib/agentProposals"
 import { applyProposal } from "@/lib/proposalExecutor";
 import { selfOrigin } from "@/lib/selfOrigin";
 import { contentRev, dmHelpKey, agentReplyKey, webhookFailureKey } from "@/lib/outboundKeys";
-import { parseSlackEvent, stripBotMention, type SlackEventBody, type ParsedSlackEvent } from "@/lib/slackEventParse";
+import { parseSlackEvent, stripBotMention, hasLeadingMention, type SlackEventBody } from "@/lib/slackEventParse";
 import { claimSlackEvent } from "@/lib/slackEventClaim";
+import { agentThreadExists } from "@/lib/agentThread";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,6 +105,12 @@ async function failVisibly(
  * AGENT_RUN_SECRET is missing, we log loudly and still ack — the placeholder
  * stays visible in Slack rather than silently vanishing, which is the signal
  * an operator needs to notice the misconfiguration.
+ *
+ * `ts` is used only for the placeholder-post outbound key's uniqueness suffix;
+ * `conversationKey` is the actual agent-memory/proposal key (DM → channelId,
+ * @mention/thread → thread_ts) forwarded to `/api/agent/run`. `surface` "thread"
+ * (a plain follow-up with no bot mention) is normalized to "mention" for the run
+ * route, which only distinguishes DM vs. everything-else memory-keying.
  */
 async function deferAgentTurn(
   req: Request,
@@ -109,8 +119,10 @@ async function deferAgentTurn(
   question: string,
   ts: string,
   threadTs: string | undefined,
-  surface: "dm" | "mention",
+  surface: "dm" | "mention" | "thread",
+  conversationKey: string,
 ): Promise<Response> {
+  const runSurface = surface === "thread" ? "mention" : surface;
   let placeholderTs: string;
   try {
     placeholderTs = await postMessage(
@@ -128,7 +140,7 @@ async function deferAgentTurn(
     void fetch(`${selfOrigin(req)}/api/agent/run`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-agent-secret": secret },
-      body: JSON.stringify({ surface, channelId, userId, incomingTs: ts, placeholderTs, threadTs, question }),
+      body: JSON.stringify({ surface: runSurface, conversationKey, channelId, userId, incomingTs: ts, placeholderTs, threadTs, question }),
     }).catch((err) => console.error("slack events: self-invoke failed:", err));
   } else {
     console.error("slack events: AGENT_RUN_SECRET not set — cannot dispatch agent turn");
@@ -136,85 +148,95 @@ async function deferAgentTurn(
   return ack({ handled: "agent", surface, deferred: true });
 }
 
-/** DM/mention → agent. Claims the event (dedup), gates on the allowlist, then defers
- *  the actual loop to `/api/agent/run` via deferAgentTurn (Phase C.2 — the loop no
- *  longer runs inline on the webhook's request path). */
-async function runAgentReply(
-  req: Request,
-  channelId: string,
-  userId: string,
-  question: string,
-  ts: string,
-  eventId: string | null,
-  threadTs: string | undefined,
-  surface: "dm" | "mention",
-): Promise<Response> {
-  if (eventId) {
-    const fresh = await claimSlackEvent(eventId, new Date().toISOString(), { eventType: "message" });
-    if (!fresh) return ack({ skipped: "duplicate-event", event_id: eventId });
-  }
-  if (!isAllowedSlackUser(userId)) {
-    try {
-      await postMessage(channelId, AGENT_REFUSAL_UK, { key: agentReplyKey(userId, ts), feature: "agent", channel: surface, trigger: "webhook" }, threadTs);
-    } catch (err) {
-      console.error("slack events: refusal post failed:", err);
-    }
-    return ack({ handled: "agent", refused: true, user: userId });
-  }
-  return deferAgentTurn(req, channelId, userId, question, ts, threadTs, surface);
+interface AgentTurnInput {
+  surface: "dm" | "mention" | "thread";
+  conversationKey: string;
+  channelId: string;
+  threadTs: string | undefined;
+  userId: string;
+  text: string;
+  eventId: string | null;
 }
 
 /**
- * DM agent path (non-help), Phase C.2 confirm-first state machine. Claims the event
- * + gates the allowlist (mirroring runAgentReply), then checks for a PENDING write
- * proposal on this channel:
+ * Surface-agnostic agent ingress — DM, @mention, or a plain thread follow-up all
+ * funnel through here. Claims the event (dedup), gates on the allowlist, then
+ * checks for a PENDING write proposal keyed on `conversationKey`:
+ *   - a pending proposal exists AND we're outside a DM AND the replier isn't the
+ *     original proposer → ignore (requester-gated: only the proposer drives a
+ *     channel/thread write, so a bystander's "так" can't hijack it).
  *   - "так" (confirm)         → atomically claim + apply, post the result. FAST (inline).
  *   - "ні" (cancel)           → mark CANCELLED, post an ack. FAST (inline).
  *   - anything else ("other") → supersede the pending proposal, post a notice, then
  *                                fall through to a NEW deferred turn.
  *   - no pending proposal     → defer a new turn directly.
  * Only the "start a new turn" paths defer (post a placeholder + self-invoke); the
- * confirm/cancel/supersede decisions themselves are fast DB + Slack calls that
- * comfortably fit inside Slack's 3s ack budget.
+ * confirm/cancel/supersede/ignore decisions themselves are fast DB + Slack calls
+ * that comfortably fit inside Slack's 3s ack budget.
  */
-async function handleDmAgent(req: Request, parsed: Extract<ParsedSlackEvent, { kind: "dm" }>): Promise<Response> {
-  if (parsed.eventId) {
-    const fresh = await claimSlackEvent(parsed.eventId, new Date().toISOString(), { eventType: "message" });
-    if (!fresh) return ack({ skipped: "duplicate-event", event_id: parsed.eventId });
+async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promise<Response> {
+  if (inp.eventId) {
+    const fresh = await claimSlackEvent(inp.eventId, new Date().toISOString(), { eventType: "message" });
+    if (!fresh) return ack({ skipped: "duplicate-event", event_id: inp.eventId });
   }
-  if (!isAllowedSlackUser(parsed.userId)) {
+  if (!isAllowedSlackUser(inp.userId)) {
     try {
-      await postMessage(parsed.channelId, AGENT_REFUSAL_UK, { key: agentReplyKey(parsed.userId, parsed.ts), feature: "agent", channel: "dm", trigger: "webhook" });
+      await postMessage(
+        inp.channelId,
+        AGENT_REFUSAL_UK,
+        {
+          key: agentReplyKey(inp.userId, inp.text ? `${inp.conversationKey}:${inp.userId}` : inp.conversationKey),
+          feature: "agent",
+          channel: inp.surface,
+          trigger: "webhook",
+        },
+        inp.threadTs,
+      );
     } catch (err) {
       console.error("slack events: refusal post failed:", err);
     }
-    return ack({ handled: "agent", refused: true, user: parsed.userId });
+    return ack({ handled: "agent", refused: true, user: inp.userId });
   }
 
-  const q = parsed.text.trim();
-  const pending = await readPendingProposal(parsed.channelId);
+  const q = inp.text.trim();
+  const pending = await readPendingProposal(inp.conversationKey);
   if (pending) {
+    // Requester-gating: in a channel/thread, only the proposer drives the pending write.
+    if (inp.surface !== "dm" && pending.proposedBy !== inp.userId) {
+      return ack({ handled: "agent", ignored: "not-requester", user: inp.userId });
+    }
     const decision = classifyDmReply(q);
     if (decision === "confirm") {
       const won = await claimApply(pending.id);
       const result = won ? await applyProposal(pending.kind, pending.params) : "Вже застосовано.";
-      await postMessage(parsed.channelId, result, { key: agentReplyKey(parsed.userId, `${parsed.ts}:apply`), feature: "agent", channel: "dm", trigger: "webhook" });
+      await postMessage(
+        inp.channelId,
+        result,
+        { key: agentReplyKey(inp.userId, `${inp.conversationKey}:apply`), feature: "agent", channel: inp.surface, trigger: "webhook" },
+        inp.threadTs,
+      );
       return ack({ handled: "agent", applied: won });
     }
     if (decision === "cancel") {
       await setState(pending.id, "CANCELLED");
-      await postMessage(parsed.channelId, "Скасовано.", { key: agentReplyKey(parsed.userId, `${parsed.ts}:cancel`), feature: "agent", channel: "dm", trigger: "webhook" });
+      await postMessage(
+        inp.channelId,
+        "Скасовано.",
+        { key: agentReplyKey(inp.userId, `${inp.conversationKey}:cancel`), feature: "agent", channel: inp.surface, trigger: "webhook" },
+        inp.threadTs,
+      );
       return ack({ handled: "agent", cancelled: true });
     }
     // "other" → supersede the pending proposal, then fall through to a new turn.
     await setState(pending.id, "SUPERSEDED");
     await postMessage(
-      parsed.channelId,
+      inp.channelId,
       "Скасував попередню пропозицію, обробляю новий запит.",
-      { key: agentReplyKey(parsed.userId, `${parsed.ts}:supersede`), feature: "agent", channel: "dm", trigger: "webhook" },
+      { key: agentReplyKey(inp.userId, `${inp.conversationKey}:supersede`), feature: "agent", channel: inp.surface, trigger: "webhook" },
+      inp.threadTs,
     );
   }
-  return deferAgentTurn(req, parsed.channelId, parsed.userId, q, parsed.ts, undefined, "dm");
+  return deferAgentTurn(req, inp.channelId, inp.userId, q, inp.conversationKey, inp.threadTs, inp.surface, inp.conversationKey);
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -273,16 +295,15 @@ export async function POST(req: Request): Promise<Response> {
         return ack({ skipped: "mention-in-verdict-or-ask-thread", thread_ts: parsed.threadTs });
       }
     }
-    return await runAgentReply(
-      req,
-      parsed.channelId,
-      parsed.userId,
-      stripBotMention(parsed.text),
-      parsed.ts,
-      parsed.eventId,
-      parsed.threadTs,
-      "mention",
-    );
+    return await handleAgentConversation(req, {
+      surface: "mention",
+      conversationKey: parsed.threadTs, // thread_ts (== ts for a top-level mention)
+      channelId: parsed.channelId,
+      threadTs: parsed.threadTs,
+      userId: parsed.userId,
+      text: stripBotMention(parsed.text),
+      eventId: parsed.eventId,
+    });
   }
 
   // A human DM to the bot → reply once with the help cheat sheet. Info-only (a DM
@@ -293,12 +314,20 @@ export async function POST(req: Request): Promise<Response> {
   if (parsed.kind === "dm") {
     // A bare help request keeps the static cheat sheet; anything else goes to the
     // DM agent (C.2: confirm-first proposal state machine + deferred loop). The
-    // agent path claims the event inside handleDmAgent, so only the help path
-    // claims here.
+    // agent path claims the event inside handleAgentConversation, so only the
+    // help path claims here.
     const q = parsed.text.trim();
     const isHelp = q === "" || /^\/?(help|допомога)\??$/i.test(q);
     if (!isHelp) {
-      return await handleDmAgent(req, parsed);
+      return await handleAgentConversation(req, {
+        surface: "dm",
+        conversationKey: parsed.channelId,
+        channelId: parsed.channelId,
+        threadTs: undefined,
+        userId: parsed.userId,
+        text: parsed.text,
+        eventId: parsed.eventId,
+      });
     }
     if (parsed.eventId) {
       const fresh = await claimSlackEvent(parsed.eventId, new Date().toISOString(), {
@@ -319,6 +348,31 @@ export async function POST(req: Request): Promise<Response> {
       const message = err instanceof Error ? err.message : String(err);
       console.error("slack events: dm-help post failed:", err);
       return ack({ handled: "dm-help", error: message });
+    }
+  }
+
+  // A plain thread reply (no bot mention) — e.g. "так" / a follow-up — inside a
+  // known agent conversation. The mention-sibling of an @mention leads with a
+  // mention token and is handled by the mention branch, so skip those here to
+  // avoid double-processing. Runs BEFORE the tracked-channel filter because an
+  // agent thread can live in any channel (e.g. #issue-log needn't be tracked).
+  if (parsed.kind === "actionable" && !hasLeadingMention(parsed.replyText)) {
+    let isAgent = false;
+    try {
+      isAgent = await agentThreadExists(parsed.threadTs);
+    } catch (err) {
+      console.error("slack events: agentThreadExists lookup failed:", err);
+    }
+    if (isAgent) {
+      return await handleAgentConversation(req, {
+        surface: "thread",
+        conversationKey: parsed.threadTs,
+        channelId: parsed.channelId,
+        threadTs: parsed.threadTs,
+        userId: parsed.userId,
+        text: parsed.replyText,
+        eventId: parsed.eventId,
+      });
     }
   }
 

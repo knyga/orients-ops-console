@@ -4,6 +4,8 @@
 **Status:** Design approved; implementation pending
 **Basis:** Extends `2026-07-02-slack-agent-phase-c-dm-design.md` (DM-only writes) to **both** surfaces.
 
+> **Implementation note:** the DM write path (`/api/agent/run`, `proposalExecutor`, `agentThread`, `agent_proposals`/`agent_threads`) was implemented by a peer session (commits through `c63dc46`). This plan's remaining scope — the `@mention`/thread delta (generalized `handleAgentConversation`, the plain-thread-reply branch, requester-gating, `conversationKey` threaded through `deferAgentTurn`) — was implemented on top of it.
+
 ## Problem
 
 Phase C.1 wired the Phase-B agent loop into Slack for **read-only** Q&A: DM + `@mention` route to `lib/agent/slackAgent.ts`, which filters to `kind === "read"` tools. So people can brainstorm / find / ask in Slack, but **cannot create or edit Jira tickets from Slack** — the headline use case (Bohdan: *"тегаєш в #issue-log, говориш хто — і він створює"*) is unmet. Ticket creation exists only via the CLI (`npm run agent`, `npm run jira-write`).

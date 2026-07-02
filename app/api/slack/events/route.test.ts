@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   applyProposal: vi.fn(),
   selfOrigin: vi.fn(),
   claimSlackEvent: vi.fn(),
+  agentThreadExists: vi.fn(),
 }));
 
 vi.mock("@/lib/slackSignature", () => ({ verifySlackSignature: h.verifySlackSignature }));
@@ -53,6 +54,7 @@ vi.mock("@/lib/agentProposals", () => ({
 vi.mock("@/lib/proposalExecutor", () => ({ applyProposal: h.applyProposal }));
 vi.mock("@/lib/selfOrigin", () => ({ selfOrigin: h.selfOrigin }));
 vi.mock("@/lib/slackEventClaim", () => ({ claimSlackEvent: h.claimSlackEvent }));
+vi.mock("@/lib/agentThread", () => ({ agentThreadExists: h.agentThreadExists }));
 
 import { POST } from "./route";
 
@@ -101,6 +103,45 @@ function mentionThreadReplyEvent() {
   };
 }
 
+/** A plain human thread reply (no bot mention) — `parseSlackEvent`'s "actionable" kind. */
+function actionableEvent(opts: {
+  threadTs: string;
+  user: string;
+  text: string;
+  channel: string;
+  eventId?: string;
+  replyTs?: string;
+}) {
+  return {
+    type: "event_callback",
+    event_id: opts.eventId ?? "Ev3",
+    event: {
+      type: "message",
+      channel: opts.channel,
+      user: opts.user,
+      text: opts.text,
+      ts: opts.replyTs ?? "300.002",
+      thread_ts: opts.threadTs,
+    },
+  };
+}
+
+/** A top-level @mention (thread_ts === ts) that starts a new agent turn. */
+function mentionEvent(opts: { ts: string; threadTs: string; user: string; channel: string; text: string; eventId?: string }) {
+  return {
+    type: "event_callback",
+    event_id: opts.eventId ?? "Ev4",
+    event: {
+      type: "app_mention",
+      channel: opts.channel,
+      user: opts.user,
+      text: opts.text,
+      ts: opts.ts,
+      thread_ts: opts.threadTs,
+    },
+  };
+}
+
 beforeEach(() => {
   Object.values(h).forEach((f) => f.mockReset());
   process.env.SLACK_SIGNING_SECRET = SIGNING_SECRET;
@@ -114,6 +155,7 @@ beforeEach(() => {
   h.findPublishedByTs.mockResolvedValue(null);
   h.findAskByTs.mockResolvedValue(null);
   h.formatDmHelp.mockReturnValue("HELP TEXT");
+  h.agentThreadExists.mockResolvedValue(false);
   global.fetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 })) as unknown as typeof fetch;
 });
 
@@ -142,6 +184,7 @@ describe("POST /api/slack/events — DM help + refusal (C.1, unchanged)", () => 
       "D1",
       expect.stringContaining("Вибачте"),
       expect.objectContaining({ feature: "agent", channel: "dm" }),
+      undefined,
     );
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -272,6 +315,7 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
       "D1",
       "✅ Створено ATP-123: https://x/ATP-123",
       expect.objectContaining({ feature: "agent", channel: "dm" }),
+      undefined,
     );
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -284,7 +328,7 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
     const res = await POST(req(dmEvent("так")));
     expect(res.status).toBe(200);
     expect(h.applyProposal).not.toHaveBeenCalled();
-    expect(h.postMessage).toHaveBeenCalledWith("D1", "Вже застосовано.", expect.anything());
+    expect(h.postMessage).toHaveBeenCalledWith("D1", "Вже застосовано.", expect.anything(), undefined);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -298,7 +342,7 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
     expect(json.cancelled).toBe(true);
 
     expect(h.setState).toHaveBeenCalledWith("prop-1", "CANCELLED");
-    expect(h.postMessage).toHaveBeenCalledWith("D1", "Скасовано.", expect.anything());
+    expect(h.postMessage).toHaveBeenCalledWith("D1", "Скасовано.", expect.anything(), undefined);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -315,6 +359,7 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
       "D1",
       "Скасував попередню пропозицію, обробляю новий запит.",
       expect.anything(),
+      undefined,
     );
     expect(h.postMessage).toHaveBeenNthCalledWith(
       2,
@@ -337,7 +382,75 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
       "D1",
       expect.stringContaining("Вибачте"),
       expect.anything(),
+      undefined,
     );
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/slack/events — plain thread-reply agent branch + requester-gating (C.2 mention delta)", () => {
+  const pending = {
+    id: "p1",
+    channelId: "T1",
+    kind: "jira_create" as const,
+    params: {},
+    summaryUk: "Створити ATP-1",
+    proposedBy: "U1",
+    state: "PENDING" as const,
+    createdAt: "2026-07-01T00:00:00Z",
+    resolvedAt: null,
+  };
+
+  it("thread reply 'так' by requester applies the pending proposal", async () => {
+    h.agentThreadExists.mockResolvedValue(true);
+    h.readPendingProposal.mockResolvedValue(pending);
+    h.classifyDmReply.mockReturnValue("confirm");
+    h.claimApply.mockResolvedValue(true);
+    h.applyProposal.mockResolvedValue("✅ Створено ATP-1: url");
+
+    const res = await POST(req(actionableEvent({ threadTs: "T1", user: "U1", text: "так", channel: "C1" })));
+    expect(res.status).toBe(200);
+
+    expect(h.agentThreadExists).toHaveBeenCalledWith("T1");
+    expect(h.readPendingProposal).toHaveBeenCalledWith("T1");
+    expect(h.claimApply).toHaveBeenCalledWith("p1");
+    expect(h.applyProposal).toHaveBeenCalled();
+    // fetch (self-invoke) NOT called — confirm is inline.
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("thread reply by a non-requester is ignored while a proposal is pending", async () => {
+    h.agentThreadExists.mockResolvedValue(true);
+    h.readPendingProposal.mockResolvedValue(pending);
+
+    const res = await POST(req(actionableEvent({ threadTs: "T1", user: "U2", text: "так", channel: "C1" })));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ignored).toBe("not-requester");
+
+    expect(h.claimApply).not.toHaveBeenCalled();
+    expect(h.setState).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("skips the message sibling of an @mention in an agent thread", async () => {
+    const res = await POST(req(actionableEvent({ threadTs: "T1", user: "U1", text: "<@U0BOT> ще задача", channel: "C1" })));
+    expect(res.status).toBe(200);
+    // The mention-token-leading sibling is not routed through the agent branch;
+    // it falls through to the tracked-channel path (C1 is untracked → skipped).
+    expect(h.agentThreadExists).not.toHaveBeenCalled();
+    expect(h.claimApply).not.toHaveBeenCalled();
+  });
+
+  it("mention defers a turn keyed by thread_ts", async () => {
+    const res = await POST(
+      req(mentionEvent({ ts: "M1", threadTs: "M1", user: "U1", channel: "C1", text: "<@U0BOT> створи" })),
+    );
+    expect(res.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [, opts] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const sentBody = JSON.parse(opts.body);
+    expect(sentBody.conversationKey).toBe("M1");
+    expect(sentBody.surface).toBe("mention");
   });
 });
