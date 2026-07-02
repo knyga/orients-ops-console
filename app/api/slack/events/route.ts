@@ -113,7 +113,7 @@ async function runAgentReply(
     const message = err instanceof Error ? err.message : String(err);
     console.error(`slack events: agent (${surface}) failed:`, err);
     try {
-      await postMessage(channelId, formatWebhookFailureNotice(message), { key: agentReplyKey(userId, `${ts}:err`), feature: "webhook-failure", channel: surface, trigger: "webhook" }, threadTs);
+      await postMessage(channelId, formatWebhookFailureNotice(message), { key: agentReplyKey(userId, `${ts}:err:${contentRev(message)}`), feature: "webhook-failure", channel: surface, trigger: "webhook" }, threadTs);
     } catch (postErr) {
       console.error("slack events: agent failure notice post failed:", postErr);
     }
@@ -155,7 +155,28 @@ export async function POST(req: Request): Promise<Response> {
 
   // An @mention anywhere → the conversational agent (read-only in C.1). Handled
   // before the tracked-channel lookup because a mention can land in any channel.
+  //
+  // Slack delivers a channel @mention as TWO events (app_mention + message) with
+  // distinct event_ids, so they do NOT dedup against each other. If the mention is
+  // a reply under a published verdict / bot question thread, the sibling `message`
+  // event already drives the S6/S7 handler below — so defer those here (skip the
+  // agent) to avoid a spurious answer + wasted Claude call on an approver's confirm.
   if (parsed.kind === "mention") {
+    if (parsed.threadTs !== parsed.ts) {
+      let deferToThreadHandler = false;
+      try {
+        const [pub, ask] = await Promise.all([
+          findPublishedByTs(parsed.threadTs),
+          findAskByTs(parsed.threadTs),
+        ]);
+        deferToThreadHandler = Boolean(pub || ask);
+      } catch (err) {
+        console.error("slack events: mention verdict/ask lookup failed:", err);
+      }
+      if (deferToThreadHandler) {
+        return ack({ skipped: "mention-in-verdict-or-ask-thread", thread_ts: parsed.threadTs });
+      }
+    }
     return await runAgentReply(
       parsed.channelId,
       parsed.userId,

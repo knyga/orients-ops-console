@@ -18,5 +18,7 @@ export async function askAgent(text: string): Promise<string> {
   }
   const readTools = jiraTools.filter((t) => t.kind === "read");
   const result = await runAgent(text, { tools: readTools, maxIters: SLACK_MAX_ITERS });
-  return result.text;
+  // An empty answer (model emitted only tool_use / all-thinking) would make Slack's
+  // postMessage reject on empty text and surface as a failure notice — coalesce it.
+  return result.text.trim() || "Не маю відповіді на це.";
 }

@@ -29,6 +29,11 @@ describe("askAgent", () => {
     expect(await askAgent("x")).toBe("Вибач, не встиг.");
   });
 
+  it("coalesces an empty answer to a Ukrainian fallback (never posts empty text)", async () => {
+    runAgentMock.mockResolvedValue({ kind: "text", text: "   " });
+    expect(await askAgent("x")).toBe("Не маю відповіді на це.");
+  });
+
   it("throws loudly when ANTHROPIC_API_KEY is missing", async () => {
     delete process.env.ANTHROPIC_API_KEY;
     await expect(askAgent("x")).rejects.toThrow(/ANTHROPIC_API_KEY/);
