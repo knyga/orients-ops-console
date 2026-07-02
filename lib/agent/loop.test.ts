@@ -21,7 +21,7 @@ const writeTool: Tool = {
   description: "d",
   inputSchema: { type: "object", properties: {} },
   kind: "write",
-  propose: async () => ({ kind: "demo_write", echoUk: "ЕХО", apply: async () => "APPLIED" }),
+  propose: async () => ({ kind: "demo_write", params: {}, echoUk: "ЕХО", apply: async () => "APPLIED" }),
 };
 
 describe("runAgent", () => {
@@ -77,5 +77,23 @@ describe("runAgent", () => {
     const res = await runAgent("test", { client, tools: [readTool], now: clockNow });
     expect(res.kind).toBe("error");
     expect(res.text).toContain("не встиг");
+  });
+
+  it("seeds prior history before the new user message", async () => {
+    const client = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] }]);
+    await runAgent("new question", {
+      client,
+      tools: [readTool],
+      history: [
+        { role: "user", text: "earlier q" },
+        { role: "assistant", text: "earlier a" },
+      ],
+    });
+    const body = client.messages.create.mock.calls[0][0] as { messages: { role: string; content: unknown }[] };
+    expect(body.messages).toEqual([
+      { role: "user", content: "earlier q" },
+      { role: "assistant", content: "earlier a" },
+      { role: "user", content: "new question" },
+    ]);
   });
 });

@@ -45,6 +45,8 @@ export interface RunAgentOptions {
   client?: AnthropicLike;
   maxIters?: number;
   now?: () => number;
+  /** Prior conversation turns (lightweight text) seeded before the new user message. */
+  history?: Array<{ role: "user" | "assistant"; text: string }>;
 }
 
 interface ToolUseBlock { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
@@ -70,6 +72,7 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
 
   const anthropicTools = toAnthropicTools(tools);
   const messages: { role: "user" | "assistant"; content: unknown }[] = [
+    ...(opts.history ?? []).map((h) => ({ role: h.role, content: h.text as unknown })),
     { role: "user", content: userText },
   ];
 

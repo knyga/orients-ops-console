@@ -11,9 +11,12 @@ export interface ToolResult {
 }
 
 /** A confirm-first write: a resolved, structured action + its Ukrainian echo.
- *  `apply()` performs the write deterministically and returns a result string. */
+ *  `params` is the resolved action (serializable — persisted across a Slack
+ *  round-trip); `apply()` performs the write deterministically. */
 export interface Proposal {
   kind: string;
+  /** Resolved, JSON-serializable action params (the deterministic executor's input). */
+  params: Record<string, unknown>;
   echoUk: string;
   apply(): Promise<string>;
 }
