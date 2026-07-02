@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const h = vi.hoisted(() => ({
   runSlackTurn: vi.fn(),
-  askAgent: vi.fn(),
   loadTranscript: vi.fn(),
   appendTurn: vi.fn(),
   insertPending: vi.fn(),
@@ -10,7 +9,6 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/agent/slackTurn", () => ({ runSlackTurn: h.runSlackTurn }));
-vi.mock("@/lib/agent/slackAgent", () => ({ askAgent: h.askAgent }));
 vi.mock("@/lib/agentThread", () => ({
   loadTranscript: h.loadTranscript,
   appendTurn: h.appendTurn,
@@ -40,6 +38,7 @@ function req(body: unknown, secret = SECRET) {
 
 const base = {
   surface: "dm",
+  conversationKey: "C1",
   channelId: "C1",
   userId: "U1",
   incomingTs: "1",
@@ -96,14 +95,35 @@ describe("POST /api/agent/run", () => {
     expect(String(h.updateMessage.mock.calls[0][2])).toMatch(/ключ|помилка|ANTHROPIC/i);
   });
 
-  it("mention → calls askAgent, edits placeholder, no transcript load", async () => {
-    h.askAgent.mockResolvedValue("mention answer");
-    const mentionReq = { ...base, surface: "mention" };
+  it("mention proposal is keyed by conversationKey (thread_ts), posts in the real channel", async () => {
+    h.runSlackTurn.mockResolvedValue({
+      kind: "proposal",
+      text: "echo",
+      proposal: {
+        kind: "jira_create",
+        params: { a: 1 },
+        echoUk: "echo",
+        apply: vi.fn(),
+      },
+    });
+    const mentionReq = {
+      surface: "mention",
+      conversationKey: "111.222",
+      channelId: "C-issue-log",
+      userId: "U1",
+      incomingTs: "111.900",
+      placeholderTs: "111.901",
+      threadTs: "111.222",
+      question: "створи задачу для Тараса",
+    };
     const res = await POST(req(mentionReq));
     expect(res.status).toBe(200);
-    expect(h.askAgent).toHaveBeenCalledWith("q");
-    expect(h.updateMessage).toHaveBeenCalledWith("C1", "2", "mention answer", expect.anything());
-    expect(h.loadTranscript).not.toHaveBeenCalled();
+    expect(h.insertPending).toHaveBeenCalledWith(
+      expect.objectContaining({ channelId: "111.222", proposedBy: "U1", kind: "jira_create" }),
+    );
+    expect(h.loadTranscript).toHaveBeenCalledWith("111.222");
+    expect(h.appendTurn).toHaveBeenCalledWith("111.222", "створи задачу для Тараса", "echo");
+    expect(h.updateMessage).toHaveBeenCalledWith("C-issue-log", "111.901", "echo", expect.anything());
   });
 
   it("DM text empty result → defaults to fallback message", async () => {
