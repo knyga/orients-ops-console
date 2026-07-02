@@ -31,3 +31,13 @@ export async function appendTurn(channelId: string, userText: string, assistantT
     .values({ channelId, updatedAt: nowIso, transcript: next })
     .onConflictDoUpdate({ target: schema.agentThreads.channelId, set: { updatedAt: nowIso, transcript: next } });
 }
+
+/** True iff an agent conversation row exists for this key (ignores the 24h cap —
+ *  used only for ingress routing, not for seeding history). */
+export async function agentThreadExists(conversationKey: string): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(schema.agentThreads)
+    .where(eq(schema.agentThreads.channelId, conversationKey));
+  return rows.length > 0;
+}

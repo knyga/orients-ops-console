@@ -101,3 +101,8 @@ export function parseSlackEvent(body: SlackEventBody): ParsedSlackEvent {
 export function stripBotMention(text: string): string {
   return text.replace(/^\s*<@[^>]+>\s*/, "").trim();
 }
+
+/** True iff `text` begins (after leading whitespace) with a Slack mention token. */
+export function hasLeadingMention(text: string): boolean {
+  return /^\s*<@[^>]+>/.test(text);
+}

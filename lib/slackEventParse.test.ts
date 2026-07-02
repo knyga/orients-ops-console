@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSlackEvent, stripBotMention } from "./slackEventParse";
+import { parseSlackEvent, stripBotMention, hasLeadingMention } from "./slackEventParse";
 
 const reply = {
   type: "message" as const,
@@ -150,5 +150,17 @@ describe("stripBotMention", () => {
   });
   it("leaves text without a leading mention unchanged", () => {
     expect(stripBotMention("no mention here")).toBe("no mention here");
+  });
+});
+
+describe("hasLeadingMention", () => {
+  it("is true for a leading mention token", () => {
+    expect(hasLeadingMention("<@U123> створи задачу")).toBe(true);
+    expect(hasLeadingMention("  <@U123|bot> hi")).toBe(true);
+  });
+  it("is false for a plain reply", () => {
+    expect(hasLeadingMention("так")).toBe(false);
+    expect(hasLeadingMention("ні, скасуй")).toBe(false);
+    expect(hasLeadingMention("зроби це <@U123>")).toBe(false); // mention not leading
   });
 });
