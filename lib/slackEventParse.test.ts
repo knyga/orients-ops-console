@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSlackEvent } from "./slackEventParse";
+import { parseSlackEvent, stripBotMention } from "./slackEventParse";
 
 const reply = {
   type: "message" as const,
@@ -104,5 +104,51 @@ describe("parseSlackEvent", () => {
       parseSlackEvent({ type: "event_callback", event: { ...dm, subtype: "message_changed" } })
         .kind,
     ).toBe("skip");
+  });
+});
+
+describe("app_mention → mention", () => {
+  it("parses a top-level mention, threadTs defaults to its own ts", () => {
+    const p = parseSlackEvent({
+      type: "event_callback",
+      event_id: "Ev1",
+      event: { type: "app_mention", user: "U1", text: "<@U0BOT> what was done in jira today", ts: "111.1", channel: "C1" },
+    });
+    expect(p).toEqual({
+      kind: "mention",
+      eventId: "Ev1",
+      channelId: "C1",
+      userId: "U1",
+      text: "<@U0BOT> what was done in jira today",
+      ts: "111.1",
+      threadTs: "111.1",
+    });
+  });
+
+  it("uses thread_ts when the mention is inside a thread", () => {
+    const p = parseSlackEvent({
+      type: "event_callback",
+      event: { type: "app_mention", user: "U1", text: "<@U0BOT> hi", ts: "222.2", thread_ts: "200.0", channel: "C1" },
+    });
+    expect(p.kind).toBe("mention");
+    if (p.kind === "mention") expect(p.threadTs).toBe("200.0");
+  });
+
+  it("ignores a bot's own app_mention (bot_id present)", () => {
+    const p = parseSlackEvent({
+      type: "event_callback",
+      event: { type: "app_mention", bot_id: "B1", user: "U1", text: "<@U0BOT> x", ts: "1.1", channel: "C1" },
+    });
+    expect(p.kind).toBe("skip");
+  });
+});
+
+describe("stripBotMention", () => {
+  it("removes a leading mention token and trims", () => {
+    expect(stripBotMention("<@U0BOT> what was done")).toBe("what was done");
+    expect(stripBotMention("  <@U0BOT>   spaced  ")).toBe("spaced");
+  });
+  it("leaves text without a leading mention unchanged", () => {
+    expect(stripBotMention("no mention here")).toBe("no mention here");
   });
 });

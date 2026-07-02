@@ -25,6 +25,7 @@ export type ParsedSlackEvent =
   | { kind: "challenge"; challenge: string }
   | { kind: "skip"; reason: string }
   | { kind: "dm"; eventId: string | null; channelId: string; userId: string; text: string; ts: string }
+  | { kind: "mention"; eventId: string | null; channelId: string; userId: string; text: string; ts: string; threadTs: string }
   | {
       kind: "actionable";
       eventId: string | null;
@@ -43,6 +44,20 @@ export function parseSlackEvent(body: SlackEventBody): ParsedSlackEvent {
     return { kind: "skip", reason: "not-event-callback" };
   }
   const e = body.event;
+  // An @mention of the bot in any channel → run the agent. Bot's own posts carry
+  // bot_id and are ignored (no self-mention loop). threadTs = thread when the
+  // mention is a reply, else the mention's own ts (so the answer threads under it).
+  if (e?.type === "app_mention" && !e.bot_id && e.user && e.ts && e.channel) {
+    return {
+      kind: "mention",
+      eventId: body.event_id ?? null,
+      channelId: e.channel,
+      userId: e.user,
+      text: e.text ?? "",
+      ts: e.ts,
+      threadTs: e.thread_ts ?? e.ts,
+    };
+  }
   // A human DM to the bot (channel_type "im"): reply with the help text. Checked
   // before the thread-reply filter because a DM has no thread_ts. Bot posts and
   // edits/joins are excluded so the help reply never loops.
@@ -80,4 +95,9 @@ export function parseSlackEvent(body: SlackEventBody): ParsedSlackEvent {
     replyTs: e.ts,
     threadTs: e.thread_ts,
   };
+}
+
+/** Remove a single leading Slack mention token (`<@U…>`/`<@U…|name>`) and trim. */
+export function stripBotMention(text: string): string {
+  return text.replace(/^\s*<@[^>]+>\s*/, "").trim();
 }
