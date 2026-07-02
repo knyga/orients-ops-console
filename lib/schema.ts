@@ -224,3 +224,11 @@ export const agentProposals = pgTable(
     index("agent_proposals_channel").on(t.channelId),
   ],
 );
+
+/** Per-DM agent conversation memory (Phase C.2). transcript = lightweight text
+ *  turns only (no tool/thinking blocks). Capped on read+write to last 10 turns. */
+export const agentThreads = pgTable("agent_threads", {
+  channelId: text("channel_id").primaryKey(),
+  updatedAt: text("updated_at").notNull(),
+  transcript: jsonb("transcript").notNull(),
+});
