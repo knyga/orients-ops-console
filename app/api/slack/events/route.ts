@@ -359,6 +359,12 @@ export async function POST(req: Request): Promise<Response> {
   // mention token and is handled by the mention branch, so skip those here to
   // avoid double-processing. Runs BEFORE the tracked-channel filter because an
   // agent thread can live in any channel (e.g. #issue-log needn't be tracked).
+  //
+  // INVARIANT: agent-thread keys and verdict/ask (S6/S7) thread ts never overlap
+  // — `agent_threads` rows are created ONLY by `appendTurn` in /api/agent/run, so
+  // a published-verdict/ask thread is never an agent thread and still reaches the
+  // S7/S6 handlers below. If anything ever seeds agent_threads from a verdict
+  // thread, this branch would shadow the approver path — keep that from happening.
   if (parsed.kind === "actionable" && !hasLeadingMention(parsed.replyText)) {
     let isAgent = false;
     try {
