@@ -14,7 +14,8 @@ export async function loadTranscript(channelId: string): Promise<Turn[]> {
   const rows = await db.select().from(schema.agentThreads).where(eq(schema.agentThreads.channelId, channelId));
   if (rows.length === 0) return [];
   const r = rows[0];
-  return capTranscript(r.transcript as Turn[], Date.now(), Date.parse(r.updatedAt));
+  const prior = Array.isArray(r.transcript) ? (r.transcript as Turn[]) : [];
+  return capTranscript(prior, Date.now(), Date.parse(r.updatedAt));
 }
 
 export async function appendTurn(channelId: string, userText: string, assistantText: string): Promise<void> {
