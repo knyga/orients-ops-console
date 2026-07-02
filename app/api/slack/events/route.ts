@@ -30,8 +30,10 @@ import { applyAnswerReply } from "@/lib/applyAnswer";
 import { permalinkFor, postMessage } from "@/lib/slack";
 import { formatWebhookFailureNotice } from "@/lib/webhookNotice";
 import { formatDmHelp } from "@/lib/dmHelp";
-import { contentRev, dmHelpKey, webhookFailureKey } from "@/lib/outboundKeys";
-import { parseSlackEvent, type SlackEventBody } from "@/lib/slackEventParse";
+import { isAllowedSlackUser, AGENT_REFUSAL_UK } from "@/lib/agent/access";
+import { askAgent } from "@/lib/agent/slackAgent";
+import { contentRev, dmHelpKey, agentReplyKey, webhookFailureKey } from "@/lib/outboundKeys";
+import { parseSlackEvent, stripBotMention, type SlackEventBody } from "@/lib/slackEventParse";
 import { claimSlackEvent } from "@/lib/slackEventClaim";
 
 export const runtime = "nodejs";
@@ -78,6 +80,47 @@ async function failVisibly(
   return ack({ handled: kind, date, error: message });
 }
 
+/** DM/mention → agent. Claims the event (dedup), gates on the allowlist, runs the
+ *  read-only agent, and posts the answer. Inline (Slack retries dedup on event_id;
+ *  the loop's ~50s budget stays under Vercel's 60s cap). Info-only in C.1. */
+async function runAgentReply(
+  channelId: string,
+  userId: string,
+  question: string,
+  ts: string,
+  eventId: string | null,
+  threadTs: string | undefined,
+  surface: "dm" | "mention",
+): Promise<Response> {
+  if (eventId) {
+    const fresh = await claimSlackEvent(eventId, new Date().toISOString(), { eventType: "message" });
+    if (!fresh) return ack({ skipped: "duplicate-event", event_id: eventId });
+  }
+  if (!isAllowedSlackUser(userId)) {
+    try {
+      await postMessage(channelId, AGENT_REFUSAL_UK, { key: agentReplyKey(userId, ts), feature: "agent", channel: surface, trigger: "webhook" }, threadTs);
+    } catch (err) {
+      console.error("slack events: refusal post failed:", err);
+    }
+    return ack({ handled: "agent", refused: true, user: userId });
+  }
+  try {
+    const answer = await askAgent(question);
+    await postMessage(channelId, answer, { key: agentReplyKey(userId, ts), feature: "agent", channel: surface, trigger: "webhook" }, threadTs);
+    console.log(`slack events: agent (${surface}) replied to ${userId}`);
+    return ack({ handled: "agent", surface, user: userId });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`slack events: agent (${surface}) failed:`, err);
+    try {
+      await postMessage(channelId, formatWebhookFailureNotice(message), { key: agentReplyKey(userId, `${ts}:err`), feature: "webhook-failure", channel: surface, trigger: "webhook" }, threadTs);
+    } catch (postErr) {
+      console.error("slack events: agent failure notice post failed:", postErr);
+    }
+    return ack({ handled: "agent", surface, error: message });
+  }
+}
+
 export async function POST(req: Request): Promise<Response> {
   const raw = await req.text(); // raw body is required for signature verification
   console.log("slack events: POST received");
@@ -110,12 +153,34 @@ export async function POST(req: Request): Promise<Response> {
   if (parsed.kind === "challenge") return Response.json({ challenge: parsed.challenge });
   if (parsed.kind === "skip") return ack({ skipped: parsed.reason });
 
+  // An @mention anywhere → the conversational agent (read-only in C.1). Handled
+  // before the tracked-channel lookup because a mention can land in any channel.
+  if (parsed.kind === "mention") {
+    return await runAgentReply(
+      parsed.channelId,
+      parsed.userId,
+      stripBotMention(parsed.text),
+      parsed.ts,
+      parsed.eventId,
+      parsed.threadTs,
+      "mention",
+    );
+  }
+
   // A human DM to the bot → reply once with the help cheat sheet. Info-only (a DM
   // never mutates verdict data); handled before the tracked-channel lookup because
   // the DM channel is not a tracked channel. Keyed on the incoming ts so a Slack
   // redelivery dedups to one reply while a new DM re-replies. The bot's own reply
   // carries a bot_id, so the parser filters it — no echo loop.
   if (parsed.kind === "dm") {
+    // A bare help request keeps the static cheat sheet; anything else is a
+    // question for the read-only agent (C.1). The agent path claims the event
+    // inside runAgentReply, so only the help path claims here.
+    const q = parsed.text.trim();
+    const isHelp = q === "" || /^\/?(help|допомога)\??$/i.test(q);
+    if (!isHelp) {
+      return await runAgentReply(parsed.channelId, parsed.userId, q, parsed.ts, parsed.eventId, undefined, "dm");
+    }
     if (parsed.eventId) {
       const fresh = await claimSlackEvent(parsed.eventId, new Date().toISOString(), {
         eventType: "message",
