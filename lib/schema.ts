@@ -7,6 +7,7 @@
  * Not server-only: the CLIs and API routes both import this. See lib/db.ts.
  */
 import { boolean, index, integer, jsonb, pgTable, primaryKey, real, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /** The Slack mirror — one row per (channel, ts), including thread replies. */
 export const slackMessages = pgTable(
@@ -201,4 +202,25 @@ export const reports = pgTable(
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [primaryKey({ columns: [t.feature, t.period] })],
+);
+
+/** Confirm-first Jira-write proposals from a DM agent turn (Phase C.2). At most
+ *  one PENDING per DM channel; applied deterministically via lib/proposalExecutor. */
+export const agentProposals = pgTable(
+  "agent_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    channelId: text("channel_id").notNull(),
+    kind: text("kind").notNull(),
+    params: jsonb("params").notNull(),
+    summaryUk: text("summary_uk").notNull(),
+    proposedBy: text("proposed_by").notNull(),
+    state: text("state").notNull(), // PENDING|APPLIED|CANCELLED|SUPERSEDED
+    createdAt: text("created_at").notNull(),
+    resolvedAt: text("resolved_at"),
+  },
+  (t) => [
+    uniqueIndex("agent_proposals_one_pending").on(t.channelId).where(sql`state = 'PENDING'`),
+    index("agent_proposals_channel").on(t.channelId),
+  ],
 );

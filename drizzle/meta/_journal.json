@@ -64,6 +64,13 @@
       "when": 1782916616827,
       "tag": "0008_ambitious_energizer",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782985565431,
+      "tag": "0009_shocking_karen_page",
+      "breakpoints": true
     }
   ]
 }
