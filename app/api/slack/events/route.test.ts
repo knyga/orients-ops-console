@@ -188,6 +188,26 @@ describe("POST /api/slack/events — DM help + refusal (C.1, unchanged)", () => 
     );
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it("refuses a disallowed user on EVERY message, keyed per-message-ts (not swallowed after the first)", async () => {
+    h.isAllowedSlackUser.mockReturnValue(false);
+    await POST(req(dmEvent("first", { ts: "200.001", eventId: "EvA" })));
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "D1",
+      expect.stringContaining("Вибачте"),
+      expect.objectContaining({ key: "agent:U1:200.001" }),
+      undefined,
+    );
+
+    h.postMessage.mockClear();
+    await POST(req(dmEvent("second", { ts: "200.002", eventId: "EvB" })));
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "D1",
+      expect.stringContaining("Вибачте"),
+      expect.objectContaining({ key: "agent:U1:200.002" }),
+      undefined,
+    );
+  });
 });
 
 describe("POST /api/slack/events — mention verdict/ask-thread deferral (C.1, unchanged)", () => {
@@ -283,6 +303,25 @@ describe("POST /api/slack/events — DM agent: fast ack + placeholder + self-inv
     expect(errSpy).toHaveBeenCalledWith(expect.stringContaining("AGENT_RUN_SECRET"));
     errSpy.mockRestore();
   });
+
+  it("two turns in the same DM conversation get DISTINCT per-message placeholder keys (not deduped by conversationKey)", async () => {
+    await POST(req(dmEvent("first question", { ts: "100.001" })));
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "D1",
+      "🤔 думаю…",
+      expect.objectContaining({ key: "agent:U1:100.001:ph" }),
+      undefined,
+    );
+
+    h.postMessage.mockClear();
+    await POST(req(dmEvent("second question", { ts: "100.002" })));
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "D1",
+      "🤔 думаю…",
+      expect.objectContaining({ key: "agent:U1:100.002:ph" }),
+      undefined,
+    );
+  });
 });
 
 describe("POST /api/slack/events — DM confirm-first proposal state machine (C.2)", () => {
@@ -298,13 +337,13 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
     resolvedAt: null,
   };
 
-  it('"так" with a pending proposal → claims + applies, posts the result, no self-invoke', async () => {
+  it('"так" with a pending proposal → claims + applies, posts the result keyed per-message-ts, no self-invoke', async () => {
     h.readPendingProposal.mockResolvedValue(pending);
     h.classifyDmReply.mockReturnValue("confirm");
     h.claimApply.mockResolvedValue(true);
     h.applyProposal.mockResolvedValue("✅ Створено ATP-123: https://x/ATP-123");
 
-    const res = await POST(req(dmEvent("так")));
+    const res = await POST(req(dmEvent("так", { ts: "100.001" })));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.applied).toBe(true);
@@ -314,10 +353,34 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
     expect(h.postMessage).toHaveBeenCalledWith(
       "D1",
       "✅ Створено ATP-123: https://x/ATP-123",
-      expect.objectContaining({ feature: "agent", channel: "dm" }),
+      expect.objectContaining({ feature: "agent", channel: "dm", key: "agent:U1:100.001:apply" }),
       undefined,
     );
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('a SECOND "так" (new message ts) in the same conversation is not deduped away', async () => {
+    h.readPendingProposal.mockResolvedValue(pending);
+    h.classifyDmReply.mockReturnValue("confirm");
+    h.claimApply.mockResolvedValue(true);
+    h.applyProposal.mockResolvedValue("✅ result 1");
+    await POST(req(dmEvent("так", { ts: "100.001" })));
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "D1",
+      "✅ result 1",
+      expect.objectContaining({ key: "agent:U1:100.001:apply" }),
+      undefined,
+    );
+
+    h.postMessage.mockClear();
+    h.applyProposal.mockResolvedValue("✅ result 2");
+    await POST(req(dmEvent("так", { ts: "100.002" })));
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "D1",
+      "✅ result 2",
+      expect.objectContaining({ key: "agent:U1:100.002:apply" }),
+      undefined,
+    );
   });
 
   it('"так" losing the atomic claim race → posts "Вже застосовано." without re-applying', async () => {
@@ -332,25 +395,30 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('"ні" with a pending proposal → CANCELLED + "Скасовано.", no self-invoke', async () => {
+  it('"ні" with a pending proposal → CANCELLED + "Скасовано.", keyed per-message-ts, no self-invoke', async () => {
     h.readPendingProposal.mockResolvedValue(pending);
     h.classifyDmReply.mockReturnValue("cancel");
 
-    const res = await POST(req(dmEvent("ні")));
+    const res = await POST(req(dmEvent("ні", { ts: "100.001" })));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.cancelled).toBe(true);
 
     expect(h.setState).toHaveBeenCalledWith("prop-1", "CANCELLED");
-    expect(h.postMessage).toHaveBeenCalledWith("D1", "Скасовано.", expect.anything(), undefined);
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "D1",
+      "Скасовано.",
+      expect.objectContaining({ key: "agent:U1:100.001:cancel" }),
+      undefined,
+    );
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("other text with a pending proposal → SUPERSEDED + notice + defers a new turn", async () => {
+  it("other text with a pending proposal → SUPERSEDED + notice (keyed per-message-ts) + defers a new turn", async () => {
     h.readPendingProposal.mockResolvedValue(pending);
     h.classifyDmReply.mockReturnValue("other");
 
-    const res = await POST(req(dmEvent("actually make it a bug instead")));
+    const res = await POST(req(dmEvent("actually make it a bug instead", { ts: "100.001" })));
     expect(res.status).toBe(200);
 
     expect(h.setState).toHaveBeenCalledWith("prop-1", "SUPERSEDED");
@@ -358,14 +426,14 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
       1,
       "D1",
       "Скасував попередню пропозицію, обробляю новий запит.",
-      expect.anything(),
+      expect.objectContaining({ key: "agent:U1:100.001:supersede" }),
       undefined,
     );
     expect(h.postMessage).toHaveBeenNthCalledWith(
       2,
       "D1",
       "🤔 думаю…",
-      expect.anything(),
+      expect.objectContaining({ key: "agent:U1:100.001:ph" }),
       undefined,
     );
     expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -401,22 +469,56 @@ describe("POST /api/slack/events — plain thread-reply agent branch + requester
     resolvedAt: null,
   };
 
-  it("thread reply 'так' by requester applies the pending proposal", async () => {
+  it("thread reply 'так' by requester applies the pending proposal, keyed by the reply's own ts (not the thread key)", async () => {
     h.agentThreadExists.mockResolvedValue(true);
     h.readPendingProposal.mockResolvedValue(pending);
     h.classifyDmReply.mockReturnValue("confirm");
     h.claimApply.mockResolvedValue(true);
     h.applyProposal.mockResolvedValue("✅ Створено ATP-1: url");
 
-    const res = await POST(req(actionableEvent({ threadTs: "T1", user: "U1", text: "так", channel: "C1" })));
+    const res = await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U1", text: "так", channel: "C1", replyTs: "300.111" })),
+    );
     expect(res.status).toBe(200);
 
     expect(h.agentThreadExists).toHaveBeenCalledWith("T1");
-    expect(h.readPendingProposal).toHaveBeenCalledWith("T1");
+    expect(h.readPendingProposal).toHaveBeenCalledWith("T1"); // conversationKey (thread) unchanged for memory/proposal lookup
     expect(h.claimApply).toHaveBeenCalledWith("p1");
     expect(h.applyProposal).toHaveBeenCalled();
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "C1",
+      "✅ Створено ATP-1: url",
+      expect.objectContaining({ key: "agent:U1:300.111:apply" }),
+      "T1",
+    );
     // fetch (self-invoke) NOT called — confirm is inline.
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("a SECOND thread reply (distinct ts, no pending proposal) defers a new turn with a distinct placeholder key", async () => {
+    h.agentThreadExists.mockResolvedValue(true);
+    h.readPendingProposal.mockResolvedValue(null);
+
+    await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U1", text: "перше питання", channel: "C1", replyTs: "300.001" })),
+    );
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "C1",
+      "🤔 думаю…",
+      expect.objectContaining({ key: "agent:U1:300.001:ph" }),
+      "T1",
+    );
+
+    h.postMessage.mockClear();
+    await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U1", text: "друге питання", channel: "C1", replyTs: "300.002", eventId: "EvThread2" })),
+    );
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "C1",
+      "🤔 думаю…",
+      expect.objectContaining({ key: "agent:U1:300.002:ph" }),
+      "T1",
+    );
   });
 
   it("thread reply by a non-requester is ignored while a proposal is pending", async () => {

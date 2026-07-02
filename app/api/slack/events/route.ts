@@ -156,6 +156,7 @@ interface AgentTurnInput {
   userId: string;
   text: string;
   eventId: string | null;
+  incomingTs: string;
 }
 
 /**
@@ -185,7 +186,7 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
         inp.channelId,
         AGENT_REFUSAL_UK,
         {
-          key: agentReplyKey(inp.userId, inp.text ? `${inp.conversationKey}:${inp.userId}` : inp.conversationKey),
+          key: agentReplyKey(inp.userId, inp.incomingTs),
           feature: "agent",
           channel: inp.surface,
           trigger: "webhook",
@@ -212,7 +213,7 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
       await postMessage(
         inp.channelId,
         result,
-        { key: agentReplyKey(inp.userId, `${inp.conversationKey}:apply`), feature: "agent", channel: inp.surface, trigger: "webhook" },
+        { key: agentReplyKey(inp.userId, `${inp.incomingTs}:apply`), feature: "agent", channel: inp.surface, trigger: "webhook" },
         inp.threadTs,
       );
       return ack({ handled: "agent", applied: won });
@@ -222,7 +223,7 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
       await postMessage(
         inp.channelId,
         "Скасовано.",
-        { key: agentReplyKey(inp.userId, `${inp.conversationKey}:cancel`), feature: "agent", channel: inp.surface, trigger: "webhook" },
+        { key: agentReplyKey(inp.userId, `${inp.incomingTs}:cancel`), feature: "agent", channel: inp.surface, trigger: "webhook" },
         inp.threadTs,
       );
       return ack({ handled: "agent", cancelled: true });
@@ -232,11 +233,11 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
     await postMessage(
       inp.channelId,
       "Скасував попередню пропозицію, обробляю новий запит.",
-      { key: agentReplyKey(inp.userId, `${inp.conversationKey}:supersede`), feature: "agent", channel: inp.surface, trigger: "webhook" },
+      { key: agentReplyKey(inp.userId, `${inp.incomingTs}:supersede`), feature: "agent", channel: inp.surface, trigger: "webhook" },
       inp.threadTs,
     );
   }
-  return deferAgentTurn(req, inp.channelId, inp.userId, q, inp.conversationKey, inp.threadTs, inp.surface, inp.conversationKey);
+  return deferAgentTurn(req, inp.channelId, inp.userId, q, inp.incomingTs, inp.threadTs, inp.surface, inp.conversationKey);
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -303,6 +304,7 @@ export async function POST(req: Request): Promise<Response> {
       userId: parsed.userId,
       text: stripBotMention(parsed.text),
       eventId: parsed.eventId,
+      incomingTs: parsed.ts,
     });
   }
 
@@ -327,6 +329,7 @@ export async function POST(req: Request): Promise<Response> {
         userId: parsed.userId,
         text: parsed.text,
         eventId: parsed.eventId,
+        incomingTs: parsed.ts,
       });
     }
     if (parsed.eventId) {
@@ -372,6 +375,7 @@ export async function POST(req: Request): Promise<Response> {
         userId: parsed.userId,
         text: parsed.replyText,
         eventId: parsed.eventId,
+        incomingTs: parsed.replyTs,
       });
     }
   }
