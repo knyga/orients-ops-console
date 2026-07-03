@@ -22,6 +22,11 @@ A missing drone-count report **voids that day for the whole crew** (reason
 is separate from the monthly `>3 drones lost` team cutoff, which zeroes the
 whole period.
 
+The drone-count classifier now returns structured per-person entries
+(`classifyDroneCount → { present, entries, forDate }`), also used to render the
+verdict message's `🛸 Дрони:` line; `present` (derived from `entries`) still
+gates the bonus, so this gate's semantics are unchanged.
+
 ## How to generate the report
 
 Run these in order (all default to the current Kyiv month if dates are omitted):
