@@ -8,6 +8,7 @@ import {
   toInputsCsv,
   validateDays,
 } from "./fieldQaReport";
+import type { DroneEntry } from "../lib/droneReport";
 
 function day(date: string, airborneSeconds: number, extra: Partial<ExtractedDay> = {}): ExtractedDay {
   return { date, airborneSeconds, flights: 1, flew: airborneSeconds > 0, sourceTs: "1.0", ...extra };
@@ -123,5 +124,38 @@ describe("formatTable", () => {
     );
     expect(table).toContain("2026-06-18");
     expect(table).toMatch(/TOTAL/i);
+  });
+});
+
+describe("buildReport drone attachment", () => {
+  it("attaches drone entries by date and omits the field when none", () => {
+    const PERIOD = { start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" };
+    const testDay = (date: string): ExtractedDay => ({
+      date,
+      airborneSeconds: 600,
+      flights: 1,
+      flew: true,
+      sourceTs: `${date}-ts`,
+    });
+    const drones = new Map<string, DroneEntry[]>([
+      ["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]],
+    ]);
+    const report = buildReport([testDay("2026-06-25"), testDay("2026-06-26")], PERIOD, new Map(), drones);
+    expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([
+      { name: "Андріан", isPerson: true, count: 2 },
+    ]);
+    expect(report.days.find((d) => d.date === "2026-06-26")).not.toHaveProperty("droneReport");
+  });
+  it("omits droneReport entirely when no map is passed", () => {
+    const PERIOD = { start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" };
+    const testDay = (date: string): ExtractedDay => ({
+      date,
+      airborneSeconds: 600,
+      flights: 1,
+      flew: true,
+      sourceTs: `${date}-ts`,
+    });
+    const report = buildReport([testDay("2026-06-25")], PERIOD, new Map());
+    expect(report.days[0]).not.toHaveProperty("droneReport");
   });
 });

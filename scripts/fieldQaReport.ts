@@ -1,4 +1,5 @@
 import { FIELD_TIMEZONE } from "../lib/reconcile";
+import type { DroneEntry } from "../lib/droneReport";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -32,6 +33,8 @@ export interface ReportDay {
   flights: number;
   flew: boolean;
   permalink: string;
+  /** Per-person / per-category drone counts from that day's drone-count report. */
+  droneReport?: DroneEntry[];
 }
 
 export interface FieldQaReport {
@@ -120,20 +123,26 @@ export function toInputsCsv(days: ExtractedDay[]): string {
   return `${lines.join("\n")}\n`;
 }
 
-/** Build the lossless report artifact, attaching a Slack permalink per day. */
+/** Build the lossless report artifact, attaching a Slack permalink and (when
+ *  provided) the day's parsed drone-count entries per day. */
 export function buildReport(
   days: ExtractedDay[],
   period: Period,
   permalinkByTs: Map<string, string>,
+  droneByDate?: Map<string, DroneEntry[]>,
 ): FieldQaReport {
-  const reportDays: ReportDay[] = days.map((d) => ({
-    date: d.date,
-    flightHours: round2(d.airborneSeconds / 3600),
-    airborneMinutes: round2(d.airborneSeconds / 60),
-    flights: d.flew ? d.flights : 0, // a no-fly day carries 0 flights (no phantom count)
-    flew: d.flew,
-    permalink: permalinkByTs.get(d.sourceTs) ?? "",
-  }));
+  const reportDays: ReportDay[] = days.map((d) => {
+    const drones = droneByDate?.get(d.date);
+    return {
+      date: d.date,
+      flightHours: round2(d.airborneSeconds / 3600),
+      airborneMinutes: round2(d.airborneSeconds / 60),
+      flights: d.flew ? d.flights : 0, // a no-fly day carries 0 flights (no phantom count)
+      flew: d.flew,
+      permalink: permalinkByTs.get(d.sourceTs) ?? "",
+      ...(drones && drones.length ? { droneReport: drones } : {}),
+    };
+  });
   const flightHours = round2(reportDays.reduce((sum, d) => sum + d.flightHours, 0));
   return {
     period,
