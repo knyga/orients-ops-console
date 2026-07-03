@@ -10,6 +10,7 @@
  */
 import { MIN_RATIO } from "./reconcile";
 import { addWorkingDays } from "./workdays";
+import type { DroneEntry } from "./droneReport";
 
 export type VerdictStatus = "ACCEPTED" | "PENDING" | "NEEDS_REVIEW" | "ACCEPTED_EXCEPTION" | "REJECTED";
 
@@ -46,6 +47,8 @@ export interface DayVerdict {
   airborneReported: boolean;
   /** Reported deployment window, when known. */
   deployWindow?: { start: string; end: string };
+  /** Per-person / per-category drone counts for the day (display only; not a gate). */
+  droneReport?: DroneEntry[];
 }
 
 export function verdictForDay(input: VerdictInput): DayVerdict {

@@ -24,13 +24,14 @@ import { overlayAirborne, readAirborneOverrides } from "./airborneOverrides";
 import { applyRosterCorrection } from "./rosterCorrection";
 import { buildReport, mergeFlightDays, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
 import { todayInFieldTz } from "./syncChannels";
+import type { DroneEntry } from "./droneReport";
 
 export const GRACE_WORKING_DAYS = 3;
 const DATASETS_CHANNEL = "datasets";
 
 /** Shape of the committed field-qa report we read airborne minutes from (S2). */
 interface FieldQaReport {
-  days: { date: string; airborneMinutes: number }[];
+  days: { date: string; airborneMinutes: number; droneReport?: DroneEntry[] }[];
 }
 
 export interface ComputeVerdictsOptions {
@@ -68,6 +69,10 @@ export async function computeVerdicts(
   const airborneByDate = overlayAirborne(
     new Map<string, number>((fq?.days ?? []).map((d) => [d.date, d.airborneMinutes])),
     await readAirborneOverrides(),
+  );
+
+  const droneByDate = new Map<string, DroneEntry[]>(
+    (fq?.days ?? []).filter((d) => d.droneReport && d.droneReport.length).map((d) => [d.date, d.droneReport!]),
   );
 
   // 2. Video minutes per flight day — live Vimeo, attributed by name date.
@@ -122,7 +127,13 @@ export async function computeVerdicts(
     // Attach the effective crew (parsed "Звіт" roster + any approver correction).
     const parsed = parsedByDate.get(date);
     const eff = applyRosterCorrection(parsed?.roster ?? [], true, corrections.find((c) => c.date === date));
-    return { ...resolved, roster: eff.roster, unknownInitials: parsed?.unknownInitials ?? [] };
+    const drones = droneByDate.get(date);
+    return {
+      ...resolved,
+      roster: eff.roster,
+      unknownInitials: parsed?.unknownInitials ?? [],
+      ...(drones && drones.length ? { droneReport: drones } : {}),
+    };
   });
 
   const report = buildReport(days, period, today, GRACE_WORKING_DAYS);
