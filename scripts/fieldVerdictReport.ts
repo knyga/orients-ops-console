@@ -4,6 +4,7 @@
  * mirrors scripts/fieldopsReport.ts. Domain logic lives in ../lib/fieldDayVerdict.
  */
 import type { DayVerdict } from "../lib/fieldDayVerdict";
+import { formatDroneCsv } from "../lib/droneReport";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -121,7 +122,7 @@ function csvField(value: string): string {
 }
 
 export function toCsv(report: VerdictReport): string {
-  const lines = ["date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster"];
+  const lines = ["date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster,drones"];
   for (const d of report.days) {
     lines.push([
       d.date,
@@ -132,6 +133,7 @@ export function toCsv(report: VerdictReport): string {
       d.datasetStatus,
       csvField(d.reasons.join("; ")),
       csvField(d.roster.join("; ")),
+      csvField(formatDroneCsv(d.droneReport ?? [])),
     ].join(","));
   }
   return `${lines.join("\n")}\n`;

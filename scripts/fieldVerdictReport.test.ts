@@ -42,7 +42,7 @@ describe("summarize / buildReport / toCsv", () => {
 
   it("toCsv emits a header + one row per day, escaping reasons", () => {
     const csv = toCsv(buildReport([day({ status: "NEEDS_REVIEW", reasons: ["video < 50%, no dataset"] })], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3));
-    expect(csv.split("\n")[0]).toBe("date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster");
+    expect(csv.split("\n")[0]).toBe("date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster,drones");
     expect(csv).toMatch(/"video < 50%, no dataset"/);
   });
 
@@ -96,6 +96,20 @@ describe("mergeFlightDays", () => {
   it("sorts the union ascending by date", () => {
     const out = mergeFlightDays(new Map([["2026-06-05", 30]]), [p("2026-06-02", 120, "10:00", "12:00")]);
     expect(out.map((d) => d.date)).toEqual(["2026-06-02", "2026-06-05"]);
+  });
+});
+
+describe("verdict CSV drones column", () => {
+  it("has a drones header and CSV-friendly cell", () => {
+    const dayWithDrones: DayVerdict = {
+      date: "2026-06-25", status: "NEEDS_REVIEW", airborneMinutes: 0, videoMinutes: 0, ratio: null,
+      datasetStatus: "MISSING", withinGrace: false, reasons: [], roster: ["Влад"], unknownInitials: [],
+      airborneReported: false, droneReport: [{ name: "Андріан", isPerson: true, count: 2 }, { name: "15ка", isPerson: false, count: 1 }],
+    };
+    const report = buildReport([dayWithDrones], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3);
+    const csv = toCsv(report);
+    expect(csv.split("\n")[0]).toBe("date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster,drones");
+    expect(csv.split("\n")[1]).toContain("Андріан 2; інші 1 (3)");
   });
 });
 

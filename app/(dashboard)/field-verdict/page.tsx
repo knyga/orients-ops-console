@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { DayVerdict, VerdictStatus } from "@/lib/fieldDayVerdict";
+import { formatDroneLine } from "@/lib/droneReport";
 
 /** The committed verdict artifact shape (reports/field-verdict/<key>.json). */
 interface VerdictReport {
@@ -154,12 +155,13 @@ export default function FieldVerdictPage() {
                 <th className="px-3 py-2 text-center">Dataset</th>
                 <th className="px-3 py-2">Reasons</th>
                 <th className="px-3 py-2">Crew</th>
+                <th className="px-3 py-2">Drones</th>
               </tr>
             </thead>
             <tbody>
               {!report || report.days.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={9} className="px-3 py-6 text-center text-slate-500">
                     {report ? "No flight days in this period." : "Select a committed report."}
                   </td>
                 </tr>
@@ -185,6 +187,9 @@ export default function FieldVerdictPage() {
                       <td className="px-3 py-2 text-slate-500">{d.reasons.join("; ")}</td>
                       <td className="px-3 py-2 text-slate-700">
                         {[...d.roster, ...d.unknownInitials.map((u) => `?${u}`)].join(", ") || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">
+                        {formatDroneLine(d.droneReport ?? [])?.replace("🛸 Дрони: ", "") || "—"}
                       </td>
                     </tr>
                   );
