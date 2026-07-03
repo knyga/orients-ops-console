@@ -1217,3 +1217,408 @@ git commit -m "docs(drones): note structured drone-count classifier + verdict dr
 **Placeholder scan:** none — every code step shows full code.
 
 **Type consistency:** `DroneEntry` defined once in `lib/droneReport.ts` (Task 1) and imported everywhere. `DroneCountResult` shape (Task 2) matches the `DroneClassifier` structural type used by `extractDroneReports` (Task 3). `splitRosterSuffix`'s new `{ body, rosterLine, droneLine }` return is consumed consistently in Tasks 7 (`applyRosterCorrection` uses `{body, droneLine}`, `applyApproval` uses all three); `parseRosterSuffix` still destructures `{ rosterLine }`. `buildReport`'s new 4th param is optional, so existing callers/tests are unaffected until Task 5 passes it.
+
+---
+
+# DELTA 2026-07-03: decline flight days with no drone-count report
+
+> Spec: `docs/superpowers/specs/2026-07-03-no-drone-report-decline-design.md`. Business rule confirmed by the operator 2026-07-03: **#field-qa is the only source of drone-count info; a flight day with no drone-count report there pays no bonuses — hard no-pay.** These tasks run AFTER base Tasks 1–9. Semantics chosen (recommended option, operator was away — flag in the final report): missing report → PENDING within the existing grace window, REJECTED after it; the approver-resolutions overlay still outranks.
+
+### Task 10: Drone gate in `verdictForDay`
+
+**Files:**
+- Modify: `lib/fieldDayVerdict.ts`
+- Test: `lib/fieldDayVerdict.test.ts` (extend)
+
+**Interfaces:**
+- Consumes: nothing new (pure).
+- Produces: `VerdictInput` gains `droneReportPresent?: boolean` (default `true`); `DayVerdict` gains `droneReportPresent?: boolean` (echoed, `undefined` treated as `true` by renderers); reason string `"no drone-count report in #field-qa"`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `lib/fieldDayVerdict.test.ts`:
+
+```ts
+describe("drone-count gate", () => {
+  const base = {
+    flightDate: "2026-06-25",
+    airborneMinutes: 60,
+    videoMinutes: 60,
+    datasetStatus: "POSTED" as const,
+    graceWorkingDays: 3,
+  };
+  it("PENDING with the drone reason within grace, even when video+dataset pass", () => {
+    const v = verdictForDay({ ...base, today: "2026-06-26", droneReportPresent: false });
+    expect(v.status).toBe("PENDING");
+    expect(v.reasons).toContain("no drone-count report in #field-qa");
+    expect(v.droneReportPresent).toBe(false);
+  });
+  it("REJECTED after grace", () => {
+    const v = verdictForDay({ ...base, today: "2026-07-15", droneReportPresent: false });
+    expect(v.status).toBe("REJECTED");
+    expect(v.reasons).toContain("no drone-count report in #field-qa");
+  });
+  it("does not gate a day that did not fly", () => {
+    const v = verdictForDay({ ...base, airborneMinutes: 0, videoMinutes: 0, today: "2026-07-15", droneReportPresent: false });
+    expect(v.status).toBe("NEEDS_REVIEW"); // no-fly reason, NOT a drone rejection
+    expect(v.reasons).not.toContain("no drone-count report in #field-qa");
+  });
+  it("gates a Звіт-only day (airborne not reported) after grace", () => {
+    const v = verdictForDay({ ...base, airborneMinutes: 0, videoMinutes: 0, airborneReported: false, today: "2026-07-15", droneReportPresent: false });
+    expect(v.status).toBe("REJECTED");
+  });
+  it("default (undefined) leaves behavior unchanged", () => {
+    const v = verdictForDay({ ...base, today: "2026-07-15" });
+    expect(v.status).toBe("ACCEPTED");
+    expect(v.droneReportPresent).toBe(true);
+  });
+  it("dataset DECLINED still REJECTED; both reasons kept", () => {
+    const v = verdictForDay({ ...base, datasetStatus: "DECLINED", today: "2026-06-26", droneReportPresent: false });
+    expect(v.status).toBe("REJECTED");
+    expect(v.reasons).toContain("no drone-count report in #field-qa");
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npx vitest run lib/fieldDayVerdict.test.ts`
+Expected: FAIL — `droneReportPresent` not a known property / reasons missing.
+
+- [ ] **Step 3: Implement**
+
+In `lib/fieldDayVerdict.ts`:
+
+Add to `VerdictInput` (after `airborneReported?: boolean;`):
+
+```ts
+  /** false when no drone-count report was attributed to this flight day (#field-qa is the only source). Defaults true (unknown → don't gate). */
+  droneReportPresent?: boolean;
+```
+
+Add to `DayVerdict` (after `airborneReported: boolean;`):
+
+```ts
+  /** false when the day flew but no drone-count report was posted (hard no-pay after grace). undefined = unknown/legacy → treated as true. */
+  droneReportPresent?: boolean;
+```
+
+In `verdictForDay`, after `const withinGrace = today <= windowEnd;` add:
+
+```ts
+  const flew = airborneMinutes > 0 || !airborneReported;
+  const droneOk = (input.droneReportPresent ?? true) || !flew;
+```
+
+After the dataset reasons block add:
+
+```ts
+  if (!droneOk) reasons.push("no drone-count report in #field-qa");
+```
+
+Replace the status chain with:
+
+```ts
+  let status: VerdictStatus;
+  if (datasetStatus === "DECLINED") {
+    status = "REJECTED";
+  } else if (!droneOk && !withinGrace) {
+    status = "REJECTED";
+  } else if (videoOk && datasetOk && droneOk) {
+    status = "ACCEPTED";
+  } else if (withinGrace) {
+    status = "PENDING";
+  } else {
+    status = "NEEDS_REVIEW";
+  }
+```
+
+In the returned object add (next to `airborneReported`):
+
+```ts
+    droneReportPresent: input.droneReportPresent ?? true,
+```
+
+Amend the file's top doc comment: replace the sentence `After the window with a condition unmet → NEEDS_REVIEW (a human decides — never auto-rejected).` with `After the window with a condition unmet → NEEDS_REVIEW (a human decides). Two hard-fails auto-REJECT: an admin-declined dataset, and a flown day with no drone-count report in #field-qa after the grace window (the operator's hard no-pay rule, 2026-07-03) — the approver-resolutions overlay can still rescue either.`
+
+- [ ] **Step 4: Run tests**
+
+Run: `npx vitest run lib/fieldDayVerdict.test.ts`
+Expected: PASS (new + existing).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lib/fieldDayVerdict.ts lib/fieldDayVerdict.test.ts
+git commit -m "feat(drones): hard drone-report gate in verdictForDay (PENDING in grace, REJECTED after)"
+```
+
+---
+
+### Task 11: Presence key discipline + `computeVerdicts` wiring
+
+The gate must never fire on a field-qa report that predates drone extraction. Marker: after extraction, EVERY day carries the `droneReport` key (empty array when no report) — key presence = extraction ran.
+
+**Files:**
+- Modify: `scripts/fieldQaReport.ts` (`buildReport` — always set the key when `droneByDate` is passed)
+- Modify: `scripts/fieldQaReport.test.ts` (adjust one expectation)
+- Modify: `lib/computeVerdicts.ts`
+
+**Interfaces:**
+- Consumes: `droneReportPresent` input (Task 10); `buildReport` 4-arg form (Task 4).
+- Produces: post-extraction field-qa reports have `days[].droneReport` on every day; `computeVerdicts` passes `droneReportPresent` only when the report has drone data.
+
+- [ ] **Step 1: Adjust the Task 4 test expectation**
+
+In `scripts/fieldQaReport.test.ts`, in the `"attaches drone entries by date and omits the field when none"` test, replace:
+
+```ts
+    expect(report.days.find((d) => d.date === "2026-06-26")).not.toHaveProperty("droneReport");
+```
+
+with:
+
+```ts
+    expect(report.days.find((d) => d.date === "2026-06-26")?.droneReport).toEqual([]);
+```
+
+and rename the test to `"attaches drone entries by date; a day with none gets an empty array"`.
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npx vitest run scripts/fieldQaReport.test.ts`
+Expected: FAIL (key absent).
+
+- [ ] **Step 3: Implement in `buildReport`**
+
+In `scripts/fieldQaReport.ts`, replace the spread line
+
+```ts
+      ...(drones && drones.length ? { droneReport: drones } : {}),
+```
+
+with:
+
+```ts
+      ...(droneByDate ? { droneReport: drones ?? [] } : {}),
+```
+
+- [ ] **Step 4: Run tests**
+
+Run: `npx vitest run scripts/fieldQaReport.test.ts`
+Expected: PASS (incl. the `"omits droneReport entirely when no map is passed"` test — unchanged).
+
+- [ ] **Step 5: Wire `computeVerdicts`**
+
+In `lib/computeVerdicts.ts`, after the `droneByDate` map built in Task 6, add:
+
+```ts
+  const droneExtracted = (fq?.days ?? []).some((d) => d.droneReport !== undefined);
+  if (fq && !droneExtracted) {
+    log(
+      `field-verdict: committed field-qa report predates drone extraction — drone gate skipped; re-run \`npm run field-qa -- --start ${period.start} --end ${period.end} --write\`.`,
+    );
+  }
+```
+
+In the `verdictForDay({ ... })` call, add after `deployWindow: fd.deployWindow,`:
+
+```ts
+      ...(droneExtracted ? { droneReportPresent: (droneByDate.get(date)?.length ?? 0) > 0 } : {}),
+```
+
+- [ ] **Step 6: Typecheck + suite**
+
+Run: `npx tsc --noEmit && npm test`
+Expected: clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add scripts/fieldQaReport.ts scripts/fieldQaReport.test.ts lib/computeVerdicts.ts
+git commit -m "feat(drones): computeVerdicts passes droneReportPresent (legacy reports ungated)"
+```
+
+---
+
+### Task 12: Ukrainian REJECTED rendering + publishable REJECTED
+
+REJECTED becomes a publishable (settled) status: the team must see a declined day. Previously REJECTED had no icon/branch and was silently unpublishable.
+
+**Files:**
+- Modify: `lib/verdictPublish.ts`
+- Test: `lib/verdictPublish.test.ts` (extend)
+
+**Interfaces:**
+- Consumes: `DayVerdict.droneReportPresent` (Task 10).
+- Produces: `publishableDays` includes `REJECTED`; `ICON.REJECTED = "⛔"`; `formatDayMessage` REJECTED branch; `ukrainianGaps` drone + dataset-declined phrases.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `lib/verdictPublish.test.ts` (reuse the file's existing DayVerdict factory if one exists; otherwise this self-contained one):
+
+```ts
+const rejectedDay = (over: Partial<DayVerdict> = {}): DayVerdict => ({
+  date: "2026-06-25",
+  status: "REJECTED",
+  airborneMinutes: 60,
+  videoMinutes: 60,
+  ratio: 1,
+  datasetStatus: "POSTED",
+  withinGrace: false,
+  reasons: ["no drone-count report in #field-qa"],
+  roster: ["Влад", "Тарас"],
+  unknownInitials: [],
+  airborneReported: true,
+  droneReportPresent: false,
+  ...over,
+});
+
+describe("REJECTED publishing", () => {
+  it("REJECTED is publishable", () => {
+    expect(publishableDays([rejectedDay()])).toHaveLength(1);
+  });
+  it("renders ⛔ відхилено with the drone gap", () => {
+    const text = formatDayMessage(rejectedDay());
+    expect(text).toContain("⛔");
+    expect(text).toContain("відхилено");
+    expect(text).toContain("немає звіту про кількість дронів у #field-qa");
+    expect(text).toContain("👥 У полі: Влад, Тарас.");
+  });
+  it("dataset-declined REJECTED renders its own gap", () => {
+    const text = formatDayMessage(
+      rejectedDay({ datasetStatus: "DECLINED", droneReportPresent: true, reasons: ["dataset reason declined by an admin"] }),
+    );
+    expect(text).toContain("причину відсутності датасету відхилено");
+  });
+  it("legacy day without droneReportPresent shows no drone gap", () => {
+    const text = formatDayMessage(rejectedDay({ droneReportPresent: undefined, datasetStatus: "DECLINED" }));
+    expect(text).not.toContain("кількість дронів");
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npx vitest run lib/verdictPublish.test.ts`
+Expected: FAIL — REJECTED filtered out; no ⛔ branch.
+
+- [ ] **Step 3: Implement**
+
+In `lib/verdictPublish.ts`:
+
+1. `ICON` map — add `REJECTED: "⛔",`.
+2. `publishableDays` — add `d.status === "REJECTED" ||` to the filter.
+3. Update the top doc comment sentence to: `Only SETTLED, actionable days are publishable: ACCEPTED, NEEDS_REVIEW, ACCEPTED_EXCEPTION, and REJECTED (a declined day is team-facing truth). PENDING days are still inside the grace window …` (keep the rest).
+4. In `formatDayMessage`, before the NEEDS_REVIEW fallthrough, add:
+
+```ts
+  if (day.status === "REJECTED") {
+    const tail = day.airborneReported && day.airborneMinutes > 0
+      ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
+      : `(відео ${vid} хв, ${ds})`;
+    return withRosterSuffix(`⛔ ${date} — відхилено: ${ukrainianGaps(day).join("; ")} ${tail}.`, day.roster);
+  }
+```
+
+5. In `ukrainianGaps`, after the `datasetStatus === "MISSING"` line, add:
+
+```ts
+  if (day.datasetStatus === "DECLINED") gaps.push("причину відсутності датасету відхилено");
+  const flew = !day.airborneReported || day.airborneMinutes > 0;
+  if (flew && day.droneReportPresent === false) gaps.push("немає звіту про кількість дронів у #field-qa");
+```
+
+Note: with the drone gap present, a REJECTED-for-drones day whose video also passed renders `відхилено: немає звіту про кількість дронів у #field-qa (відео 60 хв / 60 хв у повітрі, датасет ✓).` — honest and complete.
+
+- [ ] **Step 4: Run tests**
+
+Run: `npx vitest run lib/verdictPublish.test.ts`
+Expected: PASS (new + existing; if an existing test asserts REJECTED is NOT publishable, update it — the design changed deliberately).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lib/verdictPublish.ts lib/verdictPublish.test.ts
+git commit -m "feat(drones): REJECTED days publishable with ⛔ Ukrainian render + drone gap"
+```
+
+---
+
+### Task 13: Tooling docs — the hard no-pay rule everywhere the tooling reads
+
+**Files:**
+- Modify: `CLAUDE.md` (`field-verdict` + `field-bonus` bullets)
+- Modify: `.claude/skills/field-bonus/SKILL.md`
+- Modify: `.claude/skills/bonus-report/SKILL.md`
+
+- [ ] **Step 1: CLAUDE.md `field-verdict` bullet**
+
+Append to the `npm run field-verdict` bullet: `A flown day with no drone-count report in #field-qa (the ONLY accepted source) is PENDING within the grace window, then auto-REJECTED — the hard no-pay rule (2026-07-03); an approver override in the verdict thread can still rescue it. REJECTED days are published (⛔).`
+
+- [ ] **Step 2: CLAUDE.md `field-bonus` bullet**
+
+In the `npm run field-bonus` bullet, after `a missing report voids that day for its whole crew`, insert: `(#field-qa is the ONLY source of drone-count info — a hard no-pay, no fallback and no rescue except an explicit approver override)`.
+
+- [ ] **Step 3: Skill docs**
+
+Append this paragraph to `.claude/skills/field-bonus/SKILL.md` and `.claude/skills/bonus-report/SKILL.md` (each, phrased as a rule the skill reader must respect):
+
+```markdown
+**Hard rule (operator, 2026-07-03):** #field-qa is the ONLY place drone counts are reported. A flight day whose crew posted no drone-count report there pays NO bonuses — treat it as a hard void (`no-drone-count` / verdict REJECTED after grace), never a reviewable gap to rescue. Do not look for fallback sources; the only escape hatch is an explicit approver override in the verdict thread.
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add CLAUDE.md .claude/skills/field-bonus/SKILL.md .claude/skills/bonus-report/SKILL.md
+git commit -m "docs(drones): hard no-pay rule (no drone report → no bonus) in CLAUDE.md + skills"
+```
+
+---
+
+### Task 14: June recompute + message-update runbook (operator-gated publish)
+
+No code. Run after Tasks 1–13 are green. Everything that writes to Slack stays DRY-RUN; the operator fires the real sends.
+
+- [ ] **Step 1: Preconditions** — `.env` has `POSTGRES_URL`, `ANTHROPIC_API_KEY`, `VIMEO_TOKEN`, Slack tokens. Mirror fresh: `npm run slack-sync`.
+
+- [ ] **Step 2: Re-extract June field-qa (adds `droneReport` to every day)**
+
+```bash
+npm run field-qa -- --start 2026-06-01 --end 2026-06-30 --write
+```
+
+- [ ] **Step 3: Recompute June verdicts (drone gate live)**
+
+```bash
+npm run field-verdict -- --start 2026-06-01 --end 2026-06-30 --write --format table
+```
+
+Review the flips: expect the no-report flight days (heuristically 06-01, 06-09, 06-11, 06-23, 06-24 — the classifier decides) to move to REJECTED with reason `no drone-count report in #field-qa`. Days rescued by existing approver resolutions keep their resolution.
+
+- [ ] **Step 4: Dry-run the published-message updates**
+
+```bash
+npm run field-backfill -- --start 2026-06-01 --end 2026-06-30
+npm run field-publish -- --start 2026-06-01 --end 2026-06-30
+```
+
+`field-backfill` shows `old → new` for already-published days (🛸 line added; flipped days re-render as ⛔ відхилено; approver-overridden days skipped). `field-publish` shows newly-publishable days (e.g. REJECTED days never posted before).
+
+- [ ] **Step 5: OPERATOR ONLY — real sends**
+
+After reviewing the dry-runs, the operator runs:
+
+```bash
+npm run field-backfill -- --start 2026-06-01 --end 2026-06-30 --publish --channel field-qa
+npm run field-publish -- --start 2026-06-01 --end 2026-06-30 --publish --channel field-qa
+```
+
+(Test in the private test channel first if preferred. Nothing in this plan posts autonomously.)
+
+## Delta Self-Review
+
+- Spec §1 (`verdictForDay` gate + default-true legacy) → Task 10. §2 (wiring + legacy guard) → Task 11. §3 (Ukrainian render; REJECTED path) → Task 12. §4 (message updates, operator-gated) → Task 14. §5 (tooling docs) → Task 13. ✅
+- Type consistency: `droneReportPresent?: boolean` optional on both `VerdictInput` and `DayVerdict`; renderers treat `undefined` as true (legacy JSON safe). `droneByDate` map from Task 6 holds only non-empty entries, so `(droneByDate.get(date)?.length ?? 0) > 0` is correct presence. ✅
+- Publishing REJECTED is a deliberate behavior change (dataset-declined days also become publishable) — called out in Task 12 and the spec. ✅
