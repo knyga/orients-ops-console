@@ -75,8 +75,10 @@ New `VerdictInput` fields (all optional, defaulting to today's behavior so legac
 
 - ACCEPTED → **REJECTED**: 06-30 (deploy 120m < 3h; was never paid, so no money change).
 - ACCEPTED → **NEEDS_REVIEW**: 06-03 (no Звіт), 06-16 (Звіт without a deploy window).
-- Paid → **pending**: 06-26 (0 extracted airborne vs 200-min deploy — contradictory data), 06-27 (dataset MISSING) — June `total` drops 20 500 → 17 100 ₴ until an approver settles those two.
-- The remaining 11 counted days (06-01, 02, 05, 06, 10, 13, 15, 17, 18, 19, 29) pass all four axes and keep paying.
+- Paid → **pending**: 06-26 (0 extracted airborne vs 200-min deploy — contradictory data), 06-27 (dataset MISSING) — 3 400 ₴ moves out of `total` until an approver settles those two.
+- Unpaid → **paid**: ACCEPTED_EXCEPTION days now pay by definition («прийнято (виняток)» ⇒ pay). 06-21 (0 airborne, waived + approved by Bohdan; Sunday) starts paying Андріан + Сергій 1 000 ₴ each. 06-04 is also ACCEPTED_EXCEPTION but has no Звіт crew, so nobody is attributable — pays nothing.
+- Net June effect: 20 500 − 3 400 + 2 000 = **19 100 ₴** until 06-26/06-27 are settled.
+- The remaining 11 gate-passing counted days (06-01, 02, 05, 06, 10, 13, 15, 17, 18, 19, 29) keep paying unchanged.
 - The June end-to-end test snapshot asserts exactly this table.
 
 ## Testing
