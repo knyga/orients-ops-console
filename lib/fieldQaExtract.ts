@@ -12,6 +12,7 @@ import "server-only";
 import { downloadFileBase64, fetchMessages } from "./slack";
 import { extractAirborne } from "./flightExtract";
 import { parseAirborneFromText } from "./flightTextParse";
+import { extractDroneReports } from "./extractDroneReports";
 import { writeReport } from "./reports";
 import {
   buildReport,
@@ -69,7 +70,13 @@ export async function extractFieldQa(
 
   const days = validateDays(extracted);
   const permalinkByTs = new Map(summaries.map((m) => [m.ts, m.permalink]));
-  const report = buildReport(days, period, permalinkByTs);
+
+  // Per-day drone-count entries from that day's #field-qa messages (a separate
+  // free-text report, not the stat card). Attributed by post date / explicit date.
+  const fieldQaMessages = messages.filter((m) => m.channel === FIELD_QA_CHANNEL);
+  const droneByDate = await extractDroneReports(fieldQaMessages.map((m) => ({ ts: m.ts, text: m.text })));
+
+  const report = buildReport(days, period, permalinkByTs, droneByDate);
   const inputsCsv = toInputsCsv(days);
 
   if (opts.write) {

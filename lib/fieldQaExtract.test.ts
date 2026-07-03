@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { fetchMessages, writeReport } = vi.hoisted(() => ({
+const { fetchMessages, writeReport, extractDroneReports } = vi.hoisted(() => ({
   fetchMessages: vi.fn(),
   writeReport: vi.fn(),
+  extractDroneReports: vi.fn(),
 }));
 vi.mock("./slack", () => ({ fetchMessages, downloadFileBase64: vi.fn() }));
 vi.mock("./flightExtract", () => ({ extractAirborne: vi.fn() }));
+vi.mock("./extractDroneReports", () => ({ extractDroneReports }));
 vi.mock("./reports", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
   return { ...actual, writeReport };
@@ -17,6 +19,8 @@ beforeEach(() => {
   fetchMessages.mockReset();
   writeReport.mockReset();
   writeReport.mockResolvedValue({ key: "2026-06" });
+  extractDroneReports.mockReset();
+  extractDroneReports.mockResolvedValue(new Map());
 });
 
 // Real parseable card: parseAirborneFromText needs the `Сьогодні літали` line and
@@ -46,5 +50,25 @@ describe("extractFieldQa", () => {
     await extractFieldQa({ start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" }, { write: true });
     expect(writeReport).toHaveBeenCalledOnce();
     expect(writeReport.mock.calls[0][0]).toBe("field-qa");
+  });
+
+  it("passes ALL field-qa messages (not just summary cards) to extractDroneReports and attaches the result", async () => {
+    fetchMessages.mockResolvedValue([
+      summary("2026-06-25", 600, "1000"),
+      { channel: "field-qa", ts: "1001", text: "Андріан R&D - 1шт", files: [], permalink: "https://slack/p2" },
+    ]);
+    extractDroneReports.mockResolvedValue(
+      new Map([["2026-06-25", [{ name: "Андріан", isPerson: true, count: 1 }]]]),
+    );
+
+    const { report } = await extractFieldQa({ start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" });
+
+    expect(extractDroneReports).toHaveBeenCalledWith([
+      { ts: "1000", text: expect.stringContaining("Статистика") },
+      { ts: "1001", text: "Андріан R&D - 1шт" },
+    ]);
+    expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([
+      { name: "Андріан", isPerson: true, count: 1 },
+    ]);
   });
 });
