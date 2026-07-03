@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDayMessage, formatOverride, publishableDays, ROSTER_MARKER, splitRosterSuffix, withRosterSuffix } from "./verdictPublish";
+import { formatDayMessage, formatOverride, publishableDays, ROSTER_MARKER, splitRosterSuffix, withRosterSuffix, parseRosterSuffix, withDroneLine } from "./verdictPublish";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
@@ -170,7 +170,7 @@ describe("crew suffix", () => {
 
   it("omits the suffix for an empty roster and splits cleanly when absent", () => {
     expect(withRosterSuffix("body", [])).toBe("body");
-    expect(splitRosterSuffix("body")).toEqual({ body: "body", rosterLine: null });
+    expect(splitRosterSuffix("body")).toEqual({ body: "body", rosterLine: null, droneLine: null });
   });
 
   it("formatDayMessage appends the crew line for an ACCEPTED day", () => {
@@ -190,5 +190,62 @@ describe("crew suffix", () => {
     expect(result).toContain("~⚠️ 2026-06-04 — потрібна перевірка: …~");
     expect(result).toContain(`${ROSTER_MARKER}Тарас.`);
     expect(result).not.toContain("~👥");
+  });
+});
+
+const droneBase: DayVerdict = {
+  date: "2026-06-25",
+  status: "NEEDS_REVIEW",
+  airborneMinutes: 0,
+  videoMinutes: 0,
+  ratio: null,
+  datasetStatus: "MISSING",
+  withinGrace: false,
+  reasons: [],
+  roster: ["Влад", "Тарас"],
+  unknownInitials: [],
+  airborneReported: false,
+  deployWindow: { start: "16:30", end: "19:00" },
+  droneReport: [
+    { name: "Андріан", isPerson: true, count: 2 },
+    { name: "Демонстраційні", isPerson: false, count: 8 },
+  ],
+};
+
+describe("formatDayMessage drone line", () => {
+  it("appends the drone line after the crew suffix", () => {
+    const msg = formatDayMessage(droneBase);
+    expect(msg).toContain("\n👥 У полі: Влад, Тарас.");
+    expect(msg).toContain("\n🛸 Дрони: Андріан 2, інші 8 (усього 10)");
+    expect(msg.indexOf("👥")).toBeLessThan(msg.indexOf("🛸")); // crew before drones
+  });
+  it("omits the drone line when there is no drone report", () => {
+    expect(formatDayMessage({ ...droneBase, droneReport: undefined })).not.toContain("🛸");
+  });
+});
+
+describe("region discipline", () => {
+  const withDrones = formatDayMessage(droneBase);
+  it("splitRosterSuffix peels the crew line drone-free and returns the drone line", () => {
+    const { body, rosterLine, droneLine } = splitRosterSuffix(withDrones);
+    expect(rosterLine).toBe("👥 У полі: Влад, Тарас.");
+    expect(droneLine).toBe("🛸 Дрони: Андріан 2, інші 8 (усього 10)");
+    expect(body).not.toContain("👥");
+    expect(body).not.toContain("🛸");
+  });
+  it("parseRosterSuffix ignores the drone line", () => {
+    expect(parseRosterSuffix(withDrones)).toEqual(["Влад", "Тарас"]);
+  });
+  it("withDroneLine round-trips a re-composed message", () => {
+    const { body, rosterLine, droneLine } = splitRosterSuffix(withDrones);
+    const recomposed = withDroneLine(`${body}\n${rosterLine}`, droneBase.droneReport);
+    expect(recomposed).toBe(withDrones);
+    expect(droneLine).not.toBeNull();
+  });
+  it("no drone line → droneLine null, crew still parses", () => {
+    const plain = formatDayMessage({ ...droneBase, droneReport: undefined });
+    const { rosterLine, droneLine } = splitRosterSuffix(plain);
+    expect(droneLine).toBeNull();
+    expect(rosterLine).toBe("👥 У полі: Влад, Тарас.");
   });
 });

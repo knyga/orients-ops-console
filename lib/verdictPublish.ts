@@ -11,6 +11,7 @@
 import { MIN_RATIO } from "./reconcile";
 import { dateWithWeekday } from "./workdays";
 import type { DayVerdict } from "./fieldDayVerdict";
+import { formatDroneLine, type DroneEntry } from "./droneReport";
 
 const ICON: Record<string, string> = {
   ACCEPTED: "✅",
@@ -27,11 +28,31 @@ export function withRosterSuffix(body: string, roster: string[]): string {
   return `${body}\n${ROSTER_MARKER}${roster.join(", ")}.`;
 }
 
-/** Split a published message into body + crew suffix at the last crew marker. Pure. */
-export function splitRosterSuffix(text: string): { body: string; rosterLine: string | null } {
-  const idx = text.lastIndexOf(`\n${ROSTER_MARKER}`);
-  if (idx === -1) return { body: text, rosterLine: null };
-  return { body: text.slice(0, idx), rosterLine: text.slice(idx + 1) };
+export const DRONE_MARKER = "🛸 Дрони: ";
+
+/** Append the drone-count line. Null/empty entries → text unchanged. Pure. */
+export function withDroneLine(text: string, entries: DroneEntry[] | undefined): string {
+  const line = entries ? formatDroneLine(entries) : null;
+  return line ? `${text}\n${line}` : text;
+}
+
+/** Peel a trailing "\n🛸 Дрони: …" line off the end. Pure. */
+export function splitDroneLine(text: string): { rest: string; droneLine: string | null } {
+  const idx = text.lastIndexOf(`\n${DRONE_MARKER}`);
+  if (idx === -1) return { rest: text, droneLine: null };
+  const after = text.slice(idx + 1);
+  if (after.includes("\n")) return { rest: text, droneLine: null }; // not the trailing line
+  return { rest: text.slice(0, idx), droneLine: after };
+}
+
+/** Split a published message into body + crew suffix + drone line. The crew
+ *  suffix is the line at the last crew marker with any trailing drone line
+ *  removed, so parseRosterSuffix stays drone-free. Pure. */
+export function splitRosterSuffix(text: string): { body: string; rosterLine: string | null; droneLine: string | null } {
+  const { rest, droneLine } = splitDroneLine(text);
+  const idx = rest.lastIndexOf(`\n${ROSTER_MARKER}`);
+  if (idx === -1) return { body: rest, rosterLine: null, droneLine };
+  return { body: rest.slice(0, idx), rosterLine: rest.slice(idx + 1), droneLine };
 }
 
 /** Parse the crew names from a published message's crew suffix ([] when none). Pure. */
@@ -110,7 +131,10 @@ export function formatDayMessage(day: DayVerdict): string {
   const ds = datasetMarker(day.datasetStatus);
 
   if (day.status === "ACCEPTED") {
-    return withRosterSuffix(`✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`, day.roster);
+    return withDroneLine(
+      withRosterSuffix(`✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`, day.roster),
+      day.droneReport,
+    );
   }
   if (day.status === "ACCEPTED_EXCEPTION") {
     // Machine gaps are rebuilt in Ukrainian (the English strings in day.reasons
@@ -121,13 +145,19 @@ export function formatDayMessage(day: DayVerdict): string {
       ? day.reasons[day.reasons.length - 1].replace(/^exception/, "виняток")
       : "";
     const parts = [...ukrainianGaps(day), note].filter(Boolean);
-    return withRosterSuffix(`🟡 ${date} — прийнято (виняток): ${parts.join("; ")}.`, day.roster);
+    return withDroneLine(
+      withRosterSuffix(`🟡 ${date} — прийнято (виняток): ${parts.join("; ")}.`, day.roster),
+      day.droneReport,
+    );
   }
   // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
   const tail = day.airborneReported && day.airborneMinutes > 0
     ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
     : `(відео ${vid} хв, ${ds})`;
-  return withRosterSuffix(`${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} ${tail}.`, day.roster);
+  return withDroneLine(
+    withRosterSuffix(`${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} ${tail}.`, day.roster),
+    day.droneReport,
+  );
 }
 
 /**

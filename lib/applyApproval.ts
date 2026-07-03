@@ -64,11 +64,13 @@ export async function applyApproverDecision(
     return { applied: false, alreadyAcked: false };
   }
 
-  // Strike only the verdict BODY; preserve the crew suffix (👥 У полі: …) so an
-  // override and a roster correction edit disjoint regions of the message.
-  const { body, rosterLine } = splitRosterSuffix(entry.text);
+  // Strike only the verdict BODY; preserve the crew suffix (👥 У полі: …) and the
+  // drone line so an override and the other edits touch disjoint regions of the
+  // message.
+  const { body, rosterLine, droneLine } = splitRosterSuffix(entry.text);
   const { updatedText: struck, replyText } = formatOverride(body, decision, by, reason);
-  const updatedText = rosterLine ? `${struck}\n${rosterLine}` : struck;
+  const tail = [rosterLine, droneLine].filter(Boolean).join("\n");
+  const updatedText = tail ? `${struck}\n${tail}` : struck;
   // Key the edit + ack by the DECISION, not the (non-deterministic) reason text,
   // so a redelivered Slack event dedups to a single post while a genuine flip
   // (accept → reject) still reposts. See lib/outboundKeys.ts.

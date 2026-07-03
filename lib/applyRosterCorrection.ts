@@ -37,9 +37,11 @@ export async function applyRosterDecision(args: {
   const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
   if (!channel) return { applied: false };
 
-  // Edit ONLY the crew suffix; keep the body (incl. any override strike) intact.
-  const { body } = splitRosterSuffix(entry.text);
-  const updatedText = withRosterSuffix(body, outcome.roster);
+  // Edit ONLY the crew suffix; keep the body (incl. any override strike) AND the
+  // trailing drone line intact — each is a disjoint region.
+  const { body, droneLine } = splitRosterSuffix(entry.text);
+  const withRoster = withRosterSuffix(body, outcome.roster);
+  const updatedText = droneLine ? `${withRoster}\n${droneLine}` : withRoster;
   if (updatedText === entry.text) return { applied: false }; // suffix already current
 
   await updateMessage(channel.id, entry.ts, updatedText, {
