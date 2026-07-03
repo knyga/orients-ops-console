@@ -71,10 +71,12 @@ New `VerdictInput` fields (all optional, defaulting to today's behavior so legac
 
 ### 6. June 2026 retro impact (expected after recompute)
 
-- ACCEPTED → **REJECTED**: 06-01 (no drone-count report), 06-30 (deploy 120m < 3h).
+*(Baseline: June total 20 500 ₴ after the 07-03 `forDate` attribution fix (`e3c4e5d`) un-voided 06-01 — its drone report was a lagged post naming 01.06.)*
+
+- ACCEPTED → **REJECTED**: 06-30 (deploy 120m < 3h; was never paid, so no money change).
 - ACCEPTED → **NEEDS_REVIEW**: 06-03 (no Звіт), 06-16 (Звіт without a deploy window).
-- Paid → **pending**: 06-26 (0 extracted airborne vs 200-min deploy — contradictory data), 06-27 (dataset MISSING) — June `total` drops 19 100 → 15 700 ₴ until an approver settles those two.
-- The remaining 10 counted days (06-02, 05, 06, 10, 13, 15, 17, 18, 19, 29) pass all four axes and keep paying.
+- Paid → **pending**: 06-26 (0 extracted airborne vs 200-min deploy — contradictory data), 06-27 (dataset MISSING) — June `total` drops 20 500 → 17 100 ₴ until an approver settles those two.
+- The remaining 11 counted days (06-01, 02, 05, 06, 10, 13, 15, 17, 18, 19, 29) pass all four axes and keep paying.
 - The June end-to-end test snapshot asserts exactly this table.
 
 ## Testing
