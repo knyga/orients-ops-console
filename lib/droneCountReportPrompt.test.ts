@@ -8,8 +8,8 @@ describe("droneCountReportPrompt", () => {
       properties: Record<string, unknown>;
       required: string[];
     };
-    expect(Object.keys(schema.properties)).toEqual(["present", "note"]);
-    expect(schema.required).toEqual(["present", "note"]);
+    expect(Object.keys(schema.properties)).toEqual(["entries", "forDate", "note"]);
+    expect(schema.required).toEqual(["entries", "note"]);
   });
 
   it("embeds the day's text and asks for the tool call", () => {

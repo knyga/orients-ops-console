@@ -6,8 +6,8 @@
  */
 import "server-only";
 import { fetchVideosInPeriod } from "./vimeo";
-import { videoFlightDate, videoUploadDate } from "./reconcile";
-import { classifyDroneCount } from "./droneCountReport";
+import { videoFlightDate } from "./reconcile";
+import { extractDroneReports } from "./extractDroneReports";
 import { readChannelMessages } from "./slackMirror";
 import { writeReport } from "./reports";
 import { parseMonth } from "./fieldReports";
@@ -49,27 +49,20 @@ export async function computeBonusReport(
   log(`field-bonus: ${losses.filter((l) => !l.found).length} unrecovered loss(es)`);
 
   // Drone-count gate: a day counts only if a drone-count report was posted in
-  // #field-qa that day. Classify only otherwise-counted days (bounds Claude calls).
-  // Drone-count posts are bucketed by their Slack POST day (same-day by design;
-  // see spec Risk #1) — intentionally NOT lagged like videoFlightDate above.
-  const msgKyivDate = (ts: string) => videoUploadDate(new Date(Number(ts) * 1000).toISOString());
-  const textByDate = new Map<string, string[]>();
-  for (const m of messages) {
-    const d = msgKyivDate(m.ts);
-    const arr = textByDate.get(d) ?? [];
-    if (m.text) arr.push(m.text);
-    textByDate.set(d, arr);
-  }
+  // #field-qa FOR that day. Reports are classified per Kyiv post day and
+  // attributed to the date the text names (forDate) or, absent that, the post
+  // day — so a next-morning "Готові 01.06" still credits 06-01 (gate design
+  // Risk #1, which bit on 2026-06-01). Every post day is classified (the lagged
+  // report lives on a non-flight day), same as the verdict extraction pass.
+  const droneByDate = await extractDroneReports(messages.map((m) => ({ ts: m.ts, text: m.text })));
   const droneCountByDate: Record<string, boolean> = {};
   for (const r of reports) {
     // Use the SAME rounded video value + constants as the pure calculator so the
-    // classify-eligibility test here can never drift from computeBonuses' gate.
+    // gate-eligibility test here can never drift from computeBonuses' gate.
     const videoMin = roundVideoMin(videoMinutesByDate[r.flightDate] ?? 0);
     const otherwiseCounted = r.deployMin != null && r.deployMin >= MIN_DEPLOY_MIN && videoMin >= MIN_VIDEO_MIN;
     if (!otherwiseCounted) continue;
-    const dayText = (textByDate.get(r.flightDate) ?? []).join("\n\n");
-    const cls = await classifyDroneCount(dayText);
-    droneCountByDate[r.flightDate] = cls.present;
+    droneCountByDate[r.flightDate] = (droneByDate.get(r.flightDate)?.length ?? 0) > 0;
   }
   const voided = Object.entries(droneCountByDate).filter(([, present]) => !present).map(([d]) => d);
   log(`field-bonus: ${Object.keys(droneCountByDate).length - voided.length}/${Object.keys(droneCountByDate).length} counted days have a drone-count report${voided.length ? ` (voided: ${voided.join(", ")})` : ""}`);
