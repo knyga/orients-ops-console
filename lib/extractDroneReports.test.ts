@@ -41,4 +41,22 @@ describe("extractDroneReports", () => {
     const out = await extractDroneReports(messages, classify);
     expect(out.size).toBe(0);
   });
+
+  it("isolates classifier failures per day, continuing with other days", async () => {
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-06-25T09:00:00Z"), text: "Андріан R&D - 1шт" },
+      { ts: tsFor("2026-06-26T09:00:00Z"), text: "Влад R&D - 2шт" },
+    ];
+    const classify = vi.fn(async (text: string) => {
+      if (text.includes("Влад")) {
+        throw new Error("Classifier API error");
+      }
+      return { entries: [E("Андріан", true, 1)], forDate: null };
+    });
+    const out = await extractDroneReports(messages, classify);
+    // Should have the successful day
+    expect(out.get("2026-06-25")).toEqual([E("Андріан", true, 1)]);
+    // Failed day should not be in the map
+    expect(out.has("2026-06-26")).toBe(false);
+  });
 });

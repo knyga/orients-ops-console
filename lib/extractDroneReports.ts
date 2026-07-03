@@ -33,7 +33,15 @@ export async function extractDroneReports(
 
   const byDate = new Map<string, DroneEntry[]>();
   for (const [postDate, texts] of textByPostDate) {
-    const { entries, forDate } = await classify(texts.join("\n\n"));
+    let entries: DroneEntry[];
+    let forDate: string | null;
+    try {
+      ({ entries, forDate } = await classify(texts.join("\n\n")));
+    } catch (err) {
+      console.error(`extractDroneReports: classifier failed for ${postDate}:`, err);
+      entries = [];
+      forDate = null;
+    }
     if (entries.length === 0) continue;
     const target = forDate ?? postDate;
     byDate.set(target, [...(byDate.get(target) ?? []), ...entries]);
