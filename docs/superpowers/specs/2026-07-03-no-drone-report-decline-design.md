@@ -1,7 +1,7 @@
 # Decline flight days with no drone-count report (verdict axis)
 
 **Date:** 2026-07-03
-**Status:** Design written autonomously — the status-semantics decision below was made on the recommended option while the operator was away; flagged for review.
+**Status:** SUPERSEDED by `2026-07-03-unified-day-qualification-design.md` (operator-approved), which absorbs this axis into the unified verdict⇔bonus gate and changes the semantics to **immediate REJECTED** (no grace). Kept for the problem statement and the tooling-docs checklist; do not implement the PENDING-within-grace variant below.
 **Builds on:** `2026-07-02-drone-counts-in-verdict-design.md` (per-person drone counts in verdict messages — structured extraction, `days[].droneReport`, the `🛸 Дрони:` line).
 
 ## Problem
