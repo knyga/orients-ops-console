@@ -10,7 +10,7 @@
  *
  * Runs only under Node with `--conditions=react-server` (see package.json) so the
  * `server-only` import in ../lib/jira resolves to its empty module. Needs
- * JIRA_* env incl. JIRA_DEFAULT_PROJECT + JIRA_MRLAB_PROJECT.
+ * JIRA_* env; JIRA_DEFAULT_PROJECT + JIRA_MRLAB_ACCOUNT_ID override the hardcoded defaults.
  */
 import { personByQuery } from "../lib/people";
 import { routeIssue, routingConfigFromEnv } from "../lib/jiraRouting";
