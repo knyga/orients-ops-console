@@ -3,12 +3,13 @@
  * into the concise Slack message the bot would post, and decides which days are
  * publishable. No imports beyond the verdict TYPE; unit-tested.
  *
- * Only SETTLED, actionable days are publishable: ACCEPTED, NEEDS_REVIEW, and
- * ACCEPTED_EXCEPTION. PENDING days are still inside the grace window (videos /
- * datasets may yet arrive), so the bot stays quiet about them — posting a
- * "pending" verdict would be noise that flips later.
+ * Only SETTLED, actionable days are publishable: ACCEPTED, NEEDS_REVIEW,
+ * ACCEPTED_EXCEPTION, and REJECTED. PENDING days are still inside the grace
+ * window (videos / datasets may yet arrive), so the bot stays quiet about them
+ * — posting a "pending" verdict would be noise that flips later.
  */
 import { MIN_RATIO } from "./reconcile";
+import { MIN_DEPLOY_MIN, MIN_VIDEO_MIN } from "./fieldDayVerdict";
 import { dateWithWeekday } from "./workdays";
 import type { DayVerdict } from "./fieldDayVerdict";
 import { formatDroneLine, type DroneEntry } from "./droneReport";
@@ -18,6 +19,7 @@ const ICON: Record<string, string> = {
   PENDING: "⏳",
   NEEDS_REVIEW: "⚠️",
   ACCEPTED_EXCEPTION: "🟡",
+  REJECTED: "⛔",
 };
 
 export const ROSTER_MARKER = "👥 У полі: ";
@@ -73,7 +75,8 @@ export function publishableDays(days: DayVerdict[]): DayVerdict[] {
     (d) =>
       d.status === "ACCEPTED" ||
       d.status === "NEEDS_REVIEW" ||
-      d.status === "ACCEPTED_EXCEPTION",
+      d.status === "ACCEPTED_EXCEPTION" ||
+      d.status === "REJECTED",
   );
 }
 
@@ -130,6 +133,15 @@ export function formatDayMessage(day: DayVerdict): string {
   const pct = day.ratio === null ? "—" : `${(day.ratio * 100).toFixed(0)}%`;
   const ds = datasetMarker(day.datasetStatus);
 
+  if (day.status === "REJECTED") {
+    const tail = day.airborneReported && day.airborneMinutes > 0
+      ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
+      : `(відео ${vid} хв, ${ds})`;
+    return withDroneLine(
+      withRosterSuffix(`⛔ ${date} — відхилено: ${ukrainianGaps(day).join("; ")} ${tail}.`, day.roster),
+      day.droneReport,
+    );
+  }
   if (day.status === "ACCEPTED") {
     return withDroneLine(
       withRosterSuffix(`✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`, day.roster),
@@ -163,25 +175,37 @@ export function formatDayMessage(day: DayVerdict): string {
 /**
  * The flight day's unmet recording-completeness gaps, phrased in Ukrainian and
  * derived purely from the verdict's structured fields (never the English
- * `reasons` strings). Shared by the NEEDS_REVIEW and ACCEPTED_EXCEPTION renders.
+ * `reasons` strings). Shared by the NEEDS_REVIEW, ACCEPTED_EXCEPTION, and REJECTED renders.
  */
 function ukrainianGaps(day: DayVerdict): string[] {
   const air = day.airborneMinutes.toFixed(0);
   const vid = day.videoMinutes.toFixed(0);
   const pct = day.ratio === null ? "—" : `${(day.ratio * 100).toFixed(0)}%`;
   const gaps: string[] = [];
-  const videoOk = day.ratio !== null && day.ratio >= MIN_RATIO;
+  const videoOk = day.ratio !== null && day.ratio >= MIN_RATIO && day.videoMinutes >= MIN_VIDEO_MIN;
   if (!videoOk) {
-    if (day.ratio === null) {
-      gaps.push(
-        day.airborneReported
-          ? `за телеметрією польотів не було (0 хв у повітрі)${day.deployWindow ? `, хоча у звіті — виїзд ${day.deployWindow.start}–${day.deployWindow.end}` : ""}`
-          : `політ відбувся${day.deployWindow ? ` (${day.deployWindow.start}–${day.deployWindow.end})` : ""}, але час у повітрі не вказано`,
-      );
-    } else {
-      gaps.push(`відео ${vid} хв — лише ${pct} від ${air} хв у повітрі (< 50%)`);
+    if (day.ratio === null || day.ratio < MIN_RATIO) {
+      if (day.ratio === null) {
+        gaps.push(
+          day.airborneReported
+            ? `за телеметрією польотів не було (0 хв у повітрі)${day.deployWindow ? `, хоча у звіті — виїзд ${day.deployWindow.start}–${day.deployWindow.end}` : ""}`
+            : `політ відбувся${day.deployWindow ? ` (${day.deployWindow.start}–${day.deployWindow.end})` : ""}, але час у повітрі не вказано`,
+        );
+      } else {
+        gaps.push(`відео ${vid} хв — лише ${pct} від ${air} хв у повітрі (< 50%)`);
+      }
     }
   }
+  const flew = day.airborneMinutes > 0 || !day.airborneReported;
+  if (videoOk === false && day.ratio !== null && day.ratio >= MIN_RATIO) {
+    // ratio passed but the absolute floor did not
+    gaps.push(`відео ${day.videoMinutes.toFixed(1)} хв — менше ${MIN_VIDEO_MIN} хв`);
+  }
+  if (flew && day.deployMin != null && day.deployMin < MIN_DEPLOY_MIN) gaps.push(`виїзд ${day.deployMin} хв — менше 3 год`);
+  if (flew && day.deployMin === null) gaps.push("у Звіті не вказано час виїзду");
+  if (flew && day.droneReportPresent === false) gaps.push("немає звіту про кількість дронів у #field-qa");
+  if (flew && day.hasZvit === false) gaps.push("політ зафіксовано, але немає Звіту (екіпаж невідомий)");
   if (day.datasetStatus === "MISSING") gaps.push("немає повідомлення про датасет за цей день");
+  if (day.datasetStatus === "DECLINED") gaps.push("датасет відхилено адміністратором");
   return gaps;
 }

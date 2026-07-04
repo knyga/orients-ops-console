@@ -249,3 +249,58 @@ describe("region discipline", () => {
     expect(rosterLine).toBe("👥 У полі: Влад, Тарас.");
   });
 });
+
+describe("REJECTED rendering", () => {
+  const rejected: DayVerdict = {
+    date: "2026-06-30", status: "REJECTED", airborneMinutes: 18.1, videoMinutes: 29,
+    ratio: 29 / 18.1, datasetStatus: "POSTED", withinGrace: false,
+    reasons: ["deployment 120m is under 3h"], roster: ["Влад", "Любомир"],
+    unknownInitials: [], airborneReported: true, deployMin: 120, droneReportPresent: true, hasZvit: true,
+  };
+
+  it("renders відхилено with the short-deploy gap in Ukrainian", () => {
+    const msg = formatDayMessage(rejected);
+    expect(msg).toContain("⛔ 2026-06-30");
+    expect(msg).toContain("відхилено: виїзд 120 хв — менше 3 год");
+    expect(msg).toContain("👥 У полі: Влад, Любомир.");
+    expect(msg).not.toMatch(/прийнято/);
+  });
+
+  it("renders the missing-drone-report gap", () => {
+    const msg = formatDayMessage({ ...rejected, deployMin: 240, droneReportPresent: false, reasons: ["no drone-count report in #field-qa"] });
+    expect(msg).toContain("немає звіту про кількість дронів у #field-qa");
+  });
+
+  it("REJECTED days are publishable", () => {
+    expect(publishableDays([rejected])).toHaveLength(1);
+  });
+});
+
+describe("new curable-gap phrases", () => {
+  it("no-Звіт day", () => {
+    const day: DayVerdict = {
+      date: "2026-06-03", status: "NEEDS_REVIEW", airborneMinutes: 42.75, videoMinutes: 36,
+      ratio: 36 / 42.75, datasetStatus: "POSTED", withinGrace: false, reasons: [], roster: [],
+      unknownInitials: [], airborneReported: true, hasZvit: false,
+    };
+    expect(formatDayMessage(day)).toContain("політ зафіксовано, але немає Звіту (екіпаж невідомий)");
+  });
+
+  it("deploy window not recorded", () => {
+    const day: DayVerdict = {
+      date: "2026-06-16", status: "NEEDS_REVIEW", airborneMinutes: 36.48, videoMinutes: 93,
+      ratio: 93 / 36.48, datasetStatus: "POSTED", withinGrace: false, reasons: [], roster: ["Андріан", "Надія"],
+      unknownInitials: [], airborneReported: true, deployMin: null, hasZvit: true,
+    };
+    expect(formatDayMessage(day)).toContain("у Звіті не вказано час виїзду");
+  });
+
+  it("video under the 2-minute floor", () => {
+    const day: DayVerdict = {
+      date: "2026-06-05", status: "NEEDS_REVIEW", airborneMinutes: 2, videoMinutes: 1.5,
+      ratio: 0.75, datasetStatus: "POSTED", withinGrace: false, reasons: [], roster: [],
+      unknownInitials: [], airborneReported: true,
+    };
+    expect(formatDayMessage(day)).toContain("відео 1.5 хв — менше 2 хв");
+  });
+});
