@@ -46,4 +46,16 @@ describe("computeBonusReport", () => {
     expect(report.people.map((p) => p.name)).toEqual(["Андріан"]);
     expect(report.pendingDays.map((d) => d.date)).toEqual(["2026-06-27"]);
   });
+
+  it("counts a 0-airborne day with a known deploy window as flight evidence for pendingDays", async () => {
+    mocks.computeVerdicts.mockResolvedValue({ days: [
+      { date: "2026-06-26", status: "NEEDS_REVIEW", roster: ["Андріан", "Надія"], unknownInitials: [],
+        deployMin: 200, videoMinutes: 36.7, airborneMinutes: 0, airborneReported: true,
+        reasons: ["drones did not fly (0 flights, 0 min airborne)"], ratio: null,
+        datasetStatus: "POSTED", withinGrace: false },
+    ]});
+    const report = await computeBonusReport({ start: "2026-06-01", end: "2026-06-30" });
+    const pending = report.pendingDays.find((d) => d.date === "2026-06-26");
+    expect(pending?.amountAtStake).toBe(1400);
+  });
 });

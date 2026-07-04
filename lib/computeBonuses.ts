@@ -57,7 +57,13 @@ export async function computeBonusReport(
     videoMin: roundVideoMin(d.videoMinutes),
     start: parsedByDate.get(d.date)?.start ?? null,
     reasons: d.reasons,
-    flew: d.airborneMinutes > 0 || !d.airborneReported,
+    // Flight evidence = airborne minutes, an unquantified Звіт, or a known
+    // deploy window (0-airborne + deploy window = contradictory data, still
+    // money at stake for review).
+    flew:
+      d.airborneMinutes > 0 ||
+      !d.airborneReported ||
+      (d.deployMin ?? parsedByDate.get(d.date)?.deployMin ?? null) != null,
   }));
   const report = computeBonuses({ period, days, losses, corrections });
   log(`field-bonus: ${report.days.filter((x) => x.counted).length} counted day(s), ${report.pendingDays.length} pending, ${report.voidedDays.length} voided`);
