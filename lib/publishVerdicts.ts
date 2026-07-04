@@ -6,9 +6,10 @@
  * effectful driver, mirroring lib/computeVerdicts.
  *
  * Posts only SETTLED days (publishableDays: ACCEPTED / NEEDS_REVIEW /
- * ACCEPTED_EXCEPTION — never PENDING) that are not already in the published log.
- * Idempotent: the published log is persisted after EACH post so a mid-run failure
- * never re-posts an already-sent day.
+ * ACCEPTED_EXCEPTION / REJECTED — never PENDING, which may still flip inside the
+ * grace window) that are not already in the published log. Machine hard-fails
+ * post as ⛔ «відхилено». Idempotent: the published log is persisted after EACH
+ * post so a mid-run failure never re-posts an already-sent day.
  */
 import "server-only";
 import { postMessage } from "./slack";
