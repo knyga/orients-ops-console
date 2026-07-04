@@ -1,6 +1,6 @@
 ---
 name: field-bonus
-description: Use when answering questions about per-person field bonuses — "what did X earn in May?", "how many qualifying trips". Computes bonuses from #field-qa flight hours + Vimeo video data. Gate: 3h deployment + 2 min video per trip.
+description: Use when answering questions about per-person field bonuses — "what did X earn in May?", "how many qualifying trips". Computes bonuses from #field-qa flight hours + Vimeo video data. Gate: the day's field-verdict status (unified 4-axis gate — deploy, video, drone-count, dataset).
 ---
 
 # Field Bonus

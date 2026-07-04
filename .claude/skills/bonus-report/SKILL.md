@@ -30,10 +30,13 @@ settled yet (PENDING/NEEDS_REVIEW) are listed unpaid in `pendingDays`, not
 `voidedDays` — this is separate from the monthly `>3 drones lost` team
 cutoff, which zeroes the whole period.
 
-The drone-count classifier now returns structured per-person entries
+The drone-count classifier returns structured per-person entries
 (`classifyDroneCount → { present, entries, forDate }`), also used to render the
-verdict message's `🛸 Дрони:` line; `present` (derived from `entries`) still
-gates the bonus, so this gate's semantics are unchanged.
+verdict message's `🛸 Дрони:` line. The drone-count check itself now flows
+through the verdict — it's computed once by `field-verdict`
+(`droneReportPresent`, from `days[].droneReport`) and consumed as-is here; the
+duplicate live `classifyDroneCount` call that used to run inside
+`computeBonuses` has been deleted.
 
 ## How to generate the report
 
@@ -54,7 +57,9 @@ From `reports/field-bonus/<period>.json` (or `npm run field-bonus -- … --forma
 - `total` — the summed net payout (0 if `teamZeroed`).
 - `people[]` — per person: `{ name, trips, early, weekend, gross, penaltyPct, net }`. **`net` is the amount to pay.**
 - `teamZeroed` — true iff >3 drones lost in the period (whole period zeroed).
-- `voidedDays[]` — `{ date, roster, reason }` for days voided by the drone-count gate.
+- `voidedDays[]` — `{ date, roster, reason }` for every REJECTED day with its
+  verdict reason (any axis: deploy < 3h, missing drone-count report,
+  admin-declined dataset, or an approver rejection).
 - `pendingDays[]` — unsettled days with the amount at stake — chase these before month-end payout.
 - `flags[]` — includes `no_drone_count` entries and `counted_no_video` warnings.
 
