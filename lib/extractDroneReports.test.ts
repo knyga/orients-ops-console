@@ -8,16 +8,18 @@ const E = (name: string, isPerson: boolean, count: number): DroneEntry => ({ nam
 const tsFor = (isoUtc: string) => String(Math.floor(new Date(isoUtc).getTime() / 1000));
 
 describe("extractDroneReports", () => {
-  it("attributes to the post date and merges same-day reports", async () => {
+  it("attributes to the post date; a later same-day report replaces the earlier (snapshot, not increment)", async () => {
     const messages: DroneMessage[] = [
       { ts: tsFor("2026-06-25T09:00:00Z"), text: "Андріан R&D - 1шт" },
-      { ts: tsFor("2026-06-25T15:00:00Z"), text: "Андріан R&D - 1шт" },
+      { ts: tsFor("2026-06-25T15:00:00Z"), text: "Андріан R&D - 3шт" },
     ];
-    const classify = vi.fn(async () => ({ reports: [{ entries: [E("Андріан", true, 1)], forDate: null }] }));
+    const classify = vi.fn(async (t: string) => ({
+      reports: [{ entries: [E("Андріан", true, t.includes("3шт") ? 3 : 1)], forDate: null }],
+    }));
     const out = await extractDroneReports(messages, classify);
-    // one classify call PER candidate message; same target day merges.
+    // one classify call PER candidate message; the LAST report for a day wins.
     expect(classify).toHaveBeenCalledTimes(2);
-    expect(out.byDate.get("2026-06-25")).toEqual([E("Андріан", true, 2)]);
+    expect(out.byDate.get("2026-06-25")).toEqual([E("Андріан", true, 3)]);
   });
 
   it("skips non-candidate messages (no шт tally) without a classify call", async () => {
@@ -69,7 +71,7 @@ describe("extractDroneReports", () => {
     expect(out.byDate.get("2026-06-25")).toEqual([E("Андріан", true, 3)]);
   });
 
-  it("reassigns entries to an explicit forDate and merges across source days", async () => {
+  it("reassigns entries to an explicit forDate; a later restatement replaces the earlier report", async () => {
     const messages: DroneMessage[] = [
       { ts: tsFor("2026-06-25T09:00:00Z"), text: "for 2026-06-20: Андріан 1шт" },
       { ts: tsFor("2026-06-26T09:00:00Z"), text: "for 2026-06-20: Андріан 2шт" },
@@ -78,8 +80,39 @@ describe("extractDroneReports", () => {
       reports: [{ entries: [E("Андріан", true, t.includes("2шт") ? 2 : 1)], forDate: "2026-06-20" }],
     }));
     const out = await extractDroneReports(messages, classify);
-    expect(out.byDate.get("2026-06-20")).toEqual([E("Андріан", true, 3)]);
+    expect(out.byDate.get("2026-06-20")).toEqual([E("Андріан", true, 2)]);
     expect(out.byDate.has("2026-06-25")).toBe(false);
+  });
+
+  // Regression: the real 06-02 case — the day's own "Готові" post plus a lagged
+  // "02.06 Готові" restatement posted 06-04. Summing them doubled every entry
+  // (Андріан 4, Любомир 6, Демо 16); the restatement must WIN, not add.
+  it("lets a lagged date-named restatement replace the day's own earlier report", async () => {
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-06-04T14:29:00Z"), text: "02.06 Готові : Андріан R&D - 1 шт" },
+      { ts: tsFor("2026-06-02T09:32:00Z"), text: "Готові : Андріан R&D - 3 шт" },
+    ];
+    const classify = vi.fn(async (t: string) =>
+      t.includes("02.06")
+        ? { reports: [{ entries: [E("Андріан", true, 1)], forDate: "2026-06-02" }] }
+        : { reports: [{ entries: [E("Андріан", true, 3)], forDate: null }] },
+    );
+    const out = await extractDroneReports(messages, classify);
+    expect(out.byDate.get("2026-06-02")).toEqual([E("Андріан", true, 1)]);
+  });
+
+  it("merges same-date entries WITHIN one message instead of replacing", async () => {
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-06-25T09:00:00Z"), text: "Андріан - 1шт\n…\nАндріан - 1шт азимут" },
+    ];
+    const classify = vi.fn(async () => ({
+      reports: [
+        { entries: [E("Андріан", true, 1)], forDate: null },
+        { entries: [E("Андріан", true, 1)], forDate: null },
+      ],
+    }));
+    const out = await extractDroneReports(messages, classify);
+    expect(out.byDate.get("2026-06-25")).toEqual([E("Андріан", true, 2)]);
   });
 
   it("skips candidate messages the classifier judges not to be reports", async () => {

@@ -7,8 +7,12 @@
  *  carried 23.06/24.06/25.06 sections); each report's entries go to the date it
  *  names (forDate) or, absent that, the Kyiv post date. Per-message
  *  classification is deliberate: joined day-text made results depend on message
- *  order (the 06-02/06-16 misses). Multiple reports on one target date are
- *  merged. A per-message classifier failure is NOT swallowed as "no report" —
+ *  order (the 06-02/06-16 misses). Reports are full inventory SNAPSHOTS, not
+ *  increments: when a later message reports the same target date, it replaces
+ *  the earlier one (the real 06-02 was posted same-day and then restated as
+ *  "02.06 Готові" on 06-04 — summing them doubled every entry). Same-date
+ *  reports within ONE message still merge (they are sections of one tally).
+ *  A per-message classifier failure is NOT swallowed as "no report" —
  *  its (Kyiv post) date is surfaced in `failedDates` so callers can tell "ran,
  *  found none" from "never ran" and skip the drone gate for just that date. */
 import "server-only";
@@ -58,12 +62,14 @@ export async function extractDroneReports(
       failedDates.add(kyivPostDate(m.ts));
       continue;
     }
+    const perDate = new Map<string, DroneEntry[]>();
     for (const r of reports) {
       if (r.entries.length === 0) continue;
       const target = r.forDate ?? kyivPostDate(m.ts);
-      byDate.set(target, [...(byDate.get(target) ?? []), ...r.entries]);
+      perDate.set(target, [...(perDate.get(target) ?? []), ...r.entries]);
     }
+    // Snapshot semantics: this message's tally for a date supersedes any earlier message's.
+    for (const [date, entries] of perDate) byDate.set(date, mergeDroneEntries(entries));
   }
-  for (const [date, entries] of byDate) byDate.set(date, mergeDroneEntries(entries));
   return { byDate, failedDates };
 }
