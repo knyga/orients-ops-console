@@ -13,7 +13,7 @@ describe("extractDroneReports", () => {
       { ts: tsFor("2026-06-25T09:00:00Z"), text: "Андріан R&D - 1шт" },
       { ts: tsFor("2026-06-25T15:00:00Z"), text: "Андріан R&D - 1шт" },
     ];
-    const classify = vi.fn(async () => ({ entries: [E("Андріан", true, 1)], forDate: null }));
+    const classify = vi.fn(async () => ({ reports: [{ entries: [E("Андріан", true, 1)], forDate: null }] }));
     const out = await extractDroneReports(messages, classify);
     // one classify call PER candidate message; same target day merges.
     expect(classify).toHaveBeenCalledTimes(2);
@@ -25,7 +25,7 @@ describe("extractDroneReports", () => {
       { ts: tsFor("2026-06-25T09:00:00Z"), text: "просто балачки без звіту" },
       { ts: tsFor("2026-06-25T10:00:00Z"), text: "Андріан R&D - 1шт" },
     ];
-    const classify = vi.fn(async () => ({ entries: [E("Андріан", true, 1)], forDate: null }));
+    const classify = vi.fn(async () => ({ reports: [{ entries: [E("Андріан", true, 1)], forDate: null }] }));
     const out = await extractDroneReports(messages, classify);
     expect(classify).toHaveBeenCalledTimes(1);
     expect(classify).toHaveBeenCalledWith("Андріан R&D - 1шт", "2026-06-25");
@@ -40,12 +40,33 @@ describe("extractDroneReports", () => {
     ];
     const classify = vi.fn(async (t: string) =>
       t.includes("01.06")
-        ? { entries: [E("Андріан", true, 2)], forDate: "2026-06-01" }
-        : { entries: [E("Андріан", true, 3)], forDate: null },
+        ? { reports: [{ entries: [E("Андріан", true, 2)], forDate: "2026-06-01" }] }
+        : { reports: [{ entries: [E("Андріан", true, 3)], forDate: null }] },
     );
     const out = await extractDroneReports(messages, classify);
     expect(out.get("2026-06-01")).toEqual([E("Андріан", true, 2)]);
     expect(out.get("2026-06-02")).toEqual([E("Андріан", true, 3)]);
+  });
+
+  // Regression: the real 06-25 message carried 23.06 / 24.06 / 25.06 sections in
+  // ONE message; the old single-report shape lost 06-24 entirely and stamped
+  // 06-23's numbers onto 06-25.
+  it("attributes each dated section of a multi-date message to its own day", async () => {
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-06-25T10:56:00Z"), text: "23.06 Андріан - 5шт\n24.06 Андріан - 4шт\n25.06 Андріан - 3шт" },
+    ];
+    const classify = vi.fn(async () => ({
+      reports: [
+        { entries: [E("Андріан", true, 5)], forDate: "2026-06-23" },
+        { entries: [E("Андріан", true, 4)], forDate: "2026-06-24" },
+        { entries: [E("Андріан", true, 3)], forDate: "2026-06-25" },
+      ],
+    }));
+    const out = await extractDroneReports(messages, classify);
+    expect(classify).toHaveBeenCalledTimes(1);
+    expect(out.get("2026-06-23")).toEqual([E("Андріан", true, 5)]);
+    expect(out.get("2026-06-24")).toEqual([E("Андріан", true, 4)]);
+    expect(out.get("2026-06-25")).toEqual([E("Андріан", true, 3)]);
   });
 
   it("reassigns entries to an explicit forDate and merges across source days", async () => {
@@ -54,8 +75,7 @@ describe("extractDroneReports", () => {
       { ts: tsFor("2026-06-26T09:00:00Z"), text: "for 2026-06-20: Андріан 2шт" },
     ];
     const classify = vi.fn(async (t: string) => ({
-      entries: [E("Андріан", true, t.includes("2шт") ? 2 : 1)],
-      forDate: "2026-06-20",
+      reports: [{ entries: [E("Андріан", true, t.includes("2шт") ? 2 : 1)], forDate: "2026-06-20" }],
     }));
     const out = await extractDroneReports(messages, classify);
     expect(out.get("2026-06-20")).toEqual([E("Андріан", true, 3)]);
@@ -64,7 +84,7 @@ describe("extractDroneReports", () => {
 
   it("skips candidate messages the classifier judges not to be reports", async () => {
     const messages: DroneMessage[] = [{ ts: tsFor("2026-06-25T09:00:00Z"), text: "балачки про шт" }];
-    const classify = vi.fn(async () => ({ entries: [], forDate: null }));
+    const classify = vi.fn(async () => ({ reports: [] }));
     const out = await extractDroneReports(messages, classify);
     expect(out.size).toBe(0);
   });
@@ -78,7 +98,7 @@ describe("extractDroneReports", () => {
       if (text.includes("Влад")) {
         throw new Error("Classifier API error");
       }
-      return { entries: [E("Андріан", true, 1)], forDate: null };
+      return { reports: [{ entries: [E("Андріан", true, 1)], forDate: null }] };
     });
     const out = await extractDroneReports(messages, classify);
     // Should have the successful day

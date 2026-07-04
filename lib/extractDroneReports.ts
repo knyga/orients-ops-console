@@ -2,23 +2,25 @@
  *  SERVER-ONLY (the default classifier calls Claude). Classifies each
  *  report-candidate MESSAGE individually (a drone-count report is a per-unit
  *  "…шт" tally, so only messages containing "шт" are candidates — chatter never
- *  costs a Claude call) and attributes its entries to the date the report names
- *  (forDate) or, absent that, the Kyiv post date. Per-message classification is
- *  deliberate: a day can carry TWO reports (its own + a lagged one naming an
- *  earlier date), which a single joined-day call cannot represent, and joined
- *  text made results depend on message order (the 06-02/06-16 misses). Multiple
- *  reports on one target date are merged. */
+ *  costs a Claude call). A message yields one report per dated section (a
+ *  catch-up message can tally several days at once — the real 06-25 message
+ *  carried 23.06/24.06/25.06 sections); each report's entries go to the date it
+ *  names (forDate) or, absent that, the Kyiv post date. Per-message
+ *  classification is deliberate: joined day-text made results depend on message
+ *  order (the 06-02/06-16 misses). Multiple reports on one target date are
+ *  merged. */
 import "server-only";
 import { videoUploadDate } from "./reconcile";
 import { classifyDroneCount } from "./droneCountReport";
 import { mergeDroneEntries, type DroneEntry } from "./droneReport";
+import type { DroneDayReport } from "./droneCountReportPrompt";
 
 export interface DroneMessage {
   ts: string;
   text: string;
 }
 
-export type DroneClassifier = (text: string, postedOn?: string) => Promise<{ entries: DroneEntry[]; forDate: string | null }>;
+export type DroneClassifier = (text: string, postedOn?: string) => Promise<{ reports: DroneDayReport[] }>;
 
 const kyivPostDate = (ts: string) => videoUploadDate(new Date(Number(ts) * 1000).toISOString());
 
@@ -36,17 +38,18 @@ export async function extractDroneReports(
 
   const byDate = new Map<string, DroneEntry[]>();
   for (const m of candidates) {
-    let entries: DroneEntry[];
-    let forDate: string | null;
+    let reports: DroneDayReport[];
     try {
-      ({ entries, forDate } = await classify(m.text, kyivPostDate(m.ts)));
+      ({ reports } = await classify(m.text, kyivPostDate(m.ts)));
     } catch (err) {
       console.error(`extractDroneReports: classifier failed for message ${m.ts}:`, err);
       continue;
     }
-    if (entries.length === 0) continue;
-    const target = forDate ?? kyivPostDate(m.ts);
-    byDate.set(target, [...(byDate.get(target) ?? []), ...entries]);
+    for (const r of reports) {
+      if (r.entries.length === 0) continue;
+      const target = r.forDate ?? kyivPostDate(m.ts);
+      byDate.set(target, [...(byDate.get(target) ?? []), ...r.entries]);
+    }
   }
   for (const [date, entries] of byDate) byDate.set(date, mergeDroneEntries(entries));
   return byDate;

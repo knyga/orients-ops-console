@@ -5,16 +5,56 @@ describe("droneCountReportPrompt", () => {
   it("exposes a well-formed tool schema", () => {
     expect(DRONE_COUNT_TOOL.name).toBe("record_drone_count_report");
     const schema = DRONE_COUNT_TOOL.input_schema as {
-      properties: Record<string, unknown>;
+      properties: { reports: { items: { properties: Record<string, unknown>; required: string[] } } };
       required: string[];
     };
-    expect(Object.keys(schema.properties)).toEqual(["entries", "forDate", "note"]);
-    expect(schema.required).toEqual(["entries", "note"]);
+    expect(Object.keys(schema.properties)).toEqual(["reports", "note"]);
+    expect(schema.required).toEqual(["reports", "note"]);
+    expect(Object.keys(schema.properties.reports.items.properties)).toEqual(["entries", "forDate"]);
+    expect(schema.properties.reports.items.required).toEqual(["entries"]);
+  });
+
+  // Regression: one message carried three dated sections (23.06 / 24.06 / 25.06);
+  // the old single-forDate schema could only represent one of them, so 06-24's
+  // report was silently lost and 06-25 got 06-23's numbers.
+  it("teaches that a multi-date message yields one report per dated section", () => {
+    const p = buildDroneCountPrompt("x");
+    expect(p).toContain("one report per section");
+    const reportsDesc = (
+      DRONE_COUNT_TOOL.input_schema as { properties: { reports: { description: string } } }
+    ).properties.reports.description;
+    expect(reportsDesc.toLowerCase()).toContain("dated section");
   });
 
   it("embeds the day's text and asks for the tool call", () => {
     const p = buildDroneCountPrompt("Демонстраційні - 8 шт (Перевірені - 8шт)");
     expect(p).toContain("Демонстраційні - 8 шт");
     expect(p).toContain("record_drone_count_report");
+  });
+
+  // Regression: 'Перевірені - 8шт' inside '(...)' is a status note about the SAME
+  // 8 units, not a second 8-drone category — it double-counted every day's total.
+  it("teaches that parenthetical qualifiers are not separate entries", () => {
+    const p = buildDroneCountPrompt("x");
+    expect(p).toContain("Перевірені");
+    expect(p.toLowerCase()).toContain("not a separate entry");
+    const entriesSchema = (
+      DRONE_COUNT_TOOL.input_schema as {
+        properties: {
+          reports: {
+            items: {
+              properties: {
+                entries: {
+                  description: string;
+                  items: { properties: { isPerson: { description: string } } };
+                };
+              };
+            };
+          };
+        };
+      }
+    ).properties.reports.items.properties.entries;
+    expect(entriesSchema.description).toContain("(Перевірені");
+    expect(entriesSchema.items.properties.isPerson.description).not.toContain("Перевірені");
   });
 });
