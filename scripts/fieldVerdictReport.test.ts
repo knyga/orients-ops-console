@@ -4,6 +4,9 @@ import type { DayVerdict } from "../lib/fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
   date: "2026-06-16",
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   status: "ACCEPTED",
   airborneMinutes: 20,
   videoMinutes: 12,
@@ -42,13 +45,13 @@ describe("summarize / buildReport / toCsv", () => {
 
   it("toCsv emits a header + one row per day, escaping reasons", () => {
     const csv = toCsv(buildReport([day({ status: "NEEDS_REVIEW", reasons: ["video < 50%, no dataset"] })], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3));
-    expect(csv.split("\n")[0]).toBe("date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster,drones");
+    expect(csv.split("\n")[0]).toBe("date,reportTs,reportSeq,reportCount,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster,drones");
     expect(csv).toMatch(/"video < 50%, no dataset"/);
   });
 
   it("CSV header carries datasetStatus and the row prints the status", () => {
     const report = buildReport(
-      [{ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [], roster: [], unknownInitials: [], airborneReported: true }],
+      [{ date: "2026-06-10", reportTs: null, reportSeq: 1, reportCount: 1, status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [], roster: [], unknownInitials: [], airborneReported: true }],
       { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3,
     );
     const csv = toCsv(report);
@@ -70,47 +73,77 @@ describe("crew column", () => {
 });
 
 describe("mergeFlightDays", () => {
-  const p = (flightDate: string, deployMin: number | null, start: string | null = null, end: string | null = null) =>
-    ({ flightDate, deployMin, start, end });
+  const rpt = (over: Partial<{ flightDate: string; reportTs: string; deployMin: number | null; start: string | null; end: string | null; roster: string[]; unknownInitials: string[] }>) => ({
+    flightDate: "2026-07-01", reportTs: "1.0", deployMin: 220, start: "12:30", end: "16:10", roster: ["Андріан", "Надія"], unknownInitials: [], ...over,
+  });
+
+  it("emits one row per report with day-shared airborne and per-report windows", () => {
+    const rows = mergeFlightDays(
+      new Map([["2026-07-01", 153.4]]),
+      [rpt({}), rpt({ reportTs: "2.0", deployMin: 110, start: "18:20", end: "20:10", roster: ["Влад", "Надія"] })],
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => [r.reportSeq, r.reportCount, r.deployMin])).toEqual([[1, 2, 220], [2, 2, 110]]);
+    expect(rows[0].airborneMinutes).toBe(153.4);
+    expect(rows[1].airborneMinutes).toBe(153.4);
+    expect(rows[1].roster).toEqual(["Влад", "Надія"]);
+  });
+
+  it("keeps a synthetic reportTs-null row for an airborne day with no Звіт", () => {
+    const rows = mergeFlightDays(new Map([["2026-07-02", 60]]), []);
+    expect(rows).toEqual([
+      { date: "2026-07-02", airborneMinutes: 60, airborneReported: true, reportTs: null, reportSeq: 1, reportCount: 1, roster: [], unknownInitials: [] },
+    ]);
+  });
+
+  it("still requires a window (deployMin) for a report-only date to count as a flight day", () => {
+    expect(mergeFlightDays(new Map(), [rpt({ deployMin: null, start: null, end: null })])).toHaveLength(0);
+  });
+
+  it("a window-less second Звіт on an airborne day surfaces as its own row (curable gap)", () => {
+    const rows = mergeFlightDays(new Map([["2026-07-01", 100]]), [rpt({}), rpt({ reportTs: "2.0", deployMin: null, start: null, end: null })]);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].deployMin).toBeNull();
+  });
 
   it("clamps to the period: a Звіт naming an out-of-period date is dropped", () => {
     // The real case: a June "Звіт 25.06" posted in July surfaced 2026-06-25 in the
     // July report and got published as a duplicate verdict.
     const out = mergeFlightDays(
       new Map([["2026-07-02", 60], ["2026-06-30", 20]]),
-      [p("2026-06-25", 150, "16:30", "19:00"), p("2026-07-01", 200, "10:00", "13:20")],
+      [rpt({ flightDate: "2026-06-25", reportTs: "1.0", deployMin: 150, start: "16:30", end: "19:00" }), rpt({ flightDate: "2026-07-01", reportTs: "1.0", deployMin: 200, start: "10:00", end: "13:20" })],
       { start: "2026-07-01", end: "2026-07-31" },
     );
     expect(out.map((d) => d.date)).toEqual(["2026-07-01", "2026-07-02"]);
   });
 
   it("applies no clamp when period is omitted (back-compat)", () => {
-    const out = mergeFlightDays(new Map([["2026-06-30", 20]]), [p("2026-07-01", 200)]);
+    const out = mergeFlightDays(new Map([["2026-06-30", 20]]), [rpt({ flightDate: "2026-07-01", reportTs: "1.0", deployMin: 200 })]);
     expect(out.map((d) => d.date)).toEqual(["2026-06-30", "2026-07-01"]);
   });
 
   it("includes airborne-report dates as reported, preserving minutes", () => {
     const out = mergeFlightDays(new Map([["2026-06-01", 36.8]]), []);
-    expect(out).toEqual([{ date: "2026-06-01", airborneMinutes: 36.8, airborneReported: true, deployWindow: undefined }]);
+    expect(out).toEqual([{ date: "2026-06-01", airborneMinutes: 36.8, airborneReported: true, reportTs: null, reportSeq: 1, reportCount: 1, roster: [], unknownInitials: [] }]);
   });
 
   it("adds a parsed-only date WITH a deployment window as not-reported (airborne 0) + its window", () => {
-    const out = mergeFlightDays(new Map(), [p("2026-06-21", 180, "17:00", "20:00")]);
-    expect(out).toEqual([{ date: "2026-06-21", airborneMinutes: 0, airborneReported: false, deployWindow: { start: "17:00", end: "20:00" } }]);
+    const out = mergeFlightDays(new Map(), [rpt({ flightDate: "2026-06-21", reportTs: "1.0", deployMin: 180, start: "17:00", end: "20:00" })]);
+    expect(out).toEqual([{ date: "2026-06-21", airborneMinutes: 0, airborneReported: false, reportTs: "1.0", reportSeq: 1, reportCount: 1, deployMin: 180, deployWindow: { start: "17:00", end: "20:00" }, roster: ["Андріан", "Надія"], unknownInitials: [] }]);
   });
 
   it("excludes a parsed date with no deployment window (deployMin null)", () => {
-    const out = mergeFlightDays(new Map(), [p("2026-06-21", null)]);
+    const out = mergeFlightDays(new Map(), [rpt({ deployMin: null, start: null, end: null })]);
     expect(out).toEqual([]);
   });
 
   it("gives the airborne report precedence for a date present in both", () => {
-    const out = mergeFlightDays(new Map([["2026-06-21", 40]]), [p("2026-06-21", 180, "17:00", "20:00")]);
-    expect(out).toEqual([{ date: "2026-06-21", airborneMinutes: 40, airborneReported: true, deployWindow: { start: "17:00", end: "20:00" } }]);
+    const out = mergeFlightDays(new Map([["2026-06-21", 40]]), [rpt({ flightDate: "2026-06-21", reportTs: "1.0", deployMin: 180, start: "17:00", end: "20:00" })]);
+    expect(out).toEqual([{ date: "2026-06-21", airborneMinutes: 40, airborneReported: true, reportTs: "1.0", reportSeq: 1, reportCount: 1, deployMin: 180, deployWindow: { start: "17:00", end: "20:00" }, roster: ["Андріан", "Надія"], unknownInitials: [] }]);
   });
 
   it("sorts the union ascending by date", () => {
-    const out = mergeFlightDays(new Map([["2026-06-05", 30]]), [p("2026-06-02", 120, "10:00", "12:00")]);
+    const out = mergeFlightDays(new Map([["2026-06-05", 30]]), [rpt({ flightDate: "2026-06-02", reportTs: "1.0", deployMin: 120, start: "10:00", end: "12:00" })]);
     expect(out.map((d) => d.date)).toEqual(["2026-06-02", "2026-06-05"]);
   });
 });
@@ -118,20 +151,20 @@ describe("mergeFlightDays", () => {
 describe("verdict CSV drones column", () => {
   it("has a drones header and CSV-friendly cell", () => {
     const dayWithDrones: DayVerdict = {
-      date: "2026-06-25", status: "NEEDS_REVIEW", airborneMinutes: 0, videoMinutes: 0, ratio: null,
+      date: "2026-06-25", reportTs: null, reportSeq: 1, reportCount: 1, status: "NEEDS_REVIEW", airborneMinutes: 0, videoMinutes: 0, ratio: null,
       datasetStatus: "MISSING", withinGrace: false, reasons: [], roster: ["Влад"], unknownInitials: [],
       airborneReported: false, droneReport: [{ name: "Андріан", isPerson: true, count: 2 }, { name: "15ка", isPerson: false, count: 1 }],
     };
     const report = buildReport([dayWithDrones], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3);
     const csv = toCsv(report);
-    expect(csv.split("\n")[0]).toBe("date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster,drones");
+    expect(csv.split("\n")[0]).toBe("date,reportTs,reportSeq,reportCount,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster,drones");
     expect(csv.split("\n")[1]).toContain("Андріан 2; інші 1 (3)");
   });
 });
 
 describe("airborne n/a rendering", () => {
   const mkDay = (over: Partial<DayVerdict> = {}) => ({
-    date: "2026-06-21", status: "NEEDS_REVIEW" as const, airborneMinutes: 0, videoMinutes: 0,
+    date: "2026-06-21", reportTs: null, reportSeq: 1, reportCount: 1, status: "NEEDS_REVIEW" as const, airborneMinutes: 0, videoMinutes: 0,
     ratio: null, datasetStatus: "MISSING" as const, withinGrace: false, reasons: [],
     roster: [], unknownInitials: [], airborneReported: false, ...over,
   });
@@ -139,14 +172,14 @@ describe("airborne n/a rendering", () => {
   it("CSV shows n/a when airborne was not reported", () => {
     const csv = toCsv(buildReport([mkDay()], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3));
     const row = csv.split("\n").find((l) => l.startsWith("2026-06-21"))!;
-    expect(row.split(",")[2]).toBe("n/a"); // airborneMinutes column
+    expect(row.split(",")[5]).toBe("n/a"); // airborneMinutes column
   });
 
   it("CSV shows the number when airborne was reported", () => {
     const d = mkDay({ airborneMinutes: 42, airborneReported: true });
     const csv = toCsv(buildReport([d], { start: "2026-06-01", end: "2026-06-30" }, "2026-06-30", 3));
     const row = csv.split("\n").find((l) => l.startsWith("2026-06-21"))!;
-    expect(row.split(",")[2]).toBe("42");
+    expect(row.split(",")[5]).toBe("42");
   });
 
   it("table shows n/a when airborne was not reported", () => {

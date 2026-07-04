@@ -40,9 +40,16 @@ export interface VerdictReport {
 
 export interface FlightDayInput {
   date: string;
-  airborneMinutes: number;
-  airborneReported: boolean;
+  airborneMinutes: number;      // day-shared
+  airborneReported: boolean;    // day-shared
+  reportTs: string | null;      // null = synthetic no-Звіт row
+  reportSeq: number;
+  reportCount: number;
   deployWindow?: { start: string; end: string };
+  /** number → gate on it; null → Звіт without a window; undefined → no Звіт. */
+  deployMin?: number | null;
+  roster: string[];
+  unknownInitials: string[];
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -89,39 +96,54 @@ export function buildReport(days: DayVerdict[], period: Period, runDate: string,
 }
 
 /**
- * Ordered flight days = union of dates with a committed airborne figure and dates
- * with a parsed "Звіт" that has a deployment window (deployMin != null). An
- * airborne-report date keeps airborneReported=true and its real minutes (precedence);
- * a parsed-only date gets airborneMinutes=0, airborneReported=false. deployWindow is
- * attached whenever the parsed report for that date has both start and end.
+ * Ordered per-report flight rows. A date qualifies as a flight day when the bot
+ * reported airborne time OR some Звіт on it has a deployment window
+ * (deployMin != null). Once a date qualifies, EVERY report on it becomes a row
+ * (a window-less one is a curable gap on that report); a qualifying date with
+ * no Звіт at all keeps one synthetic reportTs-null row. Airborne minutes are
+ * day-shared across a date's rows; the window/crew are per-report.
  */
 export function mergeFlightDays(
   airborneByDate: Map<string, number>,
-  parsed: { flightDate: string; deployMin: number | null; start: string | null; end: string | null }[],
+  parsed: {
+    flightDate: string; reportTs: string; deployMin: number | null;
+    start: string | null; end: string | null;
+    roster: string[]; unknownInitials: string[];
+  }[],
   period?: { start: string; end: string },
 ): FlightDayInput[] {
-  const windowByDate = new Map<string, { start: string; end: string }>();
+  const reportsByDate = new Map<string, typeof parsed>();
   for (const r of parsed) {
-    if (r.start && r.end) windowByDate.set(r.flightDate, { start: r.start, end: r.end });
+    const arr = reportsByDate.get(r.flightDate) ?? [];
+    arr.push(r);
+    reportsByDate.set(r.flightDate, arr);
   }
   const dates = new Set<string>(airborneByDate.keys());
-  for (const r of parsed) {
-    if (r.deployMin != null) dates.add(r.flightDate);
-  }
+  for (const r of parsed) if (r.deployMin != null) dates.add(r.flightDate);
   // Clamp to the compute window: a Звіт (or airborne override) can name a date
   // outside the period — e.g. a June "Звіт 25.06" posted in July — and an
   // out-of-period day here becomes a DUPLICATE published verdict for a day
   // another period already owns.
   const inPeriod = (d: string) => !period || (d >= period.start && d <= period.end);
-  return [...dates]
-    .filter(inPeriod)
-    .sort((a, b) => a.localeCompare(b))
-    .map((date) => ({
-      date,
-      airborneMinutes: airborneByDate.get(date) ?? 0,
-      airborneReported: airborneByDate.has(date),
-      deployWindow: windowByDate.get(date),
-    }));
+  const rows: FlightDayInput[] = [];
+  for (const date of [...dates].filter(inPeriod).sort((a, b) => a.localeCompare(b))) {
+    const day = { airborneMinutes: airborneByDate.get(date) ?? 0, airborneReported: airborneByDate.has(date) };
+    const reports = (reportsByDate.get(date) ?? []).slice().sort((a, b) => a.reportTs.localeCompare(b.reportTs));
+    if (reports.length === 0) {
+      rows.push({ date, ...day, reportTs: null, reportSeq: 1, reportCount: 1, roster: [], unknownInitials: [] });
+      continue;
+    }
+    reports.forEach((r, i) =>
+      rows.push({
+        date, ...day,
+        reportTs: r.reportTs, reportSeq: i + 1, reportCount: reports.length,
+        deployMin: r.deployMin,
+        ...(r.start && r.end ? { deployWindow: { start: r.start, end: r.end } } : {}),
+        roster: r.roster, unknownInitials: r.unknownInitials,
+      }),
+    );
+  }
+  return rows;
 }
 
 function csvField(value: string): string {
@@ -129,10 +151,13 @@ function csvField(value: string): string {
 }
 
 export function toCsv(report: VerdictReport): string {
-  const lines = ["date,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster,drones"];
+  const lines = ["date,reportTs,reportSeq,reportCount,status,airborneMinutes,videoMinutes,ratio,datasetStatus,reasons,roster,drones"];
   for (const d of report.days) {
     lines.push([
       d.date,
+      d.reportTs ?? "",
+      String(d.reportSeq),
+      String(d.reportCount),
       d.status,
       d.airborneReported ? String(d.airborneMinutes) : "n/a",
       String(d.videoMinutes),
@@ -165,15 +190,16 @@ export function formatTable(report: VerdictReport): string {
   const lines: string[] = [];
   lines.push(`Field-day verdict   ${report.period.start} … ${report.period.end}   (as of ${report.runDate}, grace ${report.graceWorkingDays}wd)`);
   lines.push("");
-  lines.push("Date         Status               Air(m)  Vid(m)  Ratio  DS  Crew                  Reasons");
-  lines.push("----------   ------------------   ------  ------  -----  --  ----                  -------");
+  lines.push("Date               Status               Air(m)  Vid(m)  Ratio  DS  Crew                  Reasons");
+  lines.push("----------------   ------------------   ------  ------  -----  --  ----                  -------");
   if (report.days.length === 0) {
     lines.push("(no flight days in this period)");
   } else {
     for (const d of report.days) {
       const crew = [...d.roster, ...d.unknownInitials.map((u) => `?${u}`)].join(", ");
+      const dateCell = `${d.date}${d.reportCount > 1 ? ` #${d.reportSeq}/${d.reportCount}` : ""}`;
       lines.push(
-        `${d.date}   ${((STATUS_ICON[d.status] ?? "") + " " + d.status).padEnd(18)}   ${(d.airborneReported ? String(d.airborneMinutes) : "n/a").padStart(6)}  ${String(d.videoMinutes).padStart(6)}  ${(d.ratio === null ? "—" : d.ratio.toFixed(2)).padStart(5)}  ${((DATASET_ICON[d.datasetStatus] ?? "?") + " ").padEnd(2)}  ${crew.padEnd(20)}  ${d.reasons.join("; ")}`,
+        `${dateCell.padEnd(16)}   ${((STATUS_ICON[d.status] ?? "") + " " + d.status).padEnd(18)}   ${(d.airborneReported ? String(d.airborneMinutes) : "n/a").padStart(6)}  ${String(d.videoMinutes).padStart(6)}  ${(d.ratio === null ? "—" : d.ratio.toFixed(2)).padStart(5)}  ${((DATASET_ICON[d.datasetStatus] ?? "?") + " ").padEnd(2)}  ${crew.padEnd(20)}  ${d.reasons.join("; ")}`,
       );
     }
   }
