@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseArgs, parseArgs as parseBonusArgs, resolvePeriod, toCsv, buildNotifyPlan, formatNotifyDryRun } from "./fieldBonusReport";
+import { parseArgs, parseArgs as parseBonusArgs, resolvePeriod, toCsv, formatTable, buildNotifyPlan, formatNotifyDryRun } from "./fieldBonusReport";
 import type { BonusReport } from "../lib/fieldBonus";
 import type { DayBonus } from "../lib/fieldBonus";
 
@@ -20,6 +20,30 @@ describe("fieldBonusReport", () => {
   it("emits a per-person CSV header + rows", () => {
     expect(toCsv(report).split("\n")[0]).toBe("person,trips,early,weekend,gross,penaltyPct,net");
     expect(toCsv(report)).toContain("Андріан,1,0,0,700,0,700");
+  });
+});
+
+const reportWithPendingAndVoided: BonusReport = {
+  period: { start: "2026-06-01", end: "2026-06-30" },
+  days: [], people: [{ name: "Андріан", trips: 1, early: 0, weekend: 0, gross: 700, penaltyPct: 0, net: 700 }],
+  penalties: [], teamZeroed: false, flags: [], total: 700,
+  voidedDays: [{ date: "2026-06-30", roster: ["Влад", "Любомир"], reason: "deployment 120m is under 3h" }],
+  pendingDays: [{ date: "2026-06-27", roster: ["Андріан", "Сергій"], status: "NEEDS_REVIEW", reasons: ["no #datasets notice for the day"], amountAtStake: 2000 }],
+};
+
+describe("pending + voided surfaces", () => {
+  it("toCsv appends a pending section", () => {
+    const csv = toCsv(reportWithPendingAndVoided);
+    expect(csv).toContain("pending,date,status,roster,amountAtStake");
+    expect(csv).toContain('pending,2026-06-27,NEEDS_REVIEW,"Андріан, Сергій",2000');
+  });
+
+  it("formatTable prints pending and voided days", () => {
+    const t = formatTable(reportWithPendingAndVoided);
+    expect(t).toContain("Pending review:");
+    expect(t).toContain("2026-06-27  NEEDS_REVIEW  Андріан, Сергій — ₴2000 at stake");
+    expect(t).toContain("Voided (rejected):");
+    expect(t).toContain("2026-06-30  Влад, Любомир — deployment 120m is under 3h");
   });
 });
 

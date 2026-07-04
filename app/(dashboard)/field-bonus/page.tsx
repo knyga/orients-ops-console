@@ -200,16 +200,37 @@ export default function FieldBonusPage() {
           {report.voidedDays && report.voidedDays.length > 0 && (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
               <h2 className="text-sm font-semibold text-amber-900">
-                Voided days — no drone-count report in #field-qa ({report.voidedDays.length})
+                Voided days — rejected by the qualification gate ({report.voidedDays.length})
               </h2>
               <p className="mt-1 text-xs text-amber-700">
-                These days met the 3h + 2min gate but had no drone-count/production report, so
-                the whole crew earns nothing for the day.
+                A rejected day pays nothing for the whole crew. Reasons come from the unified
+                verdict gate (deploy ≥ 3h, video, drone-count report, dataset).
               </p>
               <ul className="mt-2 space-y-1 text-sm text-amber-900">
                 {report.voidedDays.map((d) => (
                   <li key={d.date} className="tabular-nums">
-                    {d.date} — {d.roster.join(", ") || "(no crew parsed)"}
+                    {d.date} — {d.roster.join(", ") || "(no crew parsed)"} — {d.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Pending-review days (unsettled — not in the total) */}
+          {report.pendingDays && report.pendingDays.length > 0 && (
+            <div className="rounded-md border border-sky-200 bg-sky-50 p-4">
+              <h2 className="text-sm font-semibold text-sky-900">
+                Pending review — not paid yet ({report.pendingDays.length})
+              </h2>
+              <p className="mt-1 text-xs text-sky-700">
+                These flight days are not settled (PENDING / NEEDS_REVIEW); the amounts join the
+                total only after an approver accepts the day.
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-sky-900">
+                {report.pendingDays.map((d) => (
+                  <li key={d.date} className="tabular-nums">
+                    {d.date} — {d.roster.join(", ") || "(no crew parsed)"} — ₴{d.amountAtStake.toLocaleString("uk-UA")} at stake
+                    <span className="text-xs text-sky-600"> ({d.reasons.join("; ")})</span>
                   </li>
                 ))}
               </ul>

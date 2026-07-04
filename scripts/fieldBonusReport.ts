@@ -33,7 +33,12 @@ export function resolvePeriod(args: BonusArgs, today: string): Period {
 export function toCsv(report: BonusReport): string {
   const head = "person,trips,early,weekend,gross,penaltyPct,net";
   const rows = report.people.map((p) => [p.name, p.trips, p.early, p.weekend, p.gross, p.penaltyPct, p.net].join(","));
-  return [head, ...rows].join("\n");
+  const lines = [head, ...rows];
+  if (report.pendingDays.length) {
+    lines.push("", "pending,date,status,roster,amountAtStake");
+    for (const d of report.pendingDays) lines.push(`pending,${d.date},${d.status},"${d.roster.join(", ")}",${d.amountAtStake}`);
+  }
+  return lines.join("\n");
 }
 
 export function formatTable(report: BonusReport): string {
@@ -41,6 +46,14 @@ export function formatTable(report: BonusReport): string {
   for (const p of report.people) lines.push(`  ${p.name.padEnd(14)} trips=${p.trips} early=${p.early} wknd=${p.weekend} gross=${p.gross} pen=${p.penaltyPct * 100}% net=${p.net}`);
   lines.push(`  TOTAL net=${report.total}`);
   if (report.flags.length) { lines.push("Flags:"); for (const f of report.flags) lines.push(`  [${f.kind}] ${f.date} ${f.detail}`); }
+  if (report.pendingDays.length) {
+    lines.push("Pending review:");
+    for (const d of report.pendingDays) lines.push(`  ${d.date}  ${d.status}  ${d.roster.join(", ") || "(no crew)"} — ₴${d.amountAtStake} at stake (${d.reasons.join("; ")})`);
+  }
+  if (report.voidedDays.length) {
+    lines.push("Voided (rejected):");
+    for (const d of report.voidedDays) lines.push(`  ${d.date}  ${d.roster.join(", ") || "(no crew)"} — ${d.reason}`);
+  }
   return lines.join("\n");
 }
 
