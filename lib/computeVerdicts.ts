@@ -75,6 +75,13 @@ export async function computeVerdicts(
     (fq?.days ?? []).filter((d) => d.droneReport && d.droneReport.length).map((d) => [d.date, d.droneReport!]),
   );
 
+  // Legacy committed field-qa reports predate the drone extraction; never
+  // mass-reject on absent data — skip the drone gate and say so.
+  const droneDataAvailable = (fq?.days ?? []).some((d) => d.droneReport !== undefined);
+  if (fq && !droneDataAvailable) {
+    log(`field-verdict: field-qa report for ${periodKey(period)} has no droneReport data — drone-count gate skipped (re-run \`npm run field-qa -- --write\`)`);
+  }
+
   // 2. Video minutes per flight day — live Vimeo, attributed by name date.
   const videos = await fetchVideosInPeriod(period.start, period.end);
   const videoMinutesByDate = new Map<string, number>();
@@ -111,6 +118,7 @@ export async function computeVerdicts(
     const windowEnd = addWorkingDays(date, GRACE_WORKING_DAYS);
     const datasetPosted = hasDatasetNotice(datasetMessages, date, windowEnd);
     const { status: datasetStatus, note: datasetNote } = deriveDatasetStatus(datasetPosted, date, resolutions);
+    const parsed = parsedByDate.get(date);
     const base = verdictForDay({
       flightDate: date,
       airborneMinutes,
@@ -120,12 +128,14 @@ export async function computeVerdicts(
       graceWorkingDays: GRACE_WORKING_DAYS,
       airborneReported: fd.airborneReported,
       deployWindow: fd.deployWindow,
+      deployMin: parsed ? parsed.deployMin : undefined,
+      hasZvit: parsed != null,
+      ...(droneDataAvailable ? { droneReportPresent: (droneByDate.get(date)?.length ?? 0) > 0 } : {}),
     });
     // Surface the verbatim waiver/decline reason in the verdict reasons.
     const withNote = datasetNote ? { ...base, reasons: [...base.reasons, datasetNote] } : base;
     const resolved = applyResolution(withNote, resolutions);
     // Attach the effective crew (parsed "Звіт" roster + any approver correction).
-    const parsed = parsedByDate.get(date);
     const eff = applyRosterCorrection(parsed?.roster ?? [], true, corrections.find((c) => c.date === date));
     const drones = droneByDate.get(date);
     return {
