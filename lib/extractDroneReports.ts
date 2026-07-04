@@ -8,7 +8,9 @@
  *  names (forDate) or, absent that, the Kyiv post date. Per-message
  *  classification is deliberate: joined day-text made results depend on message
  *  order (the 06-02/06-16 misses). Multiple reports on one target date are
- *  merged. */
+ *  merged. A per-message classifier failure is NOT swallowed as "no report" —
+ *  its (Kyiv post) date is surfaced in `failedDates` so callers can tell "ran,
+ *  found none" from "never ran" and skip the drone gate for just that date. */
 import "server-only";
 import { videoUploadDate } from "./reconcile";
 import { classifyDroneCount } from "./droneCountReport";
@@ -27,22 +29,33 @@ const kyivPostDate = (ts: string) => videoUploadDate(new Date(Number(ts) * 1000)
 /** A report candidate carries at least one per-unit tally ("1шт", "0 шт", …). */
 const CANDIDATE = /шт/;
 
-/** date → merged drone entries. `classify` is injectable for tests. */
+export interface ExtractDroneReportsResult {
+  /** date → merged drone entries, for dates where a report was actually found. */
+  byDate: Map<string, DroneEntry[]>;
+  /** Kyiv post-dates of candidate messages whose classification failed — a
+   *  forDate can't be known for a failed classification, so these are dates,
+   *  not report attributions. Unknown, not "no report". */
+  failedDates: Set<string>;
+}
+
+/** Extract per-day drone entries. `classify` is injectable for tests. */
 export async function extractDroneReports(
   messages: DroneMessage[],
   classify: DroneClassifier = classifyDroneCount,
-): Promise<Map<string, DroneEntry[]>> {
+): Promise<ExtractDroneReportsResult> {
   const candidates = messages
     .filter((m) => m.text && CANDIDATE.test(m.text))
     .sort((a, b) => Number(a.ts) - Number(b.ts));
 
   const byDate = new Map<string, DroneEntry[]>();
+  const failedDates = new Set<string>();
   for (const m of candidates) {
     let reports: DroneDayReport[];
     try {
       ({ reports } = await classify(m.text, kyivPostDate(m.ts)));
     } catch (err) {
       console.error(`extractDroneReports: classifier failed for message ${m.ts}:`, err);
+      failedDates.add(kyivPostDate(m.ts));
       continue;
     }
     for (const r of reports) {
@@ -52,5 +65,5 @@ export async function extractDroneReports(
     }
   }
   for (const [date, entries] of byDate) byDate.set(date, mergeDroneEntries(entries));
-  return byDate;
+  return { byDate, failedDates };
 }

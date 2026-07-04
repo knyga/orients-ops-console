@@ -71,14 +71,16 @@ export async function computeVerdicts(
     await readAirborneOverrides(),
   );
 
-  const droneByDate = new Map<string, DroneEntry[]>(
-    (fq?.days ?? []).filter((d) => d.droneReport && d.droneReport.length).map((d) => [d.date, d.droneReport!]),
-  );
+  // The fq day record per date. `droneReport` is per-day tri-state: entries =
+  // report found; explicit [] = classified-and-none (the gate binds → hard
+  // fail); key ABSENT = unknown (classifier failed for that date, or a legacy
+  // report predating extraction) → skip the gate for just that day, never
+  // reject on missing data.
+  const fqDayByDate = new Map((fq?.days ?? []).map((d) => [d.date, d]));
 
-  // Legacy committed field-qa reports predate the drone extraction; never
-  // mass-reject on absent data — skip the drone gate and say so.
-  const droneDataAvailable = (fq?.days ?? []).some((d) => d.droneReport !== undefined);
-  if (fq && !droneDataAvailable) {
+  // Legacy committed field-qa reports predate the drone extraction; when NO day
+  // carries the key the whole gate is effectively skipped — say so.
+  if (fq && !(fq.days ?? []).some((d) => d.droneReport !== undefined)) {
     log(`field-verdict: field-qa report for ${periodKey(period)} has no droneReport data — drone-count gate skipped (re-run \`npm run field-qa -- --write\`)`);
   }
 
@@ -119,6 +121,7 @@ export async function computeVerdicts(
     const datasetPosted = hasDatasetNotice(datasetMessages, date, windowEnd);
     const { status: datasetStatus, note: datasetNote } = deriveDatasetStatus(datasetPosted, date, resolutions);
     const parsed = parsedByDate.get(date);
+    const fqDay = fqDayByDate.get(date);
     const base = verdictForDay({
       flightDate: date,
       airborneMinutes,
@@ -130,14 +133,15 @@ export async function computeVerdicts(
       deployWindow: fd.deployWindow,
       deployMin: parsed ? parsed.deployMin : undefined,
       hasZvit: parsed != null,
-      ...(droneDataAvailable ? { droneReportPresent: (droneByDate.get(date)?.length ?? 0) > 0 } : {}),
+      // Per-day presence: gate only when this date's fq record carries the key.
+      ...(fqDay?.droneReport !== undefined ? { droneReportPresent: fqDay.droneReport.length > 0 } : {}),
     });
     // Surface the verbatim waiver/decline reason in the verdict reasons.
     const withNote = datasetNote ? { ...base, reasons: [...base.reasons, datasetNote] } : base;
     const resolved = applyResolution(withNote, resolutions);
     // Attach the effective crew (parsed "Звіт" roster + any approver correction).
     const eff = applyRosterCorrection(parsed?.roster ?? [], true, corrections.find((c) => c.date === date));
-    const drones = droneByDate.get(date);
+    const drones = fqDay?.droneReport;
     return {
       ...resolved,
       roster: eff.roster,

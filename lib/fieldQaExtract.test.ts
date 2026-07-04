@@ -20,7 +20,7 @@ beforeEach(() => {
   writeReport.mockReset();
   writeReport.mockResolvedValue({ key: "2026-06" });
   extractDroneReports.mockReset();
-  extractDroneReports.mockResolvedValue(new Map());
+  extractDroneReports.mockResolvedValue({ byDate: new Map(), failedDates: new Set() });
 });
 
 // Real parseable card: parseAirborneFromText needs the `Сьогодні літали` line and
@@ -57,9 +57,10 @@ describe("extractFieldQa", () => {
       summary("2026-06-25", 600, "1000"),
       { channel: "field-qa", ts: "1001", text: "Андріан R&D - 1шт", files: [], permalink: "https://slack/p2" },
     ]);
-    extractDroneReports.mockResolvedValue(
-      new Map([["2026-06-25", [{ name: "Андріан", isPerson: true, count: 1 }]]]),
-    );
+    extractDroneReports.mockResolvedValue({
+      byDate: new Map([["2026-06-25", [{ name: "Андріан", isPerson: true, count: 1 }]]]),
+      failedDates: new Set(),
+    });
 
     const { report } = await extractFieldQa({ start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" });
 
@@ -70,5 +71,20 @@ describe("extractFieldQa", () => {
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([
       { name: "Андріан", isPerson: true, count: 1 },
     ]);
+  });
+
+  it("emits explicit droneReport [] for classified days but NO key for a failed date", async () => {
+    fetchMessages.mockResolvedValue([summary("2026-06-25", 600, "1000"), summary("2026-06-26", 900, "1001")]);
+    extractDroneReports.mockResolvedValue({
+      byDate: new Map(),
+      failedDates: new Set(["2026-06-26"]),
+    });
+
+    const { report } = await extractFieldQa({ start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" });
+
+    // 06-25: extraction ran, no report found → explicit [] (gate binds).
+    expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([]);
+    // 06-26: classification failed → unknown → key omitted (gate skipped).
+    expect(report.days.find((d) => d.date === "2026-06-26")).not.toHaveProperty("droneReport");
   });
 });

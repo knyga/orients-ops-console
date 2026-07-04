@@ -33,7 +33,10 @@ export interface ReportDay {
   flights: number;
   flew: boolean;
   permalink: string;
-  /** Per-person / per-category drone counts from that day's drone-count report. */
+  /** Per-person / per-category drone counts from that day's drone-count report.
+   *  Entries when a report was found; explicit `[]` when the day was classified
+   *  and no report exists; the key is ABSENT only when presence is unknown
+   *  (classifier failed for the date, or a legacy report predating extraction). */
   droneReport?: DroneEntry[];
 }
 
@@ -124,15 +127,20 @@ export function toInputsCsv(days: ExtractedDay[]): string {
 }
 
 /** Build the lossless report artifact, attaching a Slack permalink and (when
- *  provided) the day's parsed drone-count entries per day. */
+ *  provided) the day's parsed drone-count entries per day. With `droneByDate`
+ *  present (= extraction ran), every day gets an explicit `droneReport` —
+ *  entries when found, `[]` when classified-and-none — EXCEPT dates in
+ *  `droneFailedDates` (classifier failed → presence unknown → no key), so the
+ *  verdict's drone gate skips just that day instead of hard-rejecting it. */
 export function buildReport(
   days: ExtractedDay[],
   period: Period,
   permalinkByTs: Map<string, string>,
   droneByDate?: Map<string, DroneEntry[]>,
+  droneFailedDates?: Set<string>,
 ): FieldQaReport {
   const reportDays: ReportDay[] = days.map((d) => {
-    const drones = droneByDate?.get(d.date);
+    const droneKnown = droneByDate !== undefined && !droneFailedDates?.has(d.date);
     return {
       date: d.date,
       flightHours: round2(d.airborneSeconds / 3600),
@@ -140,7 +148,7 @@ export function buildReport(
       flights: d.flew ? d.flights : 0, // a no-fly day carries 0 flights (no phantom count)
       flew: d.flew,
       permalink: permalinkByTs.get(d.sourceTs) ?? "",
-      ...(drones && drones.length ? { droneReport: drones } : {}),
+      ...(droneKnown ? { droneReport: droneByDate.get(d.date) ?? [] } : {}),
     };
   });
   const flightHours = round2(reportDays.reduce((sum, d) => sum + d.flightHours, 0));

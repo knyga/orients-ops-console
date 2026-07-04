@@ -128,15 +128,16 @@ describe("formatTable", () => {
 });
 
 describe("buildReport drone attachment", () => {
-  it("attaches drone entries by date and omits the field when none", () => {
-    const PERIOD = { start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" };
-    const testDay = (date: string): ExtractedDay => ({
-      date,
-      airborneSeconds: 600,
-      flights: 1,
-      flew: true,
-      sourceTs: `${date}-ts`,
-    });
+  const PERIOD = { start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" };
+  const testDay = (date: string): ExtractedDay => ({
+    date,
+    airborneSeconds: 600,
+    flights: 1,
+    flew: true,
+    sourceTs: `${date}-ts`,
+  });
+
+  it("attaches drone entries by date; a classified-and-none day gets an explicit []", () => {
     const drones = new Map<string, DroneEntry[]>([
       ["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]],
     ]);
@@ -144,17 +145,31 @@ describe("buildReport drone attachment", () => {
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([
       { name: "Андріан", isPerson: true, count: 2 },
     ]);
-    expect(report.days.find((d) => d.date === "2026-06-26")).not.toHaveProperty("droneReport");
+    // Extraction ran and found nothing for 06-26 → explicit [] ("ran, found
+    // none"), never an absent key (which would mean "unknown / never ran").
+    expect(report.days.find((d) => d.date === "2026-06-26")?.droneReport).toEqual([]);
   });
+
+  it("omits the droneReport key for a date whose classification failed (unknown, not [])", () => {
+    const drones = new Map<string, DroneEntry[]>([
+      ["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]],
+    ]);
+    const failedDates = new Set(["2026-06-26"]);
+    const report = buildReport(
+      [testDay("2026-06-25"), testDay("2026-06-26"), testDay("2026-06-27")],
+      PERIOD,
+      new Map(),
+      drones,
+      failedDates,
+    );
+    expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([
+      { name: "Андріан", isPerson: true, count: 2 },
+    ]);
+    expect(report.days.find((d) => d.date === "2026-06-26")).not.toHaveProperty("droneReport");
+    expect(report.days.find((d) => d.date === "2026-06-27")?.droneReport).toEqual([]);
+  });
+
   it("omits droneReport entirely when no map is passed", () => {
-    const PERIOD = { start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" };
-    const testDay = (date: string): ExtractedDay => ({
-      date,
-      airborneSeconds: 600,
-      flights: 1,
-      flew: true,
-      sourceTs: `${date}-ts`,
-    });
     const report = buildReport([testDay("2026-06-25")], PERIOD, new Map());
     expect(report.days[0]).not.toHaveProperty("droneReport");
   });

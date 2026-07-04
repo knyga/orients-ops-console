@@ -73,10 +73,17 @@ export async function extractFieldQa(
 
   // Per-day drone-count entries from that day's #field-qa messages (a separate
   // free-text report, not the stat card). Attributed by post date / explicit date.
+  // A date whose classification failed gets NO droneReport key (unknown — the
+  // verdict skips the drone gate for it); a classified-and-none day gets [].
   const fieldQaMessages = messages.filter((m) => m.channel === FIELD_QA_CHANNEL);
-  const droneByDate = await extractDroneReports(fieldQaMessages.map((m) => ({ ts: m.ts, text: m.text })));
+  const { byDate: droneByDate, failedDates: droneFailedDates } = await extractDroneReports(
+    fieldQaMessages.map((m) => ({ ts: m.ts, text: m.text })),
+  );
+  if (droneFailedDates.size > 0) {
+    log(`field-qa: drone-count classification failed for ${[...droneFailedDates].sort().join(", ")} — those days carry no droneReport key (gate skipped)`);
+  }
 
-  const report = buildReport(days, period, permalinkByTs, droneByDate);
+  const report = buildReport(days, period, permalinkByTs, droneByDate, droneFailedDates);
   const inputsCsv = toInputsCsv(days);
 
   if (opts.write) {

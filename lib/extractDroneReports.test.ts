@@ -17,7 +17,7 @@ describe("extractDroneReports", () => {
     const out = await extractDroneReports(messages, classify);
     // one classify call PER candidate message; same target day merges.
     expect(classify).toHaveBeenCalledTimes(2);
-    expect(out.get("2026-06-25")).toEqual([E("Андріан", true, 2)]);
+    expect(out.byDate.get("2026-06-25")).toEqual([E("Андріан", true, 2)]);
   });
 
   it("skips non-candidate messages (no шт tally) without a classify call", async () => {
@@ -29,7 +29,7 @@ describe("extractDroneReports", () => {
     const out = await extractDroneReports(messages, classify);
     expect(classify).toHaveBeenCalledTimes(1);
     expect(classify).toHaveBeenCalledWith("Андріан R&D - 1шт", "2026-06-25");
-    expect(out.get("2026-06-25")).toEqual([E("Андріан", true, 1)]);
+    expect(out.byDate.get("2026-06-25")).toEqual([E("Андріан", true, 1)]);
   });
 
   it("keeps a lagged date-named report and the same day's own report separate", async () => {
@@ -44,8 +44,8 @@ describe("extractDroneReports", () => {
         : { reports: [{ entries: [E("Андріан", true, 3)], forDate: null }] },
     );
     const out = await extractDroneReports(messages, classify);
-    expect(out.get("2026-06-01")).toEqual([E("Андріан", true, 2)]);
-    expect(out.get("2026-06-02")).toEqual([E("Андріан", true, 3)]);
+    expect(out.byDate.get("2026-06-01")).toEqual([E("Андріан", true, 2)]);
+    expect(out.byDate.get("2026-06-02")).toEqual([E("Андріан", true, 3)]);
   });
 
   // Regression: the real 06-25 message carried 23.06 / 24.06 / 25.06 sections in
@@ -64,9 +64,9 @@ describe("extractDroneReports", () => {
     }));
     const out = await extractDroneReports(messages, classify);
     expect(classify).toHaveBeenCalledTimes(1);
-    expect(out.get("2026-06-23")).toEqual([E("Андріан", true, 5)]);
-    expect(out.get("2026-06-24")).toEqual([E("Андріан", true, 4)]);
-    expect(out.get("2026-06-25")).toEqual([E("Андріан", true, 3)]);
+    expect(out.byDate.get("2026-06-23")).toEqual([E("Андріан", true, 5)]);
+    expect(out.byDate.get("2026-06-24")).toEqual([E("Андріан", true, 4)]);
+    expect(out.byDate.get("2026-06-25")).toEqual([E("Андріан", true, 3)]);
   });
 
   it("reassigns entries to an explicit forDate and merges across source days", async () => {
@@ -78,15 +78,15 @@ describe("extractDroneReports", () => {
       reports: [{ entries: [E("Андріан", true, t.includes("2шт") ? 2 : 1)], forDate: "2026-06-20" }],
     }));
     const out = await extractDroneReports(messages, classify);
-    expect(out.get("2026-06-20")).toEqual([E("Андріан", true, 3)]);
-    expect(out.has("2026-06-25")).toBe(false);
+    expect(out.byDate.get("2026-06-20")).toEqual([E("Андріан", true, 3)]);
+    expect(out.byDate.has("2026-06-25")).toBe(false);
   });
 
   it("skips candidate messages the classifier judges not to be reports", async () => {
     const messages: DroneMessage[] = [{ ts: tsFor("2026-06-25T09:00:00Z"), text: "балачки про шт" }];
     const classify = vi.fn(async () => ({ reports: [] }));
     const out = await extractDroneReports(messages, classify);
-    expect(out.size).toBe(0);
+    expect(out.byDate.size).toBe(0);
   });
 
   it("isolates classifier failures per message, continuing with the others", async () => {
@@ -102,8 +102,10 @@ describe("extractDroneReports", () => {
     });
     const out = await extractDroneReports(messages, classify);
     // Should have the successful day
-    expect(out.get("2026-06-25")).toEqual([E("Андріан", true, 1)]);
-    // Failed day should not be in the map
-    expect(out.has("2026-06-26")).toBe(false);
+    expect(out.byDate.get("2026-06-25")).toEqual([E("Андріан", true, 1)]);
+    // Failed day should not be in the map — it's unknown, not "no report".
+    expect(out.byDate.has("2026-06-26")).toBe(false);
+    expect(out.failedDates.has("2026-06-26")).toBe(true);
+    expect(out.failedDates.has("2026-06-25")).toBe(false);
   });
 });
