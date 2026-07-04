@@ -1,17 +1,17 @@
 /**
- * Committed record of which day-verdicts the bot has already posted to Slack, so
- * re-running the publisher never double-posts (idempotency). One file per period,
- * reports/published/<periodKey>.json, keyed by flight date.
+ * Published-verdict idempotency log, keyed by verdictKey (reportKey(date, reportTs)).
+ * Mirrors the Postgres published table: one row per (period, verdictKey).
  *
- * NOT server-only: fs-only, no secret (same precedent as lib/reports.ts). The
- * merge logic is pure. Mirrors the atomic temp+rename write used elsewhere.
+ * NOT server-only: no secret. The merge logic is pure.
  */
 import { eq } from "drizzle-orm";
 import { db, schema } from "./db";
 import { parsePeriodKey, periodKey, type Period } from "./period";
+import { reportKey } from "./fieldDayVerdict";
 
 export interface PublishedEntry {
   date: string;       // YYYY-MM-DD flight day
+  reportTs: string | null;  // Звіт message ts; null = legacy / no-Звіт
   channel: string;    // tracked channel NAME the verdict was posted to
   text: string;       // the exact message posted
   postedAt: string;   // ISO
@@ -25,12 +25,19 @@ export interface PublishedEntry {
   };
 }
 
-/** date → entry. */
+/** verdictKey → entry. */
 export type PublishedLog = Record<string, PublishedEntry>;
+
+export interface PublishTarget {
+  date: string;
+  reportTs: string | null;
+  reportCount: number;
+}
 
 function toEntry(r: typeof schema.published.$inferSelect): PublishedEntry {
   return {
     date: r.date,
+    reportTs: r.reportTs ?? null,
     channel: r.channel,
     text: r.text,
     ts: r.ts,
@@ -44,7 +51,7 @@ export async function readPublished(period: Period): Promise<PublishedLog> {
   const key = periodKey(period);
   const rows = await db.select().from(schema.published).where(eq(schema.published.period, key));
   const log: PublishedLog = {};
-  for (const r of rows) log[r.date] = toEntry(r);
+  for (const r of rows) log[r.verdictKey] = toEntry(r);
   return log;
 }
 
@@ -64,13 +71,15 @@ export async function findPublishedByTs(
   return { period, entry: toEntry(row) };
 }
 
-/** Upsert every entry of the period's published log by (period, date). */
+/** Upsert every entry of the period's published log by (period, verdictKey). */
 export async function writePublished(period: Period, log: PublishedLog): Promise<void> {
   const key = periodKey(period);
   for (const entry of Object.values(log)) {
     const values = {
       period: key,
       date: entry.date,
+      reportTs: entry.reportTs ?? null,
+      verdictKey: reportKey(entry.date, entry.reportTs),
       channel: entry.channel,
       text: entry.text,
       ts: entry.ts,
@@ -80,16 +89,19 @@ export async function writePublished(period: Period, log: PublishedLog): Promise
     await db
       .insert(schema.published)
       .values(values)
-      .onConflictDoUpdate({ target: [schema.published.period, schema.published.date], set: values });
+      .onConflictDoUpdate({ target: [schema.published.period, schema.published.verdictKey], set: values });
   }
 }
 
-/** Pure: has this date already been published? */
-export function isPublished(log: PublishedLog, date: string): boolean {
-  return Object.prototype.hasOwnProperty.call(log, date);
+/** Pure: has this report been published? Checks exact verdictKey; legacy bare-date entry covers a report only when reportCount === 1. */
+export function isPublished(log: PublishedLog, target: PublishTarget): boolean {
+  if (Object.prototype.hasOwnProperty.call(log, reportKey(target.date, target.reportTs))) return true;
+  // A legacy bare-date entry is "the day's single report".
+  return target.reportTs !== null && target.reportCount === 1 &&
+    Object.prototype.hasOwnProperty.call(log, target.date);
 }
 
 /** Pure: add an entry, returning a new log (does not mutate the input). */
 export function recordPublished(log: PublishedLog, entry: PublishedEntry): PublishedLog {
-  return { ...log, [entry.date]: entry };
+  return { ...log, [reportKey(entry.date, entry.reportTs)]: entry };
 }
