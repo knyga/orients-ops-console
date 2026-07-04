@@ -110,7 +110,7 @@ export async function computeVerdicts(
   // parsed "Звіт" that has a deployment window (deployMin != null). The latter
   // surface as NEEDS_REVIEW ("flight reported but airborne time not recorded")
   // instead of vanishing.
-  const flightDays = mergeFlightDays(airborneByDate, parsedReports);
+  const flightDays = mergeFlightDays(airborneByDate, parsedReports, period);
   const days: DayVerdict[] = flightDays.map((fd) => {
     const date = fd.date;
     const airborneMinutes = fd.airborneMinutes;

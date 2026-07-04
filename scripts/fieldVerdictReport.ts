@@ -98,6 +98,7 @@ export function buildReport(days: DayVerdict[], period: Period, runDate: string,
 export function mergeFlightDays(
   airborneByDate: Map<string, number>,
   parsed: { flightDate: string; deployMin: number | null; start: string | null; end: string | null }[],
+  period?: { start: string; end: string },
 ): FlightDayInput[] {
   const windowByDate = new Map<string, { start: string; end: string }>();
   for (const r of parsed) {
@@ -107,7 +108,13 @@ export function mergeFlightDays(
   for (const r of parsed) {
     if (r.deployMin != null) dates.add(r.flightDate);
   }
+  // Clamp to the compute window: a Звіт (or airborne override) can name a date
+  // outside the period — e.g. a June "Звіт 25.06" posted in July — and an
+  // out-of-period day here becomes a DUPLICATE published verdict for a day
+  // another period already owns.
+  const inPeriod = (d: string) => !period || (d >= period.start && d <= period.end);
   return [...dates]
+    .filter(inPeriod)
     .sort((a, b) => a.localeCompare(b))
     .map((date) => ({
       date,

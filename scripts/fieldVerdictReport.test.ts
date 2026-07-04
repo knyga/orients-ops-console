@@ -73,6 +73,22 @@ describe("mergeFlightDays", () => {
   const p = (flightDate: string, deployMin: number | null, start: string | null = null, end: string | null = null) =>
     ({ flightDate, deployMin, start, end });
 
+  it("clamps to the period: a Звіт naming an out-of-period date is dropped", () => {
+    // The real case: a June "Звіт 25.06" posted in July surfaced 2026-06-25 in the
+    // July report and got published as a duplicate verdict.
+    const out = mergeFlightDays(
+      new Map([["2026-07-02", 60], ["2026-06-30", 20]]),
+      [p("2026-06-25", 150, "16:30", "19:00"), p("2026-07-01", 200, "10:00", "13:20")],
+      { start: "2026-07-01", end: "2026-07-31" },
+    );
+    expect(out.map((d) => d.date)).toEqual(["2026-07-01", "2026-07-02"]);
+  });
+
+  it("applies no clamp when period is omitted (back-compat)", () => {
+    const out = mergeFlightDays(new Map([["2026-06-30", 20]]), [p("2026-07-01", 200)]);
+    expect(out.map((d) => d.date)).toEqual(["2026-06-30", "2026-07-01"]);
+  });
+
   it("includes airborne-report dates as reported, preserving minutes", () => {
     const out = mergeFlightDays(new Map([["2026-06-01", 36.8]]), []);
     expect(out).toEqual([{ date: "2026-06-01", airborneMinutes: 36.8, airborneReported: true, deployWindow: undefined }]);
