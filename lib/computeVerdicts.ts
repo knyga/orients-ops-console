@@ -21,7 +21,7 @@ import { readAliases, mergeAliases } from "./rosterAliases";
 import { SEED_ALIASES } from "./fieldRoster";
 import { readRosterCorrections } from "./rosterCorrections";
 import { overlayAirborne, readAirborneOverrides } from "./airborneOverrides";
-import { applyRosterCorrection } from "./rosterCorrection";
+import { applyRosterCorrection, correctionForReport } from "./rosterCorrection";
 import { buildReport, mergeFlightDays, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
 import { todayInFieldTz } from "./syncChannels";
 import type { DroneEntry } from "./droneReport";
@@ -105,47 +105,46 @@ export async function computeVerdicts(
   const aliases = mergeAliases(SEED_ALIASES, await readAliases());
   const fieldQaMessages = (await readChannelMessages("field-qa", period)).filter((m) => !m.deleted);
   const parsedReports = parseMonth(fieldQaMessages, aliases);
-  const parsedByDate = new Map(parsedReports.map((r) => [r.flightDate, r]));
   const corrections = await readRosterCorrections();
 
-  // Flight days = union of days the bot reported airborne time AND days with a
-  // parsed "Звіт" that has a deployment window (deployMin != null). The latter
-  // surface as NEEDS_REVIEW ("flight reported but airborne time not recorded")
-  // instead of vanishing.
-  const flightDays = mergeFlightDays(airborneByDate, parsedReports, period);
-  const days: DayVerdict[] = flightDays.map((fd) => {
-    const date = fd.date;
-    const airborneMinutes = fd.airborneMinutes;
+  // One row per Звіт (plus a synthetic reportTs-null row for a no-Звіт flight
+  // day). Day-shared axes — video, airborne, dataset signal, drone report —
+  // replicate onto every row of the date; deploy window + crew are per-report.
+  const flightRows = mergeFlightDays(airborneByDate, parsedReports, period);
+  const days: DayVerdict[] = flightRows.map((row) => {
+    const date = row.date;
     const videoMinutes = Math.round((videoMinutesByDate.get(date) ?? 0) * 10) / 10;
     const windowEnd = addWorkingDays(date, GRACE_WORKING_DAYS);
     const datasetPosted = hasDatasetNotice(datasetMessages, date, windowEnd);
-    const { status: datasetStatus, note: datasetNote } = deriveDatasetStatus(datasetPosted, date, resolutions);
-    const parsed = parsedByDate.get(date);
+    const { status: datasetStatus, note: datasetNote } = deriveDatasetStatus(datasetPosted, date, resolutions, row.reportTs);
     const fqDay = fqDayByDate.get(date);
     const base = verdictForDay({
       flightDate: date,
-      airborneMinutes,
+      airborneMinutes: row.airborneMinutes,
       videoMinutes,
       datasetStatus,
       today,
       graceWorkingDays: GRACE_WORKING_DAYS,
-      airborneReported: fd.airborneReported,
-      deployWindow: fd.deployWindow,
-      deployMin: parsed ? parsed.deployMin : undefined,
-      hasZvit: parsed != null,
+      airborneReported: row.airborneReported,
+      deployWindow: row.deployWindow,
+      deployMin: row.deployMin,
+      hasZvit: row.reportTs != null,
+      reportTs: row.reportTs,
+      reportSeq: row.reportSeq,
+      reportCount: row.reportCount,
       // Per-day presence: gate only when this date's fq record carries the key.
       ...(fqDay?.droneReport !== undefined ? { droneReportPresent: fqDay.droneReport.length > 0 } : {}),
     });
     // Surface the verbatim waiver/decline reason in the verdict reasons.
     const withNote = datasetNote ? { ...base, reasons: [...base.reasons, datasetNote] } : base;
     const resolved = applyResolution(withNote, resolutions);
-    // Attach the effective crew (parsed "Звіт" roster + any approver correction).
-    const eff = applyRosterCorrection(parsed?.roster ?? [], true, corrections.find((c) => c.date === date));
+    // Attach the effective crew (this report's roster + the binding correction).
+    const eff = applyRosterCorrection(row.roster, true, correctionForReport(corrections, date, row.reportTs, row.reportCount));
     const drones = fqDay?.droneReport;
     return {
       ...resolved,
       roster: eff.roster,
-      unknownInitials: parsed?.unknownInitials ?? [],
+      unknownInitials: row.unknownInitials,
       ...(drones && drones.length ? { droneReport: drones } : {}),
     };
   });
