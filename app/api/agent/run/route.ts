@@ -17,6 +17,11 @@ import type { ProposalKind } from "@/lib/proposalExecutor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// The agent loop budgets ~50s for itself (lib/agent/loop.ts BUDGET_MS); without
+// an explicit maxDuration Vercel applies the plan default and can kill the
+// function mid-loop, freezing the «думаю…» placeholder before the catch block
+// gets to edit it. 60 is the Hobby cap, matching the cron routes.
+export const maxDuration = 60;
 
 interface RunBody {
   surface: "dm" | "mention";
