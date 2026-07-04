@@ -53,14 +53,15 @@ export const DRONE_COUNT_TOOL: Anthropic.Tool = {
   },
 };
 
-export function buildDroneCountPrompt(dayText: string): string {
+export function buildDroneCountPrompt(dayText: string, postedOn?: string): string {
   return [
-    `This is one #field-qa Slack message (Ukrainian).`,
+    `This is one #field-qa Slack message (Ukrainian)${postedOn ? `, posted on ${postedOn} (Kyiv)` : ""}.`,
     `Extract the drone-count / production tally: how many drone units each person or category had that day, e.g.`,
     `"Андріан R&D - 1шт вартовий+ 1 шт азимут" → {name:"Андріан", isPerson:true, count:2};`,
     `"Демонстраційні - 8 шт" → {name:"Демонстраційні", isPerson:false, count:8}; "15ка - 1шт" → {name:"15ка", isPerson:false, count:1}.`,
     `A flight-hours "Звіт" (roster + time window) or general chatter is NOT a drone-count report → return entries: [].`,
     `Set forDate ONLY if the text explicitly names the date it is for; otherwise omit it.`,
+    `A day-month form like "01.06" names a date: resolve it against the posting date (it is that day-month on or shortly before the posting date) and return it as YYYY-MM-DD.`,
     `Messages:`,
     `"""${dayText}"""`,
     `Call record_drone_count_report with entries, note (and forDate only if explicit).`,

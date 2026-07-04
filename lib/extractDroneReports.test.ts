@@ -28,7 +28,7 @@ describe("extractDroneReports", () => {
     const classify = vi.fn(async () => ({ entries: [E("Андріан", true, 1)], forDate: null }));
     const out = await extractDroneReports(messages, classify);
     expect(classify).toHaveBeenCalledTimes(1);
-    expect(classify).toHaveBeenCalledWith("Андріан R&D - 1шт");
+    expect(classify).toHaveBeenCalledWith("Андріан R&D - 1шт", "2026-06-25");
     expect(out.get("2026-06-25")).toEqual([E("Андріан", true, 1)]);
   });
 

@@ -18,7 +18,7 @@ export interface DroneMessage {
   text: string;
 }
 
-export type DroneClassifier = (text: string) => Promise<{ entries: DroneEntry[]; forDate: string | null }>;
+export type DroneClassifier = (text: string, postedOn?: string) => Promise<{ entries: DroneEntry[]; forDate: string | null }>;
 
 const kyivPostDate = (ts: string) => videoUploadDate(new Date(Number(ts) * 1000).toISOString());
 
@@ -39,7 +39,7 @@ export async function extractDroneReports(
     let entries: DroneEntry[];
     let forDate: string | null;
     try {
-      ({ entries, forDate } = await classify(m.text));
+      ({ entries, forDate } = await classify(m.text, kyivPostDate(m.ts)));
     } catch (err) {
       console.error(`extractDroneReports: classifier failed for message ${m.ts}:`, err);
       continue;

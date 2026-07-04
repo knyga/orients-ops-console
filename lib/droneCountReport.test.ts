@@ -38,6 +38,13 @@ describe("classifyDroneCount", () => {
     expect(r.forDate).toBeNull();
   });
 
+  it("passes postedOn into the prompt", async () => {
+    create.mockResolvedValue(toolUse({ entries: [{ name: "X", isPerson: true, count: 1 }], note: "" }));
+    await classifyDroneCount("Готові 01.06 : X - 1шт", "2026-06-02");
+    const prompt = create.mock.calls[0][0].messages[0].content[0].text;
+    expect(prompt).toContain("2026-06-02");
+  });
+
   it("keeps a valid explicit forDate, rejects a malformed one", async () => {
     create.mockResolvedValue(toolUse({ entries: [{ name: "X", isPerson: true, count: 1 }], forDate: "2026-06-20", note: "" }));
     expect((await classifyDroneCount("x")).forDate).toBe("2026-06-20");
