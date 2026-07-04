@@ -6,6 +6,7 @@ import type { DayBonus } from "../lib/fieldBonus";
 const report: BonusReport = {
   period: { start: "2026-05-01", end: "2026-05-31" }, days: [], penalties: [], voidedDays: [], teamZeroed: false, flags: [], total: 700,
   people: [{ name: "Андріан", trips: 1, early: 0, weekend: 0, gross: 700, penaltyPct: 0, net: 700 }],
+  pendingDays: [],
 };
 
 describe("fieldBonusReport", () => {
@@ -24,7 +25,7 @@ describe("fieldBonusReport", () => {
 
 const day = (over: Partial<DayBonus> = {}): DayBonus => ({
   date: "2026-06-19", roster: ["Андріан", "Тарас"], deployMin: 240, videoMin: 10,
-  counted: true, early: false, weekend: false, reason: "counted", ...over,
+  counted: true, early: false, weekend: false, reason: "counted", status: "ACCEPTED", ...over,
 });
 
 describe("notify flags + plan", () => {

@@ -1,14 +1,15 @@
 /**
- * Pure field-bonus calculator. Trip counts iff deployMin >= 180 AND video >= 2min
- * (the real policy gate — NOT the 50%-of-airborne reconcile gate). Adds early
- * (arrival <= 12:30) and weekend (Sat/Sun) bonuses, then the drone-loss
- * multiplier per flight group over 12 consecutive trips, and the team-wide
- * >3-loss cutoff. No DB/Next imports — unit-tested in isolation.
+ * Pure field-bonus calculator. Trip counts iff the day's per-flight-day
+ * **verdict** is ACCEPTED or ACCEPTED_EXCEPTION — the unified qualification
+ * gate lives in `fieldDayVerdict.ts` (deploy >= 3h, video >= max(2min, 50% of
+ * airborne), a drone-count report, a #datasets notice); this module is money
+ * math only. Adds early (arrival <= 12:30) and weekend (Sat/Sun) bonuses, then
+ * the drone-loss multiplier per flight group over 12 consecutive trips, and
+ * the team-wide >3-loss cutoff. No DB/Next imports — unit-tested in isolation.
  */
-import type { FieldReport } from "./fieldReports";
 import type { Period } from "./period";
 import { applyRosterCorrection, type RosterCorrection } from "./rosterCorrection";
-import { MIN_DEPLOY_MIN, MIN_VIDEO_MIN } from "./fieldDayVerdict";
+import { MIN_DEPLOY_MIN, MIN_VIDEO_MIN, type VerdictStatus } from "./fieldDayVerdict";
 
 export const TRIP = 700;
 export const EARLY = 200;
@@ -21,11 +22,25 @@ export const LOSS_WINDOW = 12;
 export const TEAM_LOSS_CUTOFF = 3;
 
 export interface LossRecord { date: string; found: boolean; note: string }
-export interface DayBonus { date: string; roster: string[]; deployMin: number | null; videoMin: number; counted: boolean; early: boolean; weekend: boolean; reason: string }
+
+/** One flight day, already qualified by the verdict — the calculator's only input shape. */
+export interface QualifiedDay {
+  date: string;
+  status: VerdictStatus;
+  roster: string[];
+  unknownInitials: string[];
+  deployMin: number | null;
+  videoMin: number;
+  start: string | null; // Звіт arrival "HH:MM" for the early bonus
+  reasons: string[];
+  flew: boolean; // pending money is only at stake when the day flew
+}
+export interface PendingDay { date: string; roster: string[]; status: VerdictStatus; reasons: string[]; amountAtStake: number }
+export interface DayBonus { date: string; roster: string[]; deployMin: number | null; videoMin: number; counted: boolean; early: boolean; weekend: boolean; reason: string; status: VerdictStatus }
 export interface PersonBonus { name: string; trips: number; early: number; weekend: number; gross: number; penaltyPct: number; net: number }
 export interface Penalty { group: string[]; lossesInWindow: number; pct: number; reason: string }
 export interface Flag { kind: "unknown_initial" | "qualifying_unrecorded" | "counted_no_video" | "no_drone_count"; date: string; detail: string }
-export interface BonusReport { period: Period; days: DayBonus[]; people: PersonBonus[]; penalties: Penalty[]; teamZeroed: boolean; flags: Flag[]; total: number; voidedDays: { date: string; roster: string[]; reason: string }[] }
+export interface BonusReport { period: Period; days: DayBonus[]; people: PersonBonus[]; penalties: Penalty[]; teamZeroed: boolean; flags: Flag[]; total: number; voidedDays: { date: string; roster: string[]; reason: string }[]; pendingDays: PendingDay[] }
 
 const TZ = "Europe/Kyiv";
 function isWeekend(date: string): boolean {
@@ -40,33 +55,30 @@ function startMin(start: string | null): number | null {
 
 export function computeBonuses(input: {
   period: Period;
-  reports: FieldReport[];
-  videoMinutesByDate: Record<string, number>;
+  days: QualifiedDay[];
   losses: LossRecord[];
   corrections?: RosterCorrection[];
-  droneCountByDate?: Record<string, boolean>;
 }): BonusReport {
-  const { period, reports, videoMinutesByDate, losses, corrections = [], droneCountByDate } = input;
+  const { period, days: qualified, losses, corrections = [] } = input;
   const correctionFor = (date: string) => corrections.find((c) => c.date === date);
   const flags: Flag[] = [];
   const days: DayBonus[] = [];
+  const pendingDays: PendingDay[] = [];
 
-  for (const r of reports) {
-    for (const u of r.unknownInitials) flags.push({ kind: "unknown_initial", date: r.flightDate, detail: u });
-    const videoMin = roundVideoMin(videoMinutesByDate[r.flightDate] ?? 0);
-    const hoursOk = r.deployMin != null && r.deployMin >= MIN_DEPLOY_MIN;
-    const videoOk = videoMin >= MIN_VIDEO_MIN;
-    const droneCountReported = droneCountByDate == null || droneCountByDate[r.flightDate] === true;
-    const counted = hoursOk && videoOk && droneCountReported;
-    if (hoursOk && !videoOk) flags.push({ kind: "counted_no_video", date: r.flightDate, detail: `deploy ${r.deployMin}min but video ${videoMin}min < ${MIN_VIDEO_MIN}` });
-    if (hoursOk && videoOk && !droneCountReported) flags.push({ kind: "no_drone_count", date: r.flightDate, detail: `deploy ${r.deployMin}min + video ${videoMin}min OK but no drone-count report in #field-qa` });
-    const sm = startMin(r.start);
-    const early = counted && sm != null && sm <= EARLY_CUTOFF_MIN;
-    const weekend = counted && isWeekend(r.flightDate);
-    const reason = counted ? "counted" : !hoursOk ? "deploy<3h" : !videoOk ? "video<2min" : "no-drone-count";
-    // Effective crew = parsed roster overridden by any approver correction.
-    const eff = applyRosterCorrection(r.roster, counted, correctionFor(r.flightDate));
-    days.push({ date: r.flightDate, roster: eff.roster, deployMin: r.deployMin, videoMin, counted, early, weekend, reason });
+  for (const q of qualified) {
+    for (const u of q.unknownInitials) flags.push({ kind: "unknown_initial", date: q.date, detail: u });
+    const counted = q.status === "ACCEPTED" || q.status === "ACCEPTED_EXCEPTION";
+    const sm = startMin(q.start);
+    const earlyEligible = sm != null && sm <= EARLY_CUTOFF_MIN;
+    const early = counted && earlyEligible;
+    const weekend = counted && isWeekend(q.date);
+    const eff = applyRosterCorrection(q.roster, counted, correctionFor(q.date));
+    const reason = counted ? "counted" : q.reasons.join("; ") || q.status;
+    days.push({ date: q.date, roster: eff.roster, deployMin: q.deployMin, videoMin: q.videoMin, counted, early, weekend, reason, status: q.status });
+    if ((q.status === "PENDING" || q.status === "NEEDS_REVIEW") && q.flew) {
+      const perPerson = TRIP + (earlyEligible ? EARLY : 0) + (isWeekend(q.date) ? WEEKEND : 0);
+      pendingDays.push({ date: q.date, roster: eff.roster, status: q.status, reasons: q.reasons, amountAtStake: perPerson * eff.roster.length });
+    }
   }
 
   // Per-person tallies — honour per-person eligibility overrides.
@@ -119,6 +131,6 @@ export function computeBonuses(input: {
   });
 
   const total = people.reduce((s, p) => s + p.net, 0);
-  const voidedDays = days.filter((d) => d.reason === "no-drone-count").map((d) => ({ date: d.date, roster: d.roster, reason: d.reason }));
-  return { period, days, people, penalties, teamZeroed, flags, total, voidedDays };
+  const voidedDays = days.filter((d) => d.status === "REJECTED").map((d) => ({ date: d.date, roster: d.roster, reason: d.reason }));
+  return { period, days, people, penalties, teamZeroed, flags, total, voidedDays, pendingDays };
 }
