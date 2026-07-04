@@ -1,0 +1,31 @@
+date,status,crew,deployMin,videoMin,ratePerPerson,dayTotal,reason
+2026-06-01,ACCEPTED,Любомир + Тарас,220,44.8,700,1400,
+2026-06-02,ACCEPTED,Андріан + Надія,270,44.8,900,1800,
+2026-06-03,REJECTED,Любомир + Тарас,,35.7,0,0,"flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver explicitly states there is no report for the day and the day is not accepted (""звіту за день немає, день не прийнято"")."
+2026-06-04,ACCEPTED_EXCEPTION,Володимир + Любомир,,0,700,1400,
+2026-06-05,ACCEPTED,Андріан + Надія,270,76.8,900,1800,
+2026-06-06,ACCEPTED,Андріан + Данило,210,50.7,1000,2000,
+2026-06-07,REJECTED,,,0,0,0,"drones did not fly (0 flights, 0 min airborne); dataset reason declined by an admin; rejected (Oleksandr K): Approver stated ""день не прийнято"" — the day is rejected (likely a typo ""принятор"" → ""прийнято"")."
+2026-06-08,REJECTED,,,0,0,0,"video 0m is 0% of airborne 85m (< 50%); flight detected but no Звіт (crew/deployment unknown); dataset reason declined by an admin; rejected (Oleksandr K): The approver explicitly stated ""день не зараховано"" (the day is not counted/rejected), indicating the day is not acceptable."
+2026-06-09,REJECTED,Любомир + Надія,285,0,0,0,video 0m is 0% of airborne 104m (< 50%); dataset reason declined by an admin; dataset reason declined (Oleksandr K): Approver explicitly confirms the dataset is rejected — no dataset present for this day.
+2026-06-10,ACCEPTED,Андріан + Данило,320,143.8,700,1400,
+2026-06-11,REJECTED,Любомир + Надія,,0,0,0,"video 0m is 0% of airborne 18m (< 50%); no drone-count report in #field-qa; flight detected but no Звіт (crew/deployment unknown); dataset reason declined by an admin; rejected (Oleksandr K): The approver explicitly stated ""день не зараховано"" (the day is not counted/rejected)."
+2026-06-12,REJECTED,Данило + Любомир,,0,0,0,"video 0m is 0% of airborne 34m (< 50%); flight detected but no Звіт (crew/deployment unknown); dataset reason declined by an admin; rejected (Oleksandr K): Approver explicitly states the day is not accepted due to missing report (""немає звіту - день не прийнято"")."
+2026-06-13,ACCEPTED,Андріан + Сергій,420,65.8,1000,2000,
+2026-06-15,ACCEPTED,Андріан + Данило,180,82.5,700,1400,
+2026-06-16,ACCEPTED_EXCEPTION,Андріан + Надія,420,93,700,1400,
+2026-06-17,ACCEPTED,Андріан + Тарас,240,50.3,700,1400,
+2026-06-18,ACCEPTED,Андріан + Данило,190,113.6,700,1400,
+2026-06-19,ACCEPTED,Андріан,240,28.2,700,700,
+2026-06-20,REJECTED,Андріан + Сергій,,0,0,0,"drones did not fly (0 flights, 0 min airborne); dataset reason declined by an admin; rejected (Oleksandr K): Approver explicitly rejected the day: ""день не прийнято"" (day not accepted)."
+2026-06-21,ACCEPTED_EXCEPTION,Андріан + Сергій,180,15.7,1000,2000,
+2026-06-22,REJECTED,Влад + Любомир,,0,0,0,video 0m is 0% of airborne 43m (< 50%); flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver explicitly rejects the day due to missing report (немає звіту).
+2026-06-23,REJECTED,Влад + Данило,180,0,0,0,"video 0m is 0% of airborne 46m (< 50%); rejected (Oleksandr K): Approver rejected the day explicitly — ""не прийнято, немає відео"" (not accepted, no video)."
+2026-06-24,REJECTED,Влад + Тарас,,0,0,0,video 0m is 0% of airborne 66m (< 50%); flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver rejected the day due to missing report (немає звіту).
+2026-06-25,REJECTED,Влад,,11.2,0,0,video 11m is 8% of airborne 133m (< 50%); flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver rejected the day because there is no report (немає звіту).
+2026-06-26,ACCEPTED_EXCEPTION,Андріан + Надія,200,36.7,700,1400,
+2026-06-27,ACCEPTED,Андріан + Сергій,180,30,1000,2000,
+2026-06-28,REJECTED,,,0,0,0,"drones did not fly (0 flights, 0 min airborne); dataset reason declined by an admin; rejected (Oleksandr K): Approver explicitly rejected the day — no report was submitted (""не прийнято день, не було звіту"")."
+2026-06-29,ACCEPTED,Андріан + Влад,230,148.8,900,1800,
+2026-06-30,REJECTED,Влад + Любомир,120,29,0,0,deployment 120m is under 3h
+TOTAL,,,,,,25300,

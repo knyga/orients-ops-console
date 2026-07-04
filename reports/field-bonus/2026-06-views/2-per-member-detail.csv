@@ -1,0 +1,59 @@
+person,date,outcome,pay,early,weekend,reason
+Любомир,2026-06-01,paid,700,false,false,
+Любомир,2026-06-03,rejected,0,,,"flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver explicitly states there is no report for the day and the day is not accepted (""звіту за день немає, день не прийнято"")."
+Любомир,2026-06-04,paid,700,false,false,
+Любомир,2026-06-09,rejected,0,,,video 0m is 0% of airborne 104m (< 50%); dataset reason declined by an admin; dataset reason declined (Oleksandr K): Approver explicitly confirms the dataset is rejected — no dataset present for this day.
+Любомир,2026-06-11,rejected,0,,,"video 0m is 0% of airborne 18m (< 50%); no drone-count report in #field-qa; flight detected but no Звіт (crew/deployment unknown); dataset reason declined by an admin; rejected (Oleksandr K): The approver explicitly stated ""день не зараховано"" (the day is not counted/rejected)."
+Любомир,2026-06-12,rejected,0,,,"video 0m is 0% of airborne 34m (< 50%); flight detected but no Звіт (crew/deployment unknown); dataset reason declined by an admin; rejected (Oleksandr K): Approver explicitly states the day is not accepted due to missing report (""немає звіту - день не прийнято"")."
+Любомир,2026-06-22,rejected,0,,,video 0m is 0% of airborne 43m (< 50%); flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver explicitly rejects the day due to missing report (немає звіту).
+Любомир,2026-06-30,rejected,0,,,deployment 120m is under 3h
+Любомир,TOTAL,,1400,0,0,2 trips
+Тарас,2026-06-01,paid,700,false,false,
+Тарас,2026-06-03,rejected,0,,,"flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver explicitly states there is no report for the day and the day is not accepted (""звіту за день немає, день не прийнято"")."
+Тарас,2026-06-17,paid,700,false,false,
+Тарас,2026-06-24,rejected,0,,,video 0m is 0% of airborne 66m (< 50%); flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver rejected the day due to missing report (немає звіту).
+Тарас,TOTAL,,1400,0,0,2 trips
+Андріан,2026-06-02,paid,900,true,false,
+Андріан,2026-06-05,paid,900,true,false,
+Андріан,2026-06-06,paid,1000,false,true,
+Андріан,2026-06-10,paid,700,false,false,
+Андріан,2026-06-13,paid,1000,false,true,
+Андріан,2026-06-15,paid,700,false,false,
+Андріан,2026-06-16,paid,700,false,false,
+Андріан,2026-06-17,paid,700,false,false,
+Андріан,2026-06-18,paid,700,false,false,
+Андріан,2026-06-19,paid,700,false,false,
+Андріан,2026-06-20,rejected,0,,,"drones did not fly (0 flights, 0 min airborne); dataset reason declined by an admin; rejected (Oleksandr K): Approver explicitly rejected the day: ""день не прийнято"" (day not accepted)."
+Андріан,2026-06-21,paid,1000,false,true,
+Андріан,2026-06-26,paid,700,false,false,
+Андріан,2026-06-27,paid,1000,false,true,
+Андріан,2026-06-29,paid,900,true,false,
+Андріан,TOTAL,,11600,3,4,14 trips
+Надія,2026-06-02,paid,900,true,false,
+Надія,2026-06-05,paid,900,true,false,
+Надія,2026-06-09,rejected,0,,,video 0m is 0% of airborne 104m (< 50%); dataset reason declined by an admin; dataset reason declined (Oleksandr K): Approver explicitly confirms the dataset is rejected — no dataset present for this day.
+Надія,2026-06-11,rejected,0,,,"video 0m is 0% of airborne 18m (< 50%); no drone-count report in #field-qa; flight detected but no Звіт (crew/deployment unknown); dataset reason declined by an admin; rejected (Oleksandr K): The approver explicitly stated ""день не зараховано"" (the day is not counted/rejected)."
+Надія,2026-06-16,paid,700,false,false,
+Надія,2026-06-26,paid,700,false,false,
+Надія,TOTAL,,3200,2,0,4 trips
+Володимир,2026-06-04,paid,700,false,false,
+Володимир,TOTAL,,700,0,0,1 trips
+Данило,2026-06-06,paid,1000,false,true,
+Данило,2026-06-10,paid,700,false,false,
+Данило,2026-06-12,rejected,0,,,"video 0m is 0% of airborne 34m (< 50%); flight detected but no Звіт (crew/deployment unknown); dataset reason declined by an admin; rejected (Oleksandr K): Approver explicitly states the day is not accepted due to missing report (""немає звіту - день не прийнято"")."
+Данило,2026-06-15,paid,700,false,false,
+Данило,2026-06-18,paid,700,false,false,
+Данило,2026-06-23,rejected,0,,,"video 0m is 0% of airborne 46m (< 50%); rejected (Oleksandr K): Approver rejected the day explicitly — ""не прийнято, немає відео"" (not accepted, no video)."
+Данило,TOTAL,,3100,0,1,4 trips
+Сергій,2026-06-13,paid,1000,false,true,
+Сергій,2026-06-20,rejected,0,,,"drones did not fly (0 flights, 0 min airborne); dataset reason declined by an admin; rejected (Oleksandr K): Approver explicitly rejected the day: ""день не прийнято"" (day not accepted)."
+Сергій,2026-06-21,paid,1000,false,true,
+Сергій,2026-06-27,paid,1000,false,true,
+Сергій,TOTAL,,3000,0,3,3 trips
+Влад,2026-06-22,rejected,0,,,video 0m is 0% of airborne 43m (< 50%); flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver explicitly rejects the day due to missing report (немає звіту).
+Влад,2026-06-23,rejected,0,,,"video 0m is 0% of airborne 46m (< 50%); rejected (Oleksandr K): Approver rejected the day explicitly — ""не прийнято, немає відео"" (not accepted, no video)."
+Влад,2026-06-24,rejected,0,,,video 0m is 0% of airborne 66m (< 50%); flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver rejected the day due to missing report (немає звіту).
+Влад,2026-06-25,rejected,0,,,video 11m is 8% of airborne 133m (< 50%); flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver rejected the day because there is no report (немає звіту).
+Влад,2026-06-29,paid,900,true,false,
+Влад,2026-06-30,rejected,0,,,deployment 120m is under 3h
+Влад,TOTAL,,900,1,0,1 trips
