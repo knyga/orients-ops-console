@@ -9,6 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   CLASSIFY_INSTRUCTION_TOOL,
   buildInstructionPrompt,
+  classifyInstructionTool,
   type InstructionAxis,
   type InstructionClassification,
   type InstructionIntent,
@@ -47,7 +48,7 @@ export async function classifyInstruction(
     message = await client.messages.create({
       model: MODEL,
       max_tokens: 512,
-      tools: [CLASSIFY_INSTRUCTION_TOOL],
+      tools: [classifyInstructionTool(pendingEcho)],
       tool_choice: { type: "tool", name: CLASSIFY_INSTRUCTION_TOOL.name },
       messages: [{ role: "user", content: buildInstructionPrompt(verdictMessage, reply, pendingEcho) }],
     });
@@ -60,7 +61,11 @@ export async function classifyInstruction(
   if (!toolUse) throw new InstructionClassifyError("Claude returned no tool_use block.");
   const input = toolUse.input as Partial<InstructionClassification>;
 
-  const intent: InstructionIntent = VALID_INTENT.includes(input.intent as InstructionIntent)
+  // confirm/cancel are only meaningful against a pending proposal; without one they
+  // would silently noop downstream, so coerce them to "unclear" (schema narrowing
+  // already forbids them — this is the deterministic backstop).
+  const allowed: InstructionIntent[] = pendingEcho ? VALID_INTENT : ["instruction", "unclear"];
+  const intent: InstructionIntent = allowed.includes(input.intent as InstructionIntent)
     ? (input.intent as InstructionIntent)
     : "unclear";
   const axis = VALID_AXIS.includes(input.axis as InstructionAxis) ? (input.axis as InstructionAxis) : undefined;

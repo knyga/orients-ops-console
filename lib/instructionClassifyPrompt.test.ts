@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLASSIFY_INSTRUCTION_TOOL, buildInstructionPrompt } from "./instructionClassifyPrompt";
+import { CLASSIFY_INSTRUCTION_TOOL, buildInstructionPrompt, classifyInstructionTool } from "./instructionClassifyPrompt";
 
 describe("instructionClassifyPrompt", () => {
   it("includes the verdict, the reply, and a pending-proposal echo when present", () => {
@@ -39,5 +39,27 @@ describe("instructionClassifyPrompt", () => {
     );
     const intent = (CLASSIFY_INSTRUCTION_TOOL.input_schema.properties as Record<string, { enum?: string[] }>).intent;
     expect(intent.enum).toEqual(expect.arrayContaining(["confirm", "cancel", "instruction", "unclear"]));
+  });
+
+  // «відмінити, немає звіту» on a thread with NO pending proposal must be classifiable
+  // only as an instruction (day-reject) or unclear — never a confirm/cancel of a
+  // proposal that doesn't exist (2026-07-04: that combination noop'd silently).
+  it("narrows the intent enum to instruction/unclear when no proposal is pending", () => {
+    const tool = classifyInstructionTool(null);
+    const intent = (tool.input_schema.properties as Record<string, { enum?: string[] }>).intent;
+    expect(intent.enum).toEqual(["instruction", "unclear"]);
+  });
+
+  it("keeps the full intent enum when a proposal is pending", () => {
+    const tool = classifyInstructionTool("Відхилити день 2026-06-24");
+    const intent = (tool.input_schema.properties as Record<string, { enum?: string[] }>).intent;
+    expect(intent.enum).toEqual(["confirm", "cancel", "instruction", "unclear"]);
+  });
+
+  it("maps day-annulment wording to a rejection instruction when nothing is pending", () => {
+    const p = buildInstructionPrompt("verdict", "відмінити, немає звіту", null);
+    expect(p).toContain("НЕМАЄ pending proposal");
+    expect(p).toContain("«відмінити»");
+    expect(p).toContain('decision="rejected"');
   });
 });

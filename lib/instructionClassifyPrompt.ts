@@ -76,6 +76,33 @@ export const CLASSIFY_INSTRUCTION_TOOL: Anthropic.Tool = {
   },
 };
 
+/**
+ * The classify tool, with the `intent` enum narrowed to instruction/unclear when
+ * there is no pending proposal — confirm/cancel are only meaningful against one.
+ * Without this, «відмінити, немає звіту» on a bare thread classifies as a
+ * "cancel" of a nonexistent proposal and noops silently instead of rejecting the day.
+ */
+export function classifyInstructionTool(pendingEcho: string | null): Anthropic.Tool {
+  if (pendingEcho) return CLASSIFY_INSTRUCTION_TOOL;
+  const schema = CLASSIFY_INSTRUCTION_TOOL.input_schema as { properties: Record<string, unknown> };
+  const intent = schema.properties.intent as { enum: string[]; description: string };
+  return {
+    ...CLASSIFY_INSTRUCTION_TOOL,
+    input_schema: {
+      ...CLASSIFY_INSTRUCTION_TOOL.input_schema,
+      properties: {
+        ...schema.properties,
+        intent: {
+          ...intent,
+          enum: ["instruction", "unclear"],
+          description:
+            "instruction = a data change (set axis + payload); unclear = a question/comment that changes nothing",
+        },
+      },
+    },
+  };
+}
+
 export function buildInstructionPrompt(
   verdictMessage: string,
   reply: string,
@@ -98,6 +125,14 @@ export function buildInstructionPrompt(
       `If the reply agrees ("так", "ок", "підтверджую", "+", "давай", "вірно", 👍) → intent="confirm".`,
       `If it disagrees ("ні", "скасуй", "не треба", "відміна") → intent="cancel".`,
       `If it is a DIFFERENT change → intent="instruction" (a new proposal replaces the pending one).`,
+      ``,
+    );
+  } else {
+    lines.push(
+      `НЕМАЄ pending proposal (nothing is awaiting confirmation), so the reply can only be a new`,
+      `instruction or unclear. Wording that annuls the day itself — «відмінити», «скасувати»,`,
+      `«не зараховувати», e.g. «відмінити, немає звіту» — is a day rejection: intent="instruction",`,
+      `axis="day", decision="rejected".`,
       ``,
     );
   }
