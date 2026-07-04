@@ -126,6 +126,18 @@ describe("POST /api/agent/run", () => {
     expect(h.updateMessage).toHaveBeenCalledWith("C-issue-log", "111.901", "echo", expect.anything());
   });
 
+  it("DM text is converted from markdown to Slack mrkdwn before posting", async () => {
+    h.runSlackTurn.mockResolvedValue({
+      kind: "text",
+      text: "- **ATP-1685** — [Done] Натренувати",
+    });
+    const res = await POST(req(base));
+    expect(res.status).toBe(200);
+    const posted = "• *ATP-1685* — [Done] Натренувати";
+    expect(h.updateMessage).toHaveBeenCalledWith("C1", "2", posted, expect.anything());
+    expect(h.appendTurn).toHaveBeenCalledWith("C1", "q", posted);
+  });
+
   it("DM text empty result → defaults to fallback message", async () => {
     h.runSlackTurn.mockResolvedValue({ kind: "text", text: "   " });
     const res = await POST(req(base));

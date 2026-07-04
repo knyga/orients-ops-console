@@ -8,6 +8,7 @@
  * route.
  */
 import { runSlackTurn } from "@/lib/agent/slackTurn";
+import { markdownToMrkdwn } from "@/lib/mrkdwn";
 import { loadTranscript, appendTurn } from "@/lib/agentThread";
 import { insertPending } from "@/lib/agentProposals";
 import { updateMessage } from "@/lib/slack";
@@ -56,7 +57,8 @@ export async function POST(req: Request): Promise<Response> {
       await appendTurn(body.conversationKey, body.question, result.proposal.echoUk);
       return Response.json({ ok: true, surface: body.surface, proposal: result.proposal.kind });
     }
-    const answer = result.text.trim() || "Не маю відповіді на це.";
+    // The model writes GitHub markdown; Slack renders mrkdwn — convert at this boundary.
+    const answer = markdownToMrkdwn(result.text.trim()) || "Не маю відповіді на це.";
     await updateMessage(body.channelId, body.placeholderTs, answer, meta);
     await appendTurn(body.conversationKey, body.question, answer);
     return Response.json({ ok: true, surface: body.surface });
