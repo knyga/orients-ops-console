@@ -15,10 +15,37 @@ describe("extractDroneReports", () => {
     ];
     const classify = vi.fn(async () => ({ entries: [E("Андріан", true, 1)], forDate: null }));
     const out = await extractDroneReports(messages, classify);
-    // both messages fall on the same Kyiv day → one classify call over joined text → but our
-    // stub returns one entry per call; same-day grouping means ONE call here.
+    // one classify call PER candidate message; same target day merges.
+    expect(classify).toHaveBeenCalledTimes(2);
+    expect(out.get("2026-06-25")).toEqual([E("Андріан", true, 2)]);
+  });
+
+  it("skips non-candidate messages (no шт tally) without a classify call", async () => {
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-06-25T09:00:00Z"), text: "просто балачки без звіту" },
+      { ts: tsFor("2026-06-25T10:00:00Z"), text: "Андріан R&D - 1шт" },
+    ];
+    const classify = vi.fn(async () => ({ entries: [E("Андріан", true, 1)], forDate: null }));
+    const out = await extractDroneReports(messages, classify);
     expect(classify).toHaveBeenCalledTimes(1);
+    expect(classify).toHaveBeenCalledWith("Андріан R&D - 1шт");
     expect(out.get("2026-06-25")).toEqual([E("Андріан", true, 1)]);
+  });
+
+  it("keeps a lagged date-named report and the same day's own report separate", async () => {
+    // The real 06-02 case: newest-first input order must not matter.
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-06-02T09:32:00Z"), text: "Готові : Андріан R&D - 3 шт" },
+      { ts: tsFor("2026-06-02T09:31:00Z"), text: "Готові 01.06 : Андріан R&D - 2 шт" },
+    ];
+    const classify = vi.fn(async (t: string) =>
+      t.includes("01.06")
+        ? { entries: [E("Андріан", true, 2)], forDate: "2026-06-01" }
+        : { entries: [E("Андріан", true, 3)], forDate: null },
+    );
+    const out = await extractDroneReports(messages, classify);
+    expect(out.get("2026-06-01")).toEqual([E("Андріан", true, 2)]);
+    expect(out.get("2026-06-02")).toEqual([E("Андріан", true, 3)]);
   });
 
   it("reassigns entries to an explicit forDate and merges across source days", async () => {
@@ -35,14 +62,14 @@ describe("extractDroneReports", () => {
     expect(out.has("2026-06-25")).toBe(false);
   });
 
-  it("skips days with no drone entries", async () => {
-    const messages: DroneMessage[] = [{ ts: tsFor("2026-06-25T09:00:00Z"), text: "just chatter" }];
+  it("skips candidate messages the classifier judges not to be reports", async () => {
+    const messages: DroneMessage[] = [{ ts: tsFor("2026-06-25T09:00:00Z"), text: "балачки про шт" }];
     const classify = vi.fn(async () => ({ entries: [], forDate: null }));
     const out = await extractDroneReports(messages, classify);
     expect(out.size).toBe(0);
   });
 
-  it("isolates classifier failures per day, continuing with other days", async () => {
+  it("isolates classifier failures per message, continuing with the others", async () => {
     const messages: DroneMessage[] = [
       { ts: tsFor("2026-06-25T09:00:00Z"), text: "Андріан R&D - 1шт" },
       { ts: tsFor("2026-06-26T09:00:00Z"), text: "Влад R&D - 2шт" },

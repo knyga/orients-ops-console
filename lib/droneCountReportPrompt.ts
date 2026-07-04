@@ -55,7 +55,7 @@ export const DRONE_COUNT_TOOL: Anthropic.Tool = {
 
 export function buildDroneCountPrompt(dayText: string): string {
   return [
-    `These are the #field-qa messages posted on one calendar day (Ukrainian).`,
+    `This is one #field-qa Slack message (Ukrainian).`,
     `Extract the drone-count / production tally: how many drone units each person or category had that day, e.g.`,
     `"Андріан R&D - 1шт вартовий+ 1 шт азимут" → {name:"Андріан", isPerson:true, count:2};`,
     `"Демонстраційні - 8 шт" → {name:"Демонстраційні", isPerson:false, count:8}; "15ка - 1шт" → {name:"15ка", isPerson:false, count:1}.`,
