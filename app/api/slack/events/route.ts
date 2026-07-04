@@ -31,6 +31,7 @@
  * Slack only checks the 2xx status and ignores the body; it lets an operator
  * probing the endpoint see the outcome directly. SERVER-ONLY route.
  */
+import { waitUntil } from "@vercel/functions";
 import { verifySlackSignature } from "@/lib/slackSignature";
 import { TRACKED_CHANNELS } from "@/lib/slackChannels";
 import { findPublishedByTs } from "@/lib/published";
@@ -137,11 +138,22 @@ async function deferAgentTurn(
   }
   const secret = process.env.AGENT_RUN_SECRET;
   if (secret) {
-    void fetch(`${selfOrigin(req)}/api/agent/run`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-agent-secret": secret },
-      body: JSON.stringify({ surface: runSurface, conversationKey, channelId, userId, incomingTs: ts, placeholderTs, threadTs, question }),
-    }).catch((err) => console.error("slack events: self-invoke failed:", err));
+    // waitUntil, not a bare `void fetch`: Vercel freezes the instance the moment
+    // the ack is returned, so an unregistered fetch may never leave the process
+    // (observed 2026-07-04: placeholder posted, /api/agent/run never invoked).
+    // The ack below still returns immediately — waitUntil only extends the
+    // instance's lifetime, it does not block the response.
+    waitUntil(
+      fetch(`${selfOrigin(req)}/api/agent/run`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-agent-secret": secret },
+        body: JSON.stringify({ surface: runSurface, conversationKey, channelId, userId, incomingTs: ts, placeholderTs, threadTs, question }),
+      })
+        .then((res) => {
+          if (!res.ok) console.error(`slack events: agent self-invoke returned ${res.status}`);
+        })
+        .catch((err) => console.error("slack events: self-invoke failed:", err)),
+    );
   } else {
     console.error("slack events: AGENT_RUN_SECRET not set — cannot dispatch agent turn");
   }

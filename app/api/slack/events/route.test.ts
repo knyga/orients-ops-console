@@ -293,6 +293,31 @@ describe("POST /api/slack/events — DM agent: fast ack + placeholder + self-inv
     resolveFetch?.();
   });
 
+  it("registers the self-invoke with the platform waitUntil so the frozen lambda can't drop it", async () => {
+    // On Vercel, returning the response freezes the instance; a bare `void fetch`
+    // may never leave the process. @vercel/functions waitUntil reads this symbol.
+    const waitUntilSpy = vi.fn();
+    const sym = Symbol.for("@vercel/request-context");
+    (globalThis as Record<symbol, unknown>)[sym] = { get: () => ({ waitUntil: waitUntilSpy }) };
+    try {
+      let resolveFetch: (() => void) | undefined;
+      global.fetch = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveFetch = () => resolve(new Response("{}", { status: 200 }));
+          }),
+      ) as unknown as typeof fetch;
+
+      const res = await POST(req(dmEvent("hello")));
+      expect(res.status).toBe(200);
+      expect(waitUntilSpy).toHaveBeenCalledTimes(1);
+      expect(waitUntilSpy.mock.calls[0][0]).toBeInstanceOf(Promise);
+      resolveFetch?.();
+    } finally {
+      delete (globalThis as Record<symbol, unknown>)[sym];
+    }
+  });
+
   it("logs and still acks if AGENT_RUN_SECRET is unset (placeholder stays visible)", async () => {
     delete process.env.AGENT_RUN_SECRET;
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
