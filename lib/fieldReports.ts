@@ -1,13 +1,16 @@
 /**
  * Parse #field-qa "Звіт" reports into structured roster + deployment windows.
  * Pure (no DB/Next). Hardened for the real variances in the mirror: optional
- * "Звіт" keyword, reversed roster/time order, dot-or-colon separators, threads,
- * and a report date in the text that lags the post time.
+ * "Звіт" keyword, reversed roster/time order, dot-or-colon separators, threads.
+ * Every Звіт message is a distinct report (one message = one report; corrections
+ * are Slack edits under the same ts).
  */
 import { resolveInitial } from "./fieldRoster";
 
 export interface FieldReport {
   flightDate: string;
+  /** Slack ts of the Звіт message — the report's identity and its thread root. */
+  reportTs: string;
   roster: string[];
   unknownInitials: string[];
   start: string | null;
@@ -26,7 +29,7 @@ const toMin = (h: string, m: string) => Number(h) * 60 + Number(m);
 
 export function parseZvit(
   text: string,
-  meta: { permalink: string; threadTs: string },
+  meta: { permalink: string; threadTs: string; reportTs: string },
   aliases: Record<string, string> = {},
 ): FieldReport | null {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -71,19 +74,19 @@ export function parseZvit(
   // line when it sits on its own line (so it never leaks into crashText).
   const crashStart = windowLineIndex > 1 ? windowLineIndex + 1 : 2;
   const crashText = lines.slice(crashStart).join("\n") || null;
-  return { flightDate, roster, unknownInitials, start, end, deployMin, crashText, permalink: meta.permalink, threadTs: meta.threadTs };
+  return { flightDate, reportTs: meta.reportTs, roster, unknownInitials, start, end, deployMin, crashText, permalink: meta.permalink, threadTs: meta.threadTs };
 }
 
 export function parseMonth(
   messages: { text: string; permalink: string; thread_ts?: string; ts: string }[],
   aliases: Record<string, string> = {},
 ): FieldReport[] {
-  const byDate = new Map<string, { ts: string; report: FieldReport }>();
+  const reports: FieldReport[] = [];
   for (const m of messages) {
-    const r = parseZvit(m.text ?? "", { permalink: m.permalink, threadTs: m.thread_ts ?? m.ts }, aliases);
-    if (!r) continue;
-    const prev = byDate.get(r.flightDate);
-    if (!prev || m.ts.localeCompare(prev.ts) > 0) byDate.set(r.flightDate, { ts: m.ts, report: r });
+    const r = parseZvit(m.text ?? "", { permalink: m.permalink, threadTs: m.thread_ts ?? m.ts, reportTs: m.ts }, aliases);
+    if (r) reports.push(r);
   }
-  return [...byDate.values()].map((v) => v.report).sort((a, b) => a.flightDate.localeCompare(b.flightDate));
+  return reports.sort(
+    (a, b) => a.flightDate.localeCompare(b.flightDate) || a.reportTs.localeCompare(b.reportTs),
+  );
 }

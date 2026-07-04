@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseZvit, parseMonth } from "./fieldReports";
 
-const meta = { permalink: "http://x", threadTs: "1.1" };
+const meta = { permalink: "http://x", threadTs: "1.1", reportTs: "1.1" };
 
 describe("parseZvit", () => {
   it("parses the canonical shape", () => {
@@ -50,13 +50,24 @@ describe("parseZvit", () => {
 });
 
 describe("parseMonth", () => {
-  it("dedupes by flightDate keeping the later edit (by ts)", () => {
+  it("keeps both same-day reports from different crews, each with its own reportTs", () => {
     const msgs = [
-      { text: "Звіт 01.06.2026\nА+Д 14:00-17:00", permalink: "a", ts: "100" },
-      { text: "Звіт 01.06.2026\nА+Д 14:00-18:00", permalink: "b", ts: "200" },
+      { text: "Звіт 01.07.2026\nА+Н 12:30-16:10", permalink: "p1", ts: "1782912665.697519" },
+      { text: "Звіт 01.07.2026\nВ+Н 18:20-20:10", permalink: "p2", ts: "1782927922.936129" },
     ];
     const out = parseMonth(msgs);
-    expect(out).toHaveLength(1);
-    expect(out[0].deployMin).toBe(240); // the ts=200 edit wins
+    expect(out).toHaveLength(2);
+    expect(out[0].reportTs).toBe("1782912665.697519");
+    expect(out[0].deployMin).toBe(220);
+    expect(out[1].reportTs).toBe("1782927922.936129");
+    expect(out[1].deployMin).toBe(110);
+  });
+
+  it("sorts by flightDate then ts across dates", () => {
+    const msgs = [
+      { text: "Звіт 02.07.2026\nА+Б 10:00-14:00", permalink: "p3", ts: "3.0" },
+      { text: "Звіт 01.07.2026\nВ+Г 09:00-13:00", permalink: "p4", ts: "2.0" },
+    ];
+    expect(parseMonth(msgs).map((r) => r.flightDate)).toEqual(["2026-07-01", "2026-07-02"]);
   });
 });
