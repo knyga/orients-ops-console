@@ -153,4 +153,24 @@ describe("videoFlightDate", () => {
   it("skips a leading invalid date-run and uses a later valid one in the name", () => {
     expect(videoFlightDate("20261399_WIN_20260616_17_39", "2026-06-18T09:00:00Z")).toBe("2026-06-16");
   });
+
+  it("rejects a years-off name date (camera clock reset) and falls back to the upload date", () => {
+    // Real June 2026 incident: the field recorder's clock was reset to 2010, so its
+    // files are named 20100912_*/20100914_* — that date must not black-hole the video.
+    expect(videoFlightDate("20100914_051246", "2026-06-25T12:00:00Z")).toBe("2026-06-25");
+    expect(videoFlightDate("20100912_043343", "2026-06-21T15:00:00Z")).toBe("2026-06-21");
+  });
+
+  it("rejects a name date in the future of the upload and falls back", () => {
+    expect(videoFlightDate("WIN_20260620_10_00_00_Pro", "2026-06-18T09:00:00Z")).toBe("2026-06-18");
+  });
+
+  it("allows one day of forward slack for timezone jitter", () => {
+    // Uploaded 23:30Z on 06-18 = 02:30 Kyiv 06-19; a name date of 06-18 (or 06-19) is fine.
+    expect(videoFlightDate("Recording 2026-06-19 001500", "2026-06-18T20:00:00Z")).toBe("2026-06-19");
+  });
+
+  it("skips an implausible date-run and uses a later plausible one in the name", () => {
+    expect(videoFlightDate("20100912_WIN_20260616_17_39", "2026-06-18T09:00:00Z")).toBe("2026-06-16");
+  });
 });

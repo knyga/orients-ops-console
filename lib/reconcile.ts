@@ -102,23 +102,38 @@ function validDate(y: number, m: number, d: number): string | null {
   return `${y}-${mm}-${dd}`;
 }
 
+// A name date is only credible as the flight day when the upload happened soon
+// after it: uploads lag flights by a couple of working days at most, and a flight
+// cannot postdate its upload (1 day of forward slack for timezone jitter). The
+// recorder naming the files keeps its own clock, which can be arbitrarily wrong —
+// a 2010-reset clock once black-holed two days of footage.
+const MAX_NAME_DATE_LAG_DAYS = 14;
+
+function plausibleFlightDate(nameDate: string, uploadDate: string): boolean {
+  const lagDays = (Date.parse(uploadDate) - Date.parse(nameDate)) / 86_400_000;
+  return lagDays >= -1 && lagDays <= MAX_NAME_DATE_LAG_DAYS;
+}
+
 /**
  * The flight day a video belongs to. Uploads lag the flight by up to the grace
  * window, so the flight date is taken from the video NAME — two observed formats,
- * `Recording YYYY-MM-DD …` and `WIN_YYYYMMDD_…`. Falls back to the Kyiv upload
- * date only when the name carries no parseable calendar date.
+ * `Recording YYYY-MM-DD …` and `WIN_YYYYMMDD_…`. A name date is trusted only when
+ * it is plausibly recent relative to the upload (see plausibleFlightDate); falls
+ * back to the Kyiv upload date when the name carries no plausible calendar date.
  * See docs/.../field-day-acceptance spec + memory video-name-carries-flight-date.
  */
 export function videoFlightDate(name: string, createdTime: string): string {
-  // Try every date-like run; return the first that is a real calendar date, so a
-  // spurious leading digit run before the true date doesn't force the fallback.
+  const uploadDate = videoUploadDate(createdTime);
+  // Try every date-like run; return the first that is a real, plausible calendar
+  // date, so a spurious leading digit run before the true date doesn't force the
+  // fallback.
   for (const m of (name ?? "").matchAll(NAME_DATE_RE)) {
     const iso = m[1]
       ? validDate(Number(m[1]), Number(m[2]), Number(m[3]))
       : validDate(Number(m[4]), Number(m[5]), Number(m[6]));
-    if (iso) return iso;
+    if (iso && plausibleFlightDate(iso, uploadDate)) return iso;
   }
-  return videoUploadDate(createdTime);
+  return uploadDate;
 }
 
 interface DayAccumulator {
