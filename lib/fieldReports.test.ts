@@ -32,6 +32,21 @@ describe("parseZvit", () => {
     const r = parseZvit("Звіт 01.06.2026\nбез часу", meta);
     expect(r).toMatchObject({ flightDate: "2026-06-01", start: null, deployMin: null });
   });
+  it("parses a window on its own line below the roster (real 2026-06-16 shape)", () => {
+    const r = parseZvit(
+      "16.06.2026\nА+Н\n13:00-20:00\n\nОблітали військовий азимут\nПофіксили баг з ребусом",
+      meta,
+    );
+    expect(r).toMatchObject({
+      flightDate: "2026-06-16",
+      roster: ["Андріан", "Надія"],
+      start: "13:00",
+      end: "20:00",
+      deployMin: 420,
+    });
+    expect(r?.crashText).toContain("військовий азимут");
+    expect(r?.crashText).not.toContain("13:00-20:00");
+  });
 });
 
 describe("parseMonth", () => {

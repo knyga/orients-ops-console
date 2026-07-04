@@ -36,7 +36,19 @@ export function parseZvit(
   const flightDate = `${dm[3]}-${dm[2]}-${dm[1]}`;
 
   const rosterLine = lines[1] ?? "";
-  const wm = WINDOW_RE.exec(rosterLine);
+  // The window is usually on the roster line («А+Серж 14:40-17:40»), but some
+  // reports put it on its own line below the roster (date / roster / window).
+  // Scan from the roster line down and take the first window match.
+  let wm: RegExpExecArray | null = null;
+  let windowLineIndex = -1;
+  for (let i = 1; i < lines.length; i++) {
+    const m = WINDOW_RE.exec(lines[i]);
+    if (m) {
+      wm = m;
+      windowLineIndex = i;
+      break;
+    }
+  }
   let start: string | null = null;
   let end: string | null = null;
   let deployMin: number | null = null;
@@ -46,7 +58,8 @@ export function parseZvit(
     start = `${pad(wm[1])}:${wm[2]}`;
     end = `${pad(wm[3])}:${wm[4]}`;
     deployMin = toMin(wm[3], wm[4]) - toMin(wm[1], wm[2]);
-    // Roster tokens are everything on the line that is not the time window.
+    // Roster tokens are everything on the roster line that is not the time
+    // window (stripping the window is a no-op when it lived on its own line).
     const names = rosterLine.replace(WINDOW_RE, " ");
     for (const tok of names.split(/[+/,&]/).map((s) => s.trim()).filter((s) => s && !/^\d+$/.test(s))) {
       const r = resolveInitial(tok, aliases);
@@ -54,7 +67,10 @@ export function parseZvit(
       else unknownInitials.push(r.unknown);
     }
   }
-  const crashText = lines.slice(2).join("\n") || null;
+  // Descriptive text is everything below the roster line, minus the window
+  // line when it sits on its own line (so it never leaks into crashText).
+  const crashStart = windowLineIndex > 1 ? windowLineIndex + 1 : 2;
+  const crashText = lines.slice(crashStart).join("\n") || null;
   return { flightDate, roster, unknownInitials, start, end, deployMin, crashText, permalink: meta.permalink, threadTs: meta.threadTs };
 }
 
