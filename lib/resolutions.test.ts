@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyResolution, deriveDatasetStatus, type Resolution } from "./resolutions";
-import type { DayVerdict } from "./fieldDayVerdict";
+import { verdictForDay, type DayVerdict } from "./fieldDayVerdict";
 
 const res = (over: Partial<Resolution>): Resolution => ({
   date: "2026-06-13",
@@ -99,6 +99,43 @@ describe("deriveDatasetStatus", () => {
   });
   it("posted but day-axis rejected → still POSTED here (day veto handled by applyResolution)", () => {
     expect(deriveDatasetStatus(true, "2026-06-10", [R({ axis: "day", decision: "rejected" })]).status).toBe("POSTED");
+  });
+});
+
+describe("applyResolution (approver exception rescues a machine REJECT)", () => {
+  it("accepted_exception upgrades a machine-rejected day to ACCEPTED_EXCEPTION", () => {
+    const rejected: DayVerdict = verdictForDay({
+      flightDate: "2026-06-30",
+      airborneMinutes: 100,
+      videoMinutes: 50,
+      datasetStatus: "POSTED",
+      today: "2026-07-01",
+      graceWorkingDays: 2,
+      deployMin: 120, // < MIN_DEPLOY_MIN → hard REJECTED
+    });
+    expect(rejected.status).toBe("REJECTED");
+    const out = applyResolution(rejected, [
+      res({ date: "2026-06-30", decision: "accepted_exception", note: "approved despite short deploy — force majeure", by: "Oleksandr K" }),
+    ]);
+    expect(out.status).toBe("ACCEPTED_EXCEPTION");
+    expect(out.reasons[out.reasons.length - 1]).toMatch(/exception \(Oleksandr K\): approved despite short deploy/);
+  });
+
+  it("a human rejected resolution still wins over any exception (precedence regression pin)", () => {
+    const rejected: DayVerdict = verdictForDay({
+      flightDate: "2026-06-30",
+      airborneMinutes: 100,
+      videoMinutes: 50,
+      datasetStatus: "POSTED",
+      today: "2026-07-01",
+      graceWorkingDays: 2,
+      deployMin: 120,
+    });
+    const out = applyResolution(rejected, [
+      res({ date: "2026-06-30", decision: "rejected", note: "confirmed unacceptable", by: "Bohdan Forostianyi" }),
+    ]);
+    expect(out.status).toBe("REJECTED");
+    expect(out.reasons.join(" ")).toMatch(/rejected \(Bohdan Forostianyi\): confirmed unacceptable/);
   });
 });
 

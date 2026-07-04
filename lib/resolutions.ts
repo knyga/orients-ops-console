@@ -108,8 +108,11 @@ export function deriveDatasetStatus(
  * handled by deriveDatasetStatus + verdictForDay; here we only honour exceptions
  * and vetoes that target the video gate or the whole day:
  *  - a `rejected` (video|day) is an authoritative veto → REJECTED from ANY status.
- *  - an `accepted_exception` (video|day) forgives a flagged miss → ACCEPTED_EXCEPTION,
- *    but only from NEEDS_REVIEW (never upgrades an already-good day).
+ *  - an `accepted_exception` (video|day) forgives a flagged miss or a machine
+ *    auto-reject → ACCEPTED_EXCEPTION, but only from NEEDS_REVIEW or REJECTED
+ *    (never upgrades an already-good day). A human `rejected` resolution is
+ *    checked first, so it still wins over any exception for the same day (the
+ *    admin escape hatch cuts both ways, and the veto takes precedence).
  */
 export function applyResolution(verdict: DayVerdict, resolutions: Resolution[]): DayVerdict {
   const forDate = resolutions.filter(
@@ -121,7 +124,7 @@ export function applyResolution(verdict: DayVerdict, resolutions: Resolution[]):
     return { ...verdict, status: "REJECTED", reasons: [...verdict.reasons, `rejected${who}: ${rejected.note}`] };
   }
   const exception = forDate.find((r) => r.decision === "accepted_exception");
-  if (exception && verdict.status === "NEEDS_REVIEW") {
+  if (exception && (verdict.status === "NEEDS_REVIEW" || verdict.status === "REJECTED")) {
     const who = exception.by ? ` (${exception.by})` : "";
     return { ...verdict, status: "ACCEPTED_EXCEPTION", reasons: [...verdict.reasons, `exception${who}: ${exception.note}`] };
   }
