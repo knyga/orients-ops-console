@@ -14,6 +14,9 @@ const res = (over: Partial<Resolution>): Resolution => ({
 
 const needsReview: DayVerdict = {
   date: "2026-06-13",
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   status: "NEEDS_REVIEW",
   airborneMinutes: 20,
   videoMinutes: 2,
@@ -141,7 +144,7 @@ describe("applyResolution (approver exception rescues a machine REJECT)", () => 
 
 describe("applyResolution (video/day axes only)", () => {
   const verdict: DayVerdict = {
-    date: "2026-06-10", status: "NEEDS_REVIEW" as const, airborneMinutes: 100,
+    date: "2026-06-10", reportTs: null, reportSeq: 1, reportCount: 1, status: "NEEDS_REVIEW" as const, airborneMinutes: 100,
     videoMinutes: 10, ratio: 0.1, datasetStatus: "WAIVED" as const, withinGrace: false, reasons: [], roster: [], unknownInitials: [], airborneReported: true,
   };
   it("video-axis exception flips NEEDS_REVIEW → ACCEPTED_EXCEPTION", () => {
@@ -155,5 +158,44 @@ describe("applyResolution (video/day axes only)", () => {
   it("a dataset-axis resolution is ignored here (it drives the dataset status, not the overlay)", () => {
     const out = applyResolution({ ...verdict, status: "ACCEPTED" }, [R({ axis: "dataset" })]);
     expect(out.status).toBe("ACCEPTED");
+  });
+});
+
+// ── New tests for Task 4: report-scoped resolutions ─────────────────────────
+
+const someAcceptedVerdict: DayVerdict = {
+  date: "2026-07-01",
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
+  status: "ACCEPTED",
+  airborneMinutes: 100,
+  videoMinutes: 60,
+  ratio: 0.6,
+  datasetStatus: "POSTED",
+  withinGrace: false,
+  reasons: [], roster: [], unknownInitials: [], airborneReported: true,
+};
+
+describe("applyResolution (report-scoped)", () => {
+  it("a report-scoped rejection vetoes only its report", () => {
+    const rej: Resolution = { date: "2026-07-01", reportTs: "2.0", axis: "day", decision: "rejected", note: "дубль", source: "s", recordedAt: "t" };
+    const v1 = { ...someAcceptedVerdict, date: "2026-07-01", reportTs: "1.0" };
+    const v2 = { ...someAcceptedVerdict, date: "2026-07-01", reportTs: "2.0" };
+    expect(applyResolution(v1, [rej]).status).toBe(v1.status); // untouched
+    expect(applyResolution(v2, [rej]).status).toBe("REJECTED");
+  });
+
+  it("a day-wide (no reportTs) resolution applies to every report of the day", () => {
+    const rej: Resolution = { date: "2026-07-01", axis: "day", decision: "rejected", note: "n", source: "s", recordedAt: "t" };
+    expect(applyResolution({ ...someAcceptedVerdict, date: "2026-07-01", reportTs: "1.0" }, [rej]).status).toBe("REJECTED");
+  });
+});
+
+describe("deriveDatasetStatus (report-scoped)", () => {
+  it("honours report scope for day-axis declines", () => {
+    const rej: Resolution = { date: "2026-07-01", reportTs: "2.0", axis: "day", decision: "rejected", note: "n", source: "s", recordedAt: "t" };
+    expect(deriveDatasetStatus(false, "2026-07-01", [rej], "1.0").status).toBe("MISSING");
+    expect(deriveDatasetStatus(false, "2026-07-01", [rej], "2.0").status).toBe("DECLINED");
   });
 });

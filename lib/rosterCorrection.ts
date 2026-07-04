@@ -14,6 +14,9 @@ export interface RosterCorrection {
   by: string;
   source: string;
   recordedAt: string;
+  /** Scopes the correction to one Звіт's report ts; ""/absent = day-wide
+   *  (approver legacy + sheet import). */
+  reportTs?: string;
 }
 
 /**
@@ -26,6 +29,24 @@ export interface RosterCorrection {
  */
 export function sheetImportShouldSkip(existingSource: string | undefined, incomingSource: string): boolean {
   return incomingSource === "field-ops-sheet" && existingSource !== undefined && existingSource !== "field-ops-sheet";
+}
+
+/**
+ * The correction binding one report: an exact report-scoped one wins; a day-wide
+ * correction binds only a single-report day or the synthetic no-Звіт row — on a
+ * multi-report day each Звіт's own roster is authoritative.
+ */
+export function correctionForReport(
+  corrections: RosterCorrection[],
+  date: string,
+  reportTs: string | null,
+  reportCount: number,
+): RosterCorrection | undefined {
+  const forDate = corrections.filter((c) => c.date === date);
+  const scoped = reportTs ? forDate.find((c) => c.reportTs === reportTs) : undefined;
+  if (scoped) return scoped;
+  if (reportTs !== null && reportCount > 1) return undefined;
+  return forDate.find((c) => !c.reportTs);
 }
 
 export function applyRosterCorrection(

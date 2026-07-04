@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyRosterCorrection, sheetImportShouldSkip, type RosterCorrection } from "./rosterCorrection";
+import { applyRosterCorrection, correctionForReport, sheetImportShouldSkip, type RosterCorrection } from "./rosterCorrection";
 
 const c = (over: Partial<RosterCorrection>): RosterCorrection => ({
   date: "2026-06-10", note: "n", by: "Oleksandr K", source: "slack", recordedAt: "2026-06-30T00:00:00Z", ...over,
@@ -47,5 +47,16 @@ describe("applyRosterCorrection", () => {
   it("force-counts a person even when the day gate failed", () => {
     const r = applyRosterCorrection(["Тарас"], false, c({ eligibility: { Тарас: "counted" } }));
     expect(r.perPerson).toEqual([{ name: "Тарас", counted: true }]);
+  });
+});
+
+describe("correctionForReport", () => {
+  it("prefers the exact report-scoped correction, falls back day-wide only on single-report days", () => {
+    const dayWide = { date: "2026-07-01", roster: ["Ш"], note: "", by: "b", source: "manual", recordedAt: "t" };
+    const scoped = { date: "2026-07-01", reportTs: "2.0", roster: ["С"], note: "", by: "b", source: "slack", recordedAt: "t" };
+    expect(correctionForReport([dayWide, scoped], "2026-07-01", "2.0", 2)).toBe(scoped);
+    expect(correctionForReport([dayWide], "2026-07-01", "1.0", 2)).toBeUndefined(); // multi-report: Звіт roster wins
+    expect(correctionForReport([dayWide], "2026-07-01", "1.0", 1)).toBe(dayWide);
+    expect(correctionForReport([dayWide], "2026-07-01", null, 1)).toBe(dayWide);    // synthetic row
   });
 });

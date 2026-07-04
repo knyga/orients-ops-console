@@ -23,6 +23,15 @@ export interface Resolution {
   recordedAt: string;               // ISO
   /** Who decided (e.g. an approver's name), when applicable. */
   by?: string;
+  /** Scopes the resolution to one Звіт's report ts; ""/absent = the whole day. */
+  reportTs?: string;
+}
+
+/** Does this resolution bind the given report? ''/absent scope = the whole day. */
+function appliesTo(r: Resolution, date: string, reportTs: string | null): boolean {
+  if (r.date !== date) return false;
+  const scope = r.reportTs ?? "";
+  return scope === "" || scope === (reportTs ?? "");
 }
 
 function toResolution(r: typeof schema.resolutions.$inferSelect): Resolution {
@@ -34,6 +43,7 @@ function toResolution(r: typeof schema.resolutions.$inferSelect): Resolution {
     source: r.source,
     recordedAt: r.recordedAt,
     ...(r.by != null ? { by: r.by } : {}),
+    ...(r.reportTs ? { reportTs: r.reportTs } : {}),
   };
 }
 
@@ -53,11 +63,15 @@ export async function upsertResolution(resolution: Resolution): Promise<void> {
     source: resolution.source,
     by: resolution.by ?? null,
     recordedAt: resolution.recordedAt,
+    reportTs: resolution.reportTs ?? "",
   };
   await db
     .insert(schema.resolutions)
     .values(values)
-    .onConflictDoUpdate({ target: [schema.resolutions.date, schema.resolutions.axis], set: values });
+    .onConflictDoUpdate({
+      target: [schema.resolutions.date, schema.resolutions.axis, schema.resolutions.reportTs],
+      set: values,
+    });
 }
 
 /**
@@ -70,9 +84,10 @@ export function deriveDatasetStatus(
   datasetPosted: boolean,
   date: string,
   resolutions: Resolution[],
+  reportTs: string | null = null,
 ): { status: DatasetStatus; note?: string } {
   const forDate = resolutions.filter(
-    (r) => r.date === date && (r.axis === "dataset" || r.axis === "day"),
+    (r) => appliesTo(r, date, reportTs) && (r.axis === "dataset" || r.axis === "day"),
   );
   const rejected = forDate.find((r) => r.decision === "rejected");
   const exception = forDate.find((r) => r.decision === "accepted_exception");
@@ -109,9 +124,13 @@ export function deriveDatasetStatus(
  * wins over any exception). Consulted before amending a published verdict to
  * ⛔ on a dataset decline — a rescued day is NOT rejected. Pure.
  */
-export function dayRescuedByException(date: string, resolutions: Resolution[]): boolean {
+export function dayRescuedByException(
+  date: string,
+  resolutions: Resolution[],
+  reportTs: string | null = null,
+): boolean {
   const forDate = resolutions.filter(
-    (r) => r.date === date && (r.axis === "video" || r.axis === "day"),
+    (r) => appliesTo(r, date, reportTs) && (r.axis === "video" || r.axis === "day"),
   );
   if (forDate.some((r) => r.decision === "rejected")) return false;
   return forDate.some((r) => r.decision === "accepted_exception");
@@ -130,7 +149,7 @@ export function dayRescuedByException(date: string, resolutions: Resolution[]): 
  */
 export function applyResolution(verdict: DayVerdict, resolutions: Resolution[]): DayVerdict {
   const forDate = resolutions.filter(
-    (r) => r.date === verdict.date && (r.axis === "video" || r.axis === "day"),
+    (r) => appliesTo(r, verdict.date, verdict.reportTs) && (r.axis === "video" || r.axis === "day"),
   );
   const rejected = forDate.find((r) => r.decision === "rejected");
   if (rejected) {

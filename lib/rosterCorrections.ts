@@ -4,7 +4,7 @@
  * `roster_corrections` Postgres table; read by the verdict (display) and the
  * bonus calc. NOT server-only (CLIs import it, like lib/resolutions.ts).
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, schema } from "./db";
 import { sheetImportShouldSkip, type RosterCorrection } from "./rosterCorrection";
 
@@ -17,6 +17,7 @@ function toCorrection(r: typeof schema.rosterCorrections.$inferSelect): RosterCo
     recordedAt: r.recordedAt,
     ...(r.roster != null ? { roster: r.roster as string[] } : {}),
     ...(r.eligibility != null ? { eligibility: r.eligibility as Record<string, "counted" | "not_counted"> } : {}),
+    ...(r.reportTs ? { reportTs: r.reportTs } : {}),
   };
 }
 
@@ -32,7 +33,7 @@ export async function upsertRosterCorrection(c: RosterCorrection): Promise<void>
     const existing = await db
       .select({ source: schema.rosterCorrections.source })
       .from(schema.rosterCorrections)
-      .where(eq(schema.rosterCorrections.date, c.date));
+      .where(and(eq(schema.rosterCorrections.date, c.date), eq(schema.rosterCorrections.reportTs, "")));
     if (existing.length > 0 && sheetImportShouldSkip(existing[0].source, c.source)) return;
   }
 
@@ -44,9 +45,13 @@ export async function upsertRosterCorrection(c: RosterCorrection): Promise<void>
     by: c.by,
     source: c.source,
     recordedAt: c.recordedAt,
+    reportTs: c.reportTs ?? "",
   };
   await db
     .insert(schema.rosterCorrections)
     .values(values)
-    .onConflictDoUpdate({ target: schema.rosterCorrections.date, set: values });
+    .onConflictDoUpdate({
+      target: [schema.rosterCorrections.date, schema.rosterCorrections.reportTs],
+      set: values,
+    });
 }

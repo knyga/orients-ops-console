@@ -41,7 +41,8 @@ export const slackSync = pgTable("slack_sync", {
   lastSync: text("last_sync").notNull(),
 });
 
-/** Durable human resolutions (exceptions / vetoes), keyed by (flight date, axis). */
+/** Durable human resolutions (exceptions / vetoes), keyed by (flight date, axis,
+ *  report ts). report_ts ""=day-wide (applies to every report of the day). */
 export const resolutions = pgTable(
   "resolutions",
   {
@@ -52,20 +53,27 @@ export const resolutions = pgTable(
     source: text("source").notNull(),
     by: text("by"),
     recordedAt: text("recorded_at").notNull(),
+    reportTs: text("report_ts").notNull().default(""), // ""=day-wide; a Звіт ts scopes it
   },
-  (t) => [primaryKey({ columns: [t.date, t.axis] })],
+  (t) => [primaryKey({ columns: [t.date, t.axis, t.reportTs] })],
 );
 
-/** Approver roster corrections, keyed by flight date (crew + per-person eligibility). */
-export const rosterCorrections = pgTable("roster_corrections", {
-  date: text("date").primaryKey(),
-  roster: jsonb("roster"),            // string[] | null
-  eligibility: jsonb("eligibility"),  // Record<name,"counted"|"not_counted"> | null
-  note: text("note").notNull(),
-  by: text("by").notNull(),
-  source: text("source").notNull(),
-  recordedAt: text("recorded_at").notNull(),
-});
+/** Approver roster corrections, keyed by (flight date, report ts). report_ts
+ *  ""=day-wide (approver legacy + sheet import); a Звіт ts scopes it to one report. */
+export const rosterCorrections = pgTable(
+  "roster_corrections",
+  {
+    date: text("date").notNull(),
+    roster: jsonb("roster"),            // string[] | null
+    eligibility: jsonb("eligibility"),  // Record<name,"counted"|"not_counted"> | null
+    note: text("note").notNull(),
+    by: text("by").notNull(),
+    source: text("source").notNull(),
+    recordedAt: text("recorded_at").notNull(),
+    reportTs: text("report_ts").notNull().default(""), // ""=day-wide; a Звіт ts scopes it
+  },
+  (t) => [primaryKey({ columns: [t.date, t.reportTs] })],
+);
 
 /** Approver airborne-minutes overrides, keyed by flight date (corrects the figure
  *  the day is judged against when the #field-qa report is wrong/absent). */
