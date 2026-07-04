@@ -20,6 +20,9 @@ const period = { start: "2026-06-01", end: "2026-06-30" };
 // Minimal settled ACCEPTED day, type-valid against lib/fieldDayVerdict.
 const day = (date: string): DayVerdict => ({
   date,
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   status: "ACCEPTED",
   airborneMinutes: 20,
   videoMinutes: 40,
@@ -50,7 +53,7 @@ describe("publishSettledDays", () => {
 
   it("skips days already in the published log (idempotent)", async () => {
     readPublished.mockResolvedValue({
-      "2026-06-29": { date: "2026-06-29", channel: "field-qa", text: "x", postedAt: "t", ts: "x" },
+      "2026-06-29": { date: "2026-06-29", reportTs: null, channel: "field-qa", text: "x", postedAt: "t", ts: "x" },
     });
     const res = await publishSettledDays([day("2026-06-29"), day("2026-06-30")], channel, period);
     expect(res.posted).toEqual(["2026-06-30"]);

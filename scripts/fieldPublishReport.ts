@@ -26,6 +26,7 @@ export interface PublishArgs {
 
 export interface PlanItem {
   date: string;
+  reportTs: string | null;
   text: string;
   alreadyPublished: boolean;
 }
@@ -64,8 +65,9 @@ export function resolvePeriod(args: PublishArgs, today: string): Period {
 export function buildPlan(days: DayVerdict[], log: PublishedLog): PlanItem[] {
   return publishableDays(days).map((d) => ({
     date: d.date,
+    reportTs: d.reportTs,
     text: formatDayMessage(d),
-    alreadyPublished: isPublished(log, d.date),
+    alreadyPublished: isPublished(log, { date: d.date, reportTs: d.reportTs, reportCount: d.reportCount }),
   }));
 }
 

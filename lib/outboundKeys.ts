@@ -22,8 +22,8 @@ export function detectOrigin(
   return env.VERCEL === "1" ? "vercel" : "local";
 }
 
-export const verdictKey = (periodKey: string, date: string): string =>
-  `verdict:${periodKey}:${date}`;
+export const verdictKey = (periodKey: string, date: string, reportTs?: string | null): string =>
+  reportTs ? `verdict:${periodKey}:${date}:${reportTs}` : `verdict:${periodKey}:${date}`;
 export const askKey = (gapType: string, date: string): string => `ask:${gapType}:${date}`;
 export const approvalEditKey = (date: string, rev: string): string =>
   `approval-edit:${date}:${rev}`;

@@ -4,6 +4,9 @@ import type { DayVerdict } from "./fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
   date: "2026-06-18",
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   status: "ACCEPTED",
   airborneMinutes: 18,
   videoMinutes: 206,
@@ -111,7 +114,7 @@ describe("formatDayMessage", () => {
   });
 
   it("renders the waived dataset marker (Ukrainian)", () => {
-    const msg = formatDayMessage({ date: "2026-06-10", status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [], roster: [], unknownInitials: [], airborneReported: true });
+    const msg = formatDayMessage({ date: "2026-06-10", reportTs: null, reportSeq: 1, reportCount: 1, status: "ACCEPTED", airborneMinutes: 100, videoMinutes: 60, ratio: 0.6, datasetStatus: "WAIVED", withinGrace: false, reasons: [], roster: [], unknownInitials: [], airborneReported: true });
     expect(msg).toContain("датасет 📝 виняток");
   });
 
@@ -140,6 +143,21 @@ describe("formatDayMessage", () => {
     expect(msg).toContain('виняток (Oleksandr K): approver replied "approve"');
     expect(msg).not.toContain("airborne");
     expect(msg).not.toContain("exception (");
+  });
+
+  it("labels multi-report days «виїзд N/M (window)» and keeps single-report days byte-identical", () => {
+    const base: DayVerdict = {
+      date: "2026-07-01", reportTs: "2.0", reportSeq: 2, reportCount: 2,
+      status: "REJECTED", airborneMinutes: 18.1, videoMinutes: 29, ratio: 29 / 18.1,
+      datasetStatus: "POSTED", withinGrace: false,
+      reasons: ["deployment 110m is under 3h"], roster: ["Влад", "Любомир"],
+      unknownInitials: [], airborneReported: true,
+      deployWindow: { start: "18:20", end: "20:10" }, deployMin: 110,
+      droneReportPresent: true, hasZvit: true,
+    };
+    expect(formatDayMessage(base)).toContain("2026-07-01 (середа), виїзд 2/2 (18:20–20:10) — відхилено");
+    const single: DayVerdict = { ...base, reportTs: "1.0", reportSeq: 1, reportCount: 1 };
+    expect(formatDayMessage(single)).not.toContain("виїзд 1/1");
   });
 });
 
@@ -195,6 +213,9 @@ describe("crew suffix", () => {
 
 const droneBase: DayVerdict = {
   date: "2026-06-25",
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   status: "NEEDS_REVIEW",
   airborneMinutes: 0,
   videoMinutes: 0,
@@ -269,7 +290,7 @@ describe("region discipline", () => {
 
 describe("REJECTED rendering", () => {
   const rejected: DayVerdict = {
-    date: "2026-06-30", status: "REJECTED", airborneMinutes: 18.1, videoMinutes: 29,
+    date: "2026-06-30", reportTs: null, reportSeq: 1, reportCount: 1, status: "REJECTED", airborneMinutes: 18.1, videoMinutes: 29,
     ratio: 29 / 18.1, datasetStatus: "POSTED", withinGrace: false,
     reasons: ["deployment 120m is under 3h"], roster: ["Влад", "Любомир"],
     unknownInitials: [], airborneReported: true, deployMin: 120, droneReportPresent: true, hasZvit: true,
@@ -373,7 +394,7 @@ describe("uniform tail on every status", () => {
 describe("new curable-gap phrases", () => {
   it("no-Звіт day", () => {
     const day: DayVerdict = {
-      date: "2026-06-03", status: "NEEDS_REVIEW", airborneMinutes: 42.75, videoMinutes: 36,
+      date: "2026-06-03", reportTs: null, reportSeq: 1, reportCount: 1, status: "NEEDS_REVIEW", airborneMinutes: 42.75, videoMinutes: 36,
       ratio: 36 / 42.75, datasetStatus: "POSTED", withinGrace: false, reasons: [], roster: [],
       unknownInitials: [], airborneReported: true, hasZvit: false,
     };
@@ -382,7 +403,7 @@ describe("new curable-gap phrases", () => {
 
   it("deploy window not recorded", () => {
     const day: DayVerdict = {
-      date: "2026-06-16", status: "NEEDS_REVIEW", airborneMinutes: 36.48, videoMinutes: 93,
+      date: "2026-06-16", reportTs: null, reportSeq: 1, reportCount: 1, status: "NEEDS_REVIEW", airborneMinutes: 36.48, videoMinutes: 93,
       ratio: 93 / 36.48, datasetStatus: "POSTED", withinGrace: false, reasons: [], roster: ["Андріан", "Надія"],
       unknownInitials: [], airborneReported: true, deployMin: null, hasZvit: true,
     };
@@ -391,7 +412,7 @@ describe("new curable-gap phrases", () => {
 
   it("video under the 2-minute floor", () => {
     const day: DayVerdict = {
-      date: "2026-06-05", status: "NEEDS_REVIEW", airborneMinutes: 2, videoMinutes: 1.5,
+      date: "2026-06-05", reportTs: null, reportSeq: 1, reportCount: 1, status: "NEEDS_REVIEW", airborneMinutes: 2, videoMinutes: 1.5,
       ratio: 0.75, datasetStatus: "POSTED", withinGrace: false, reasons: [], roster: [],
       unknownInitials: [], airborneReported: true,
     };

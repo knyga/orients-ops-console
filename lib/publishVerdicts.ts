@@ -17,6 +17,7 @@ import { verdictKey } from "./outboundKeys";
 import { periodKey } from "./reports";
 import { isPublished, readPublished, recordPublished, writePublished } from "./published";
 import { formatDayMessage, publishableDays } from "./verdictPublish";
+import { reportKey } from "./fieldDayVerdict";
 import type { SlackChannel } from "./slackChannels";
 import type { DayVerdict } from "./fieldDayVerdict";
 import type { SendTrigger } from "./outboundKeys";
@@ -47,27 +48,30 @@ export async function publishSettledDays(
   const posted: string[] = [];
   const skipped: string[] = [];
   for (const day of publishableDays(days)) {
-    if (isPublished(publishedLog, day.date)) {
-      skipped.push(day.date);
+    const target = { date: day.date, reportTs: day.reportTs, reportCount: day.reportCount };
+    const label = reportKey(day.date, day.reportTs);
+    if (isPublished(publishedLog, target)) {
+      skipped.push(label);
       continue;
     }
     const text = formatDayMessage(day);
     const ts = await postMessage(channel.id, text, {
-      key: verdictKey(key, day.date),
+      key: verdictKey(key, day.date, day.reportTs),
       feature: "verdict",
       channel: channel.name,
       trigger,
     });
     publishedLog = recordPublished(publishedLog, {
       date: day.date,
+      reportTs: day.reportTs,
       channel: channel.name,
       text,
       postedAt: new Date().toISOString(),
       ts,
     });
     await writePublished(period, publishedLog); // persist after each post
-    posted.push(day.date);
-    log(`field-publish: posted ${day.date} to #${channel.name} (ts ${ts})`);
+    posted.push(label);
+    log(`field-publish: posted ${label} to #${channel.name} (ts ${ts})`);
   }
   return { posted, skipped };
 }

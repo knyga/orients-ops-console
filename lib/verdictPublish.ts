@@ -175,7 +175,10 @@ export function formatTimeTail(day: DayVerdict): string {
  */
 export function formatDayMessage(day: DayVerdict): string {
   const icon = ICON[day.status] ?? "";
-  const date = dateWithWeekday(day.date);
+  const win = day.deployWindow ? ` (${day.deployWindow.start}–${day.deployWindow.end})` : "";
+  const date = day.reportCount > 1
+    ? `${dateWithWeekday(day.date)}, виїзд ${day.reportSeq}/${day.reportCount}${win}`
+    : dateWithWeekday(day.date);
   const tail = formatTimeTail(day);
 
   let body: string;

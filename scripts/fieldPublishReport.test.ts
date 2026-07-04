@@ -5,6 +5,9 @@ import type { PublishedLog } from "../lib/published";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
   date: "2026-06-18",
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   status: "ACCEPTED",
   airborneMinutes: 18,
   videoMinutes: 206,
@@ -36,11 +39,28 @@ describe("parseArgs / resolvePeriod", () => {
 describe("buildPlan / pendingItems", () => {
   it("includes settled days, marks already-published, excludes PENDING", () => {
     const days = [day({ date: "2026-06-18", status: "ACCEPTED" }), day({ date: "2026-06-17", status: "PENDING" }), day({ date: "2026-06-13", status: "NEEDS_REVIEW", reasons: ["x"] })];
-    const log: PublishedLog = { "2026-06-18": { date: "2026-06-18", channel: "field-qa", text: "...", postedAt: "2026-06-20T00:00:00Z", ts: "1.1" } };
+    const log: PublishedLog = { "2026-06-18": { date: "2026-06-18", reportTs: null, channel: "field-qa", text: "...", postedAt: "2026-06-20T00:00:00Z", ts: "1.1" } };
     const plan = buildPlan(days, log);
     expect(plan.map((p) => p.date)).toEqual(["2026-06-18", "2026-06-13"]); // no PENDING
     expect(plan.find((p) => p.date === "2026-06-18")?.alreadyPublished).toBe(true);
     expect(pendingItems(plan).map((p) => p.date)).toEqual(["2026-06-13"]);
+  });
+
+  it("a legacy bare-date entry covers a single-report day (real reportTs, reportCount 1) but not either row of a 2-report day", () => {
+    const days = [
+      day({ date: "2026-07-01", status: "ACCEPTED", reportTs: "9.0", reportSeq: 1, reportCount: 1 }),
+      day({ date: "2026-07-02", status: "ACCEPTED", reportTs: "1.0", reportSeq: 1, reportCount: 2 }),
+      day({ date: "2026-07-02", status: "ACCEPTED", reportTs: "2.0", reportSeq: 2, reportCount: 2 }),
+    ];
+    const log: PublishedLog = {
+      "2026-07-01": { date: "2026-07-01", reportTs: null, channel: "field-qa", text: "...", postedAt: "t", ts: "1.1" },
+      "2026-07-02": { date: "2026-07-02", reportTs: null, channel: "field-qa", text: "...", postedAt: "t", ts: "2.1" },
+    };
+    const plan = buildPlan(days, log);
+    expect(plan.find((p) => p.date === "2026-07-01")?.alreadyPublished).toBe(true);
+    const julyTwo = plan.filter((p) => p.date === "2026-07-02");
+    expect(julyTwo).toHaveLength(2);
+    expect(julyTwo.every((p) => p.alreadyPublished === false)).toBe(true);
   });
 });
 
