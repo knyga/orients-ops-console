@@ -1,10 +1,6 @@
 /**
  * Pure per-flight-day acceptance verdict for the field bonus. Operationalizes the
- * recording-completeness gate: a day is ACCEPTED when, within the grace window,
- * Vimeo video minutes ≥ MIN_RATIO × airborne minutes AND a #datasets notice
- * exists. Inside the window with a condition unmet → PENDING. After the window
- * with a condition unmet → NEEDS_REVIEW (a human decides — never auto-rejected).
- *
+ * unified day-qualification gate: a day is ACCEPTED when every gate axis passes.
  * The gate has four axes: deployment >= 3h, video >= max(2 min, 50% x airborne),
  * a #field-qa drone-count report, and a #datasets notice. Three failures are
  * machine auto-rejects (hard no-pay, admin can override via the instruction
