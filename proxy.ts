@@ -8,7 +8,9 @@ import { SESSION_COOKIE } from "@/lib/authCookies";
  * 302 to /login; API routes get 401 JSON. Runs in the edge runtime — verifySession
  * uses Web Crypto only.
  *
- * Bypass (own auth / public): /api/auth/*, /api/cron/*, /api/slack/*, /login.
+ * Bypass (own auth / public): /api/auth/*, /api/cron/*, /api/slack/*,
+ * /api/agent/* (x-agent-secret — the webhook's self-invoke carries no session
+ * cookie), /login.
  */
 export async function proxy(request: NextRequest) {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
@@ -32,5 +34,5 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Run on everything EXCEPT: the login flow, machine endpoints (own auth),
   // the login page, and Next static assets.
-  matcher: ["/((?!(?:api/auth|api/cron|api/slack|login)(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!(?:api/auth|api/cron|api/slack|api/agent|login)(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
 };

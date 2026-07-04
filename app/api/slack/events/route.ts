@@ -150,7 +150,11 @@ async function deferAgentTurn(
         body: JSON.stringify({ surface: runSurface, conversationKey, channelId, userId, incomingTs: ts, placeholderTs, threadTs, question }),
       })
         .then((res) => {
-          if (!res.ok) console.error(`slack events: agent self-invoke returned ${res.status}`);
+          // Always log the outcome, including redirects: a silent 302→SSO-wall→200
+          // is exactly how this dispatch failed invisibly on 2026-07-04.
+          const line = `slack events: agent self-invoke → ${res.status}${res.redirected ? ` (redirected to ${res.url})` : ""}`;
+          if (res.ok && !res.redirected) console.log(line);
+          else console.error(line);
         })
         .catch((err) => console.error("slack events: self-invoke failed:", err)),
     );
