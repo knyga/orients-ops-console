@@ -50,6 +50,23 @@ npm run field-bonus -- --start 2026-06-01 --end 2026-06-30 --write # compute + c
 `--write` persists `reports/field-bonus/<period>.{json,csv}`. The JSON is the
 payout report and the web render source.
 
+## Output format (required)
+
+The operator wants every bonus-report answer as **three reconciled views plus a
+sums cross-check**, all derivable from the report JSON:
+
+1. **Per-person totals** — from `people[]`: name, trips, early, weekend, net.
+2. **Per-member detail** — for each person, from `days[]`: every paid day
+   (date, pay, which bonuses — early/weekend) AND every rejected day they were
+   rostered on, with the reason.
+3. **Per-day report** — for each flight day, from `days[]`: status, crew,
+   per-person rate (`700 + 200·early + 300·weekend`), day total paid;
+   rejected days show 0 + reason.
+4. **Cross-check** — verify with a small script (never hand-sum):
+   `sum(people[].net) == sum(day totals) == total`, and per-person
+   trips/early/weekend/net re-derived from `days[]` match `people[]` exactly.
+   State the result explicitly.
+
 ## How to read it
 
 From `reports/field-bonus/<period>.json` (or `npm run field-bonus -- … --format table`):
