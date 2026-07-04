@@ -274,6 +274,19 @@ describe("REJECTED rendering", () => {
   it("REJECTED days are publishable", () => {
     expect(publishableDays([rejected])).toHaveLength(1);
   });
+
+  it("surfaces the human rejection note when no machine gap fails", () => {
+    // applyResolution can flip a gate-passing day to REJECTED, appending
+    // `rejected (<by>): <note>` last — the note must reach the channel.
+    const msg = formatDayMessage({
+      ...rejected,
+      airborneMinutes: 60, videoMinutes: 40, ratio: 40 / 60,
+      deployMin: 240, droneReportPresent: true, hasZvit: true, datasetStatus: "POSTED",
+      reasons: ["rejected (Oleksandr K): день не зараховано"],
+    });
+    expect(msg).toContain("відхилено (Oleksandr K): день не зараховано");
+    expect(msg).not.toMatch(/відхилено:\s{2}/);
+  });
 });
 
 describe("new curable-gap phrases", () => {

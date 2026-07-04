@@ -134,11 +134,16 @@ export function formatDayMessage(day: DayVerdict): string {
   const ds = datasetMarker(day.datasetStatus);
 
   if (day.status === "REJECTED") {
+    // A human rejection (applyResolution appends `rejected[(by)]: note` last)
+    // must surface its note verbatim — machine gaps alone can be empty then.
+    const last = day.reasons[day.reasons.length - 1] ?? "";
+    const note = /^rejected/.test(last) ? last.replace(/^rejected/, "відхилено") : "";
+    const parts = [...ukrainianGaps(day), note].filter(Boolean);
     const tail = day.airborneReported && day.airborneMinutes > 0
       ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
       : `(відео ${vid} хв, ${ds})`;
     return withDroneLine(
-      withRosterSuffix(`⛔ ${date} — відхилено: ${ukrainianGaps(day).join("; ")} ${tail}.`, day.roster),
+      withRosterSuffix(`⛔ ${date} — відхилено: ${parts.join("; ")} ${tail}.`, day.roster),
       day.droneReport,
     );
   }
