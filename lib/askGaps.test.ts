@@ -4,6 +4,9 @@ import type { DayVerdict } from "./fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
   date: "2026-06-13",
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   status: "NEEDS_REVIEW",
   airborneMinutes: 20,
   videoMinutes: 66,

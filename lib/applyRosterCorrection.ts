@@ -10,9 +10,10 @@ import "server-only";
 import { postMessage, updateMessage } from "./slack";
 import { contentRev, rosterAckKey, rosterEditKey, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
-import { writePublished, type PublishedEntry } from "./published";
+import { writePublished, recordPublished, type PublishedEntry } from "./published";
 import { upsertRosterCorrection } from "./rosterCorrections";
 import { splitRosterSuffix, withRosterSuffix } from "./verdictPublish";
+import { reportKey } from "./fieldDayVerdict";
 import type { RosterOutcome } from "../scripts/fieldRosterReport";
 import type { Period } from "./period";
 
@@ -26,6 +27,7 @@ export async function applyRosterDecision(args: {
 
   await upsertRosterCorrection({
     date: entry.date,
+    reportTs: entry.reportTs ?? "",
     ...(outcome.roster.length ? { roster: outcome.roster } : {}),
     ...(Object.keys(outcome.eligibility).length ? { eligibility: outcome.eligibility } : {}),
     note: outcome.note,
@@ -44,8 +46,9 @@ export async function applyRosterDecision(args: {
   const updatedText = droneLine ? `${withRoster}\n${droneLine}` : withRoster;
   if (updatedText === entry.text) return { applied: false }; // suffix already current
 
+  const key = reportKey(entry.date, entry.reportTs);
   await updateMessage(channel.id, entry.ts, updatedText, {
-    key: rosterEditKey(entry.date, contentRev(updatedText)),
+    key: rosterEditKey(key, contentRev(updatedText)),
     feature: "roster",
     channel: channel.name,
     trigger,
@@ -57,10 +60,10 @@ export async function applyRosterDecision(args: {
   await postMessage(
     channel.id,
     replyText,
-    { key: rosterAckKey(entry.date, contentRev(replyText)), feature: "roster", channel: channel.name, trigger },
+    { key: rosterAckKey(key, contentRev(replyText)), feature: "roster", channel: channel.name, trigger },
     entry.ts,
   );
 
-  await writePublished(period, { [entry.date]: { ...entry, text: updatedText } });
+  await writePublished(period, recordPublished({}, { ...entry, text: updatedText }));
   return { applied: true };
 }

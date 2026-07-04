@@ -60,11 +60,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const verdictByDate: Record<string, DayVerdict> = {};
-  for (const d of report.days) verdictByDate[d.date] = d;
-
   const log = await readPublished(period);
-  const plan = computeBackfillPlan(log, verdictByDate);
+  const plan = computeBackfillPlan(log, report.days);
   const updates = plan.filter((p) => p.action === "update");
 
   // Dry-run (default): print what would change; write nothing.

@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { computeBackfillPlan } from "./backfillPublished";
 import { formatDayMessage } from "./verdictPublish";
-import type { DayVerdict } from "./fieldDayVerdict";
+import { reportKey, type DayVerdict } from "./fieldDayVerdict";
 import type { PublishedEntry, PublishedLog } from "./published";
 
 const verdict = (over: Partial<DayVerdict>): DayVerdict => ({
   date: "2026-06-18",
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   status: "ACCEPTED",
   airborneMinutes: 18,
   videoMinutes: 206,
@@ -21,6 +24,7 @@ const verdict = (over: Partial<DayVerdict>): DayVerdict => ({
 
 const entry = (over: Partial<PublishedEntry>): PublishedEntry => ({
   date: "2026-06-18",
+  reportTs: null,
   channel: "field-qa",
   text: "✅ 2026-06-18 — accepted (video 206m is 1144% of 18m airborne; dataset ✓).",
   postedAt: "2026-06-20T00:00:00Z",
@@ -29,12 +33,12 @@ const entry = (over: Partial<PublishedEntry>): PublishedEntry => ({
 });
 
 const logOf = (...es: PublishedEntry[]): PublishedLog =>
-  Object.fromEntries(es.map((e) => [e.date, e]));
+  Object.fromEntries(es.map((e) => [reportKey(e.date, e.reportTs), e]));
 
 describe("computeBackfillPlan", () => {
   it("marks an English post needing the Ukrainian re-render as update", () => {
     const v = verdict({});
-    const plan = computeBackfillPlan(logOf(entry({})), { "2026-06-18": v });
+    const plan = computeBackfillPlan(logOf(entry({})), [v]);
     expect(plan).toHaveLength(1);
     expect(plan[0].action).toBe("update");
     expect(plan[0].reason).toBe("needs-update");
@@ -45,7 +49,7 @@ describe("computeBackfillPlan", () => {
 
   it("skips a post already in the current format (idempotent re-run)", () => {
     const v = verdict({});
-    const plan = computeBackfillPlan(logOf(entry({ text: formatDayMessage(v) })), { "2026-06-18": v });
+    const plan = computeBackfillPlan(logOf(entry({ text: formatDayMessage(v) })), [v]);
     expect(plan[0].action).toBe("skip");
     expect(plan[0].reason).toBe("already-current");
   });
@@ -54,7 +58,7 @@ describe("computeBackfillPlan", () => {
     const v = verdict({ status: "NEEDS_REVIEW", videoMinutes: 0, ratio: 0, datasetStatus: "MISSING" });
     const plan = computeBackfillPlan(
       logOf(entry({ override: { decision: "accepted_exception", by: "Oleksandr K", ackedAt: "x" } })),
-      { "2026-06-18": v },
+      [v],
     );
     expect(plan[0].action).toBe("skip");
     expect(plan[0].reason).toBe("overridden");
@@ -62,7 +66,26 @@ describe("computeBackfillPlan", () => {
   });
 
   it("skips a post with no matching verdict in the report", () => {
-    const plan = computeBackfillPlan(logOf(entry({})), {});
+    const plan = computeBackfillPlan(logOf(entry({})), []);
+    expect(plan[0].action).toBe("skip");
+    expect(plan[0].reason).toBe("no-verdict");
+  });
+
+  it("resolves a per-report entry by its exact reportKey, not just the date", () => {
+    const v1 = verdict({ reportTs: "111.1", reportSeq: 1, reportCount: 2 });
+    const v2 = verdict({ reportTs: "222.2", reportSeq: 2, reportCount: 2, status: "NEEDS_REVIEW" });
+    const e1 = entry({ reportTs: "111.1", ts: "1.1" });
+    const plan = computeBackfillPlan(logOf(e1), [v1, v2]);
+    expect(plan).toHaveLength(1);
+    expect(plan[0].newText).toBe(formatDayMessage(v1));
+  });
+
+  it("skips a legacy (reportTs null) entry when its day now has multiple reports (ambiguous)", () => {
+    const v1 = verdict({ reportTs: "111.1", reportSeq: 1, reportCount: 2 });
+    const v2 = verdict({ reportTs: "222.2", reportSeq: 2, reportCount: 2 });
+    const legacy = entry({ reportTs: null, ts: "1.1" });
+    const plan = computeBackfillPlan(logOf(legacy), [v1, v2]);
+    expect(plan).toHaveLength(1);
     expect(plan[0].action).toBe("skip");
     expect(plan[0].reason).toBe("no-verdict");
   });
@@ -70,7 +93,7 @@ describe("computeBackfillPlan", () => {
   it("returns items sorted by date", () => {
     const plan = computeBackfillPlan(
       logOf(entry({ date: "2026-06-18" }), entry({ date: "2026-06-01" }), entry({ date: "2026-06-09" })),
-      {},
+      [],
     );
     expect(plan.map((p) => p.date)).toEqual(["2026-06-01", "2026-06-09", "2026-06-18"]);
   });

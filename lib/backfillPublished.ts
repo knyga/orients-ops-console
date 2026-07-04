@@ -8,12 +8,14 @@
  * Two cases are deliberately SKIPPED:
  *  - `overridden`: the live message is a struck approver amendment (+ a separate
  *    ack reply) — re-rendering the plain verdict would clobber it.
- *  - `no-verdict`: no matching day in the report — nothing to render from.
+ *  - `no-verdict`: no matching report row for this entry — nothing to render
+ *    from. This also covers a legacy (bare-date) entry that lands on a day that
+ *    now has MULTIPLE reports — ambiguous, so it is skipped rather than guessed.
  * `already-current` makes re-runs idempotent (the CLI rewrites the stored text to
  * the new render after posting, so a second pass is a no-op).
  */
 import { formatDayMessage } from "./verdictPublish";
-import type { DayVerdict } from "./fieldDayVerdict";
+import { reportKey, type DayVerdict } from "./fieldDayVerdict";
 import type { PublishedLog } from "./published";
 
 export type BackfillReason = "needs-update" | "already-current" | "overridden" | "no-verdict";
@@ -29,18 +31,32 @@ export interface BackfillItem {
   overridden: boolean;
 }
 
-/** One item per published day, sorted by date. Pure. */
+/** One item per published entry, sorted by date. Pure. */
 export function computeBackfillPlan(
   log: PublishedLog,
-  verdictByDate: Record<string, DayVerdict>,
+  verdicts: DayVerdict[],
 ): BackfillItem[] {
+  const rowsByKey = new Map(verdicts.map((d) => [reportKey(d.date, d.reportTs), d]));
+  const rowsByDate = new Map<string, DayVerdict[]>();
+  for (const d of verdicts) {
+    const list = rowsByDate.get(d.date) ?? [];
+    list.push(d);
+    rowsByDate.set(d.date, list);
+  }
+
   return Object.values(log)
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((entry) => {
       const overridden = entry.override != null;
       const base = { date: entry.date, channel: entry.channel, ts: entry.ts, oldText: entry.text, overridden };
-      const verdict = verdictByDate[entry.date];
+      // A legacy (reportTs === null) entry resolves to the day's single row when
+      // unambiguous; on a multi-report day it is left unresolved (no-verdict skip).
+      const verdict =
+        rowsByKey.get(reportKey(entry.date, entry.reportTs)) ??
+        (entry.reportTs === null && (rowsByDate.get(entry.date) ?? []).length === 1
+          ? rowsByDate.get(entry.date)![0]
+          : undefined);
 
       if (!verdict) {
         return { ...base, newText: entry.text, action: "skip" as const, reason: "no-verdict" as const };

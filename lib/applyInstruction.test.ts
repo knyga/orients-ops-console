@@ -25,6 +25,7 @@ const period = { start: "2026-06-01", end: "2026-06-30" };
 
 const entry = (override?: PublishedEntry["override"]): PublishedEntry => ({
   date: "2026-06-09",
+  reportTs: null,
   channel: "field-qa",
   text:
     "⚠️ 2026-06-09 (вівторок) — потрібна перевірка: відео 0 хв — лише 0% від 104 хв у повітрі (< 50%); немає повідомлення про датасет за цей день (відео 0 хв / 104 хв у повітрі, без датасету).\n" +

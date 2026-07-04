@@ -10,9 +10,10 @@ import { classifyApproval } from "./approvalClassify";
 import { postMessage, updateMessage } from "./slack";
 import { approvalOutboundKeys, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
-import { writePublished, type PublishedEntry } from "./published";
+import { writePublished, recordPublished, type PublishedEntry } from "./published";
 import { upsertResolution, type ResolutionDecision } from "./resolutions";
 import { formatOverride, splitRosterSuffix } from "./verdictPublish";
+import { reportKey } from "./fieldDayVerdict";
 import type { Period } from "./period";
 import { decideApproval } from "../scripts/fieldApprovalsReport";
 
@@ -70,7 +71,7 @@ export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<App
   // Key the edit + ack by the DECISION, not the (non-deterministic) reason text,
   // so a redelivered Slack event dedups to a single post while a genuine flip
   // (accept → reject) still reposts. See lib/outboundKeys.ts.
-  const { editKey, ackKey } = approvalOutboundKeys(entry.date, decision);
+  const { editKey, ackKey } = approvalOutboundKeys(reportKey(entry.date, entry.reportTs), decision);
   await updateMessage(channel.id, entry.ts, updatedText, {
     key: editKey,
     feature: "approval",
@@ -91,9 +92,10 @@ export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<App
     );
   }
 
-  await writePublished(period, {
-    [entry.date]: { ...entry, override: { decision, by, ackedAt: new Date().toISOString() } },
-  });
+  await writePublished(
+    period,
+    recordPublished({}, { ...entry, override: { decision, by, ackedAt: new Date().toISOString() } }),
+  );
 
   return { applied: true, alreadyAcked: false };
 }
@@ -114,6 +116,7 @@ export async function applyApproverDecision(
 
   await upsertResolution({
     date: entry.date,
+    reportTs: entry.reportTs ?? "",
     axis: "day",
     decision,
     note: reason,

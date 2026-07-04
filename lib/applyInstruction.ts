@@ -26,6 +26,7 @@ import { amendPublishedVerdict, applyApproverDecision } from "./applyApproval";
 import { applyRosterDecision } from "./applyRosterCorrection";
 import { buildRosterOutcome } from "./instructionOutcome";
 import { parseRosterSuffix } from "./verdictPublish";
+import { reportKey } from "./fieldDayVerdict";
 import { resolveInitial, SEED_ALIASES } from "./fieldRoster";
 import { mergeAliases, readAliases } from "./rosterAliases";
 import type { InstructionAxis, InstructionClassification } from "./instructionClassifyPrompt";
@@ -56,7 +57,12 @@ async function ack(entry: PublishedEntry, text: string, axis: string, trigger: S
   await postMessage(
     channel.id,
     text,
-    { key: instructionAckKey(entry.date, axis, contentRev(text)), feature: "instruction", channel: channel.name, trigger },
+    {
+      key: instructionAckKey(reportKey(entry.date, entry.reportTs), axis, contentRev(text)),
+      feature: "instruction",
+      channel: channel.name,
+      trigger,
+    },
     entry.ts,
   );
   return true;
@@ -91,11 +97,12 @@ export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ ap
     await upsertResolution({ date: entry.date, axis: "dataset", decision, note: c.reason, source: evidence || "slack", recordedAt: new Date().toISOString(), by });
     const label = decision === "rejected" ? "датасет ⛔ причину відхилено" : "датасет 📝 виняток (не потрібен)";
     const applied = await ack(entry, `📝 Зафіксовано: ${label} — ${by}. Причина: ${c.reason}`, "dataset", trigger);
-    if (decision === "rejected" && !dayRescuedByException(entry.date, await readResolutions())) {
-      // A dataset decline machine-rejects the day (fieldDayVerdict), and nothing
-      // downstream ever re-edits an already-published day — so amend it now.
-      // A waive is NOT amended: the resulting status depends on the other gates
-      // and only the next verdict recompute knows it.
+    if (decision === "rejected" && !dayRescuedByException(entry.date, await readResolutions(), entry.reportTs ?? null)) {
+      // A dataset decline machine-rejects ALL of the day's reports (the dataset
+      // axis is day-wide by design); only THIS thread's message is amended here —
+      // any sibling report's already-published message is untouched and picks up
+      // the rejection on the next verdict recompute (pre-existing behavior for
+      // un-amended messages).
       await amendPublishedVerdict({ entry, period, decision: "rejected", by, reason: c.reason, trigger, postAck: false });
     }
     return { applied };
