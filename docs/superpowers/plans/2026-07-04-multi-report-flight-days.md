@@ -17,7 +17,8 @@
 - Legacy bare-date store keys = "the day's single report". Never migrate stored data; read-compatibility only.
 - The ≥3h deploy gate, crew, day-accept/reject, and eligibility are per-report; video/airborne/dataset/drone-count are day-scoped. `reportTs: ""` on a resolution/correction = day-wide scope.
 - Run tests with `npx vitest run <file>`; the full suite with `npm test`. CLIs run via `node --env-file=.env --conditions=react-server --import tsx <script>` (or the `npm run <feature>` wrappers).
-- Commit after each task with the trailer `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
+- Commit after each task with the trailer `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`. Shared trunk checkout: stage ONLY your own files by explicit path (never `git add -A`); leave `next-env.d.ts` untouched.
+- **Verification DB:** the prod Neon DB is NOT migrated until Task 12. Any step that runs a CLI needing the new columns (Tasks 5 verify, 8 Steps 3–4, 11 Step 3) must run against the Neon branch created in Task 5 by prefixing the command with `POSTGRES_URL=<branch-url>` (the controller supplies the URL). Never run `npm run db:migrate` against prod before Task 12.
 
 ---
 
