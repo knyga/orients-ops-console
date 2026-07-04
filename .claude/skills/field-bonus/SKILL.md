@@ -9,7 +9,7 @@ Answer per-person bonus questions using this repo's CLI. Recomputes bonuses from
 
 ## Domain (must-know)
 
-- A **trip counts** iff deployment ≥ **3 hours** AND recorded video ≥ **2 minutes** (the gate — differs from field-ops 50%-of-airborne reconcile). This is the real bonus gate.
+- A **trip counts** iff the day's field-verdict status is ACCEPTED or ACCEPTED_EXCEPTION — the unified gate: deployment ≥ **3 hours**, video ≥ max(**2 minutes**, 50% of airborne), a **drone-count report** in #field-qa, and a **dataset notice**. «Прийнято» in Slack ⇔ the crew is paid. Unsettled days sit in `pendingDays` (not paid); REJECTED days in `voidedDays`.
 - Bonuses are: **700** per qualifying trip + **200** early (arrival ≤12:30 Kyiv) + **300** weekend (Sat/Sun) — apply early/weekend stacking per deployment.
 - There is a **drone-loss multiplier** for deployments where the drone was lost; the classifier runs via Claude and scans the #field-qa thread + Vimeo video names for loss evidence.
 - Videos are attributed to a flight day by the **date encoded in the video name** (via `videoFlightDate`), robust to upload lag. Day boundaries use **Europe/Kyiv**, not UTC. `created_time` is a fallback only.

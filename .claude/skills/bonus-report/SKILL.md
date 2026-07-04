@@ -10,17 +10,25 @@ person, plus a void audit of days that earned nothing.
 
 ## Gate (must-know)
 
-A flight day counts toward bonuses only if **all three** hold:
+A flight day pays only if its field-verdict status is ACCEPTED or
+ACCEPTED_EXCEPTION — the **unified qualification gate**, computed once by
+`field-verdict` and consumed as-is here (not re-derived). All four axes must
+hold:
 
 1. deployment ≥ **3 hours**, and
-2. recorded video ≥ **2 minutes**, and
+2. recorded video ≥ **max(2 minutes, 50% of airborne)**, and
 3. a **drone-count / production report was posted in #field-qa that day**
-   (e.g. `R&D - 1шт вартовий`, `Демонстраційні - 8шт`, `Перевірені`, `15ка - 1шт`).
+   (e.g. `R&D - 1шт вартовий`, `Демонстраційні - 8шт`, `Перевірені`, `15ка - 1шт`), and
+4. a **#datasets notice** for the day.
 
-A missing drone-count report **voids that day for the whole crew** (reason
-`no-drone-count`; surfaced as a `no_drone_count` flag and in `voidedDays`). This
-is separate from the monthly `>3 drones lost` team cutoff, which zeroes the
-whole period.
+A sub-3h deployment, a missing drone-count report, or an admin-declined
+dataset is a **hard machine REJECT** — no-pay for the whole crew, with no
+automatic rescue. Only an explicit approver instruction (a confirmed reply in
+the verdict thread, or `field-instructions`) can override a REJECT into
+ACCEPTED_EXCEPTION; do not propose any other rescue path. Days that haven't
+settled yet (PENDING/NEEDS_REVIEW) are listed unpaid in `pendingDays`, not
+`voidedDays` — this is separate from the monthly `>3 drones lost` team
+cutoff, which zeroes the whole period.
 
 The drone-count classifier now returns structured per-person entries
 (`classifyDroneCount → { present, entries, forDate }`), also used to render the
@@ -47,6 +55,7 @@ From `reports/field-bonus/<period>.json` (or `npm run field-bonus -- … --forma
 - `people[]` — per person: `{ name, trips, early, weekend, gross, penaltyPct, net }`. **`net` is the amount to pay.**
 - `teamZeroed` — true iff >3 drones lost in the period (whole period zeroed).
 - `voidedDays[]` — `{ date, roster, reason }` for days voided by the drone-count gate.
+- `pendingDays[]` — unsettled days with the amount at stake — chase these before month-end payout.
 - `flags[]` — includes `no_drone_count` entries and `counted_no_video` warnings.
 
 ## Prerequisites
