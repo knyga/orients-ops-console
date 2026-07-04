@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { verdictForDay } from "./fieldDayVerdict";
+import { verdictForDay, reportKey } from "./fieldDayVerdict";
 
 const base = {
   flightDate: "2026-06-16",
@@ -193,5 +193,26 @@ describe("verdictForDay with DatasetStatus", () => {
   it("WAIVED but video short, after grace → NEEDS_REVIEW (dataset OK, video axis fails)", () => {
     const v = verdictForDay({ ...base, datasetStatus: "WAIVED", videoMinutes: 10 });
     expect(v.status).toBe("NEEDS_REVIEW");
+  });
+});
+
+describe("report identity", () => {
+  it("reportKey composes date#ts and falls back to the bare date", () => {
+    expect(reportKey("2026-07-01", "1782912665.697519")).toBe("2026-07-01#1782912665.697519");
+    expect(reportKey("2026-07-01", null)).toBe("2026-07-01");
+    expect(reportKey("2026-07-01", undefined)).toBe("2026-07-01");
+  });
+
+  it("verdictForDay passes report identity through, defaulting to a single day-report", () => {
+    const base = { flightDate: "2026-07-01", airborneMinutes: 100, videoMinutes: 90, datasetStatus: "POSTED" as const, today: "2026-07-02", graceWorkingDays: 3 };
+    const v = verdictForDay({ ...base, reportTs: "1.0", reportSeq: 2, reportCount: 2, deployMin: 110 });
+    expect(v.reportTs).toBe("1.0");
+    expect(v.reportSeq).toBe(2);
+    expect(v.reportCount).toBe(2);
+    expect(v.status).toBe("REJECTED"); // per-report 3h gate
+    const legacy = verdictForDay(base);
+    expect(legacy.reportTs).toBeNull();
+    expect(legacy.reportSeq).toBe(1);
+    expect(legacy.reportCount).toBe(1);
   });
 });

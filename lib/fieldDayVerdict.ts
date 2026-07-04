@@ -1,8 +1,8 @@
 /**
  * Pure per-flight-day acceptance verdict for the field bonus. Operationalizes the
  * unified day-qualification gate: a day is ACCEPTED when every gate axis passes.
- * The gate has four axes: deployment >= 3h, video >= max(2 min, 50% x airborne),
- * a #field-qa drone-count report, and a #datasets notice. Three failures are
+ * The gate has per-report axes (deployment >= 3h, crew), day-shared axes (video >= max(2 min, 50% x airborne),
+ * a #field-qa drone-count report, and a #datasets notice). Three failures are
  * machine auto-rejects (hard no-pay, admin can override via the instruction
  * path): an admin-declined dataset, a deployment under 3h, and a missing
  * drone-count report. Curable gaps stay PENDING inside the grace window and
@@ -18,6 +18,12 @@ import type { DroneEntry } from "./droneReport";
 
 export const MIN_DEPLOY_MIN = 180;
 export const MIN_VIDEO_MIN = 2;
+
+/** Canonical store key for one report's verdict: "<date>#<reportTs>"; the bare
+ *  date for a synthetic no-Звіт row — and for every legacy pre-multi-report row. */
+export function reportKey(date: string, reportTs: string | null | undefined): string {
+  return reportTs ? `${date}#${reportTs}` : date;
+}
 
 export type VerdictStatus = "ACCEPTED" | "PENDING" | "NEEDS_REVIEW" | "ACCEPTED_EXCEPTION" | "REJECTED";
 
@@ -41,10 +47,19 @@ export interface VerdictInput {
   droneReportPresent?: boolean;
   /** false when the day has no parsed "Звіт" at all (nobody attributable to pay). Defaults true. */
   hasZvit?: boolean;
+  /** Звіт message ts — the report's identity; null/absent = synthetic no-Звіт day. */
+  reportTs?: string | null;
+  /** 1-based position among the day's reports (display: «виїзд 2/2»). */
+  reportSeq?: number;
+  reportCount?: number;
 }
 
 export interface DayVerdict {
   date: string;
+  /** Звіт message ts; null = no-Звіт synthetic row or a legacy day verdict. */
+  reportTs: string | null;
+  reportSeq: number;
+  reportCount: number;
   status: VerdictStatus;
   airborneMinutes: number;
   videoMinutes: number;
@@ -123,7 +138,11 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
   }
 
   return {
-    date: flightDate, status, airborneMinutes, videoMinutes, ratio, datasetStatus, withinGrace,
+    date: flightDate,
+    reportTs: input.reportTs ?? null,
+    reportSeq: input.reportSeq ?? 1,
+    reportCount: input.reportCount ?? 1,
+    status, airborneMinutes, videoMinutes, ratio, datasetStatus, withinGrace,
     reasons, roster: [], unknownInitials: [], airborneReported, deployWindow: input.deployWindow,
     deployMin, droneReportPresent, hasZvit,
   };
