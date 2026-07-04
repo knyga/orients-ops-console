@@ -219,8 +219,25 @@ describe("formatDayMessage drone line", () => {
     expect(msg).toContain("\n🛸 Дрони: Андріан 2, інші 8 (усього 10)");
     expect(msg.indexOf("👥")).toBeLessThan(msg.indexOf("🛸")); // crew before drones
   });
-  it("omits the drone line when there is no drone report", () => {
-    expect(formatDayMessage({ ...droneBase, droneReport: undefined })).not.toContain("🛸");
+  it("omits the drone line when drone presence is unknown (legacy verdict)", () => {
+    expect(formatDayMessage({ ...droneBase, droneReport: undefined, droneReportPresent: undefined })).not.toContain("🛸");
+  });
+  it("states the absence explicitly when the extraction says the day had no report", () => {
+    const msg = formatDayMessage({ ...droneBase, droneReport: undefined, droneReportPresent: false });
+    expect(msg).toContain("\n🛸 Дрони: звіт не подано.");
+  });
+  it("states the absence on a no-fly day too", () => {
+    const msg = formatDayMessage({
+      ...droneBase, droneReport: undefined, droneReportPresent: false,
+      airborneReported: true, airborneMinutes: 0, videoMinutes: 0, ratio: null, deployWindow: undefined,
+    });
+    expect(msg).toContain("\n🛸 Дрони: звіт не подано.");
+    expect(msg.indexOf("👥")).toBeLessThan(msg.indexOf("🛸"));
+  });
+  it("counts win over the absence marker when both could apply", () => {
+    const msg = formatDayMessage({ ...droneBase, droneReportPresent: true });
+    expect(msg).toContain("🛸 Дрони: Андріан 2, інші 8 (усього 10)");
+    expect(msg).not.toContain("звіт не подано");
   });
 });
 

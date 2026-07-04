@@ -38,6 +38,20 @@ export function withDroneLine(text: string, entries: DroneEntry[] | undefined): 
   return line ? `${text}\n${line}` : text;
 }
 
+/**
+ * The day's drone region: the counts when a report exists, an explicit
+ * "звіт не подано" when the extraction positively says the day had none
+ * (droneReportPresent === false), and nothing when presence is unknown
+ * (legacy verdicts predating the extraction — never claim an absence the
+ * data can't back). Pure.
+ */
+export function withDroneRegion(text: string, day: DayVerdict): string {
+  const counts = formatDroneLine(day.droneReport ?? []);
+  if (counts) return `${text}\n${counts}`;
+  if (day.droneReportPresent === false) return `${text}\n${DRONE_MARKER}звіт не подано.`;
+  return text;
+}
+
 /** Peel a trailing "\n🛸 Дрони: …" line off the end. Pure. */
 export function splitDroneLine(text: string): { rest: string; droneLine: string | null } {
   const idx = text.lastIndexOf(`\n${DRONE_MARKER}`);
@@ -142,15 +156,15 @@ export function formatDayMessage(day: DayVerdict): string {
     const tail = day.airborneReported && day.airborneMinutes > 0
       ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
       : `(відео ${vid} хв, ${ds})`;
-    return withDroneLine(
+    return withDroneRegion(
       withRosterSuffix(`⛔ ${date} — відхилено: ${parts.join("; ")} ${tail}.`, day.roster),
-      day.droneReport,
+      day,
     );
   }
   if (day.status === "ACCEPTED") {
-    return withDroneLine(
+    return withDroneRegion(
       withRosterSuffix(`✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`, day.roster),
-      day.droneReport,
+      day,
     );
   }
   if (day.status === "ACCEPTED_EXCEPTION") {
@@ -162,18 +176,18 @@ export function formatDayMessage(day: DayVerdict): string {
       ? day.reasons[day.reasons.length - 1].replace(/^exception/, "виняток")
       : "";
     const parts = [...ukrainianGaps(day), note].filter(Boolean);
-    return withDroneLine(
+    return withDroneRegion(
       withRosterSuffix(`🟡 ${date} — прийнято (виняток): ${parts.join("; ")}.`, day.roster),
-      day.droneReport,
+      day,
     );
   }
   // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
   const tail = day.airborneReported && day.airborneMinutes > 0
     ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
     : `(відео ${vid} хв, ${ds})`;
-  return withDroneLine(
+  return withDroneRegion(
     withRosterSuffix(`${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} ${tail}.`, day.roster),
-    day.droneReport,
+    day,
   );
 }
 
