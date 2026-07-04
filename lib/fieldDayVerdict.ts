@@ -5,12 +5,23 @@
  * exists. Inside the window with a condition unmet → PENDING. After the window
  * with a condition unmet → NEEDS_REVIEW (a human decides — never auto-rejected).
  *
+ * The gate has four axes: deployment >= 3h, video >= max(2 min, 50% x airborne),
+ * a #field-qa drone-count report, and a #datasets notice. Three failures are
+ * machine auto-rejects (hard no-pay, admin can override via the instruction
+ * path): an admin-declined dataset, a deployment under 3h, and a missing
+ * drone-count report. Curable gaps stay PENDING inside the grace window and
+ * NEEDS_REVIEW after. ACCEPTED ⇔ the crew is paid for the day (see the
+ * 2026-07-03 unified-day-qualification spec).
+ *
  * No React/Next imports; unit-tested. Reuses MIN_RATIO and the shared working-day
  * math. See docs/.../field-day-acceptance spec (phase B).
  */
 import { MIN_RATIO } from "./reconcile";
 import { addWorkingDays } from "./workdays";
 import type { DroneEntry } from "./droneReport";
+
+export const MIN_DEPLOY_MIN = 180;
+export const MIN_VIDEO_MIN = 2;
 
 export type VerdictStatus = "ACCEPTED" | "PENDING" | "NEEDS_REVIEW" | "ACCEPTED_EXCEPTION" | "REJECTED";
 
@@ -28,6 +39,12 @@ export interface VerdictInput {
   airborneReported?: boolean;
   /** Reported deployment window, when known (for the honest message). */
   deployWindow?: { start: string; end: string };
+  /** Звіт deployment minutes: number → gate on it; null → Звіт without a window (curable gap); undefined → unknown source (don't gate). */
+  deployMin?: number | null;
+  /** false when no drone-count report was attributed to this flight day. Defaults true (unknown → don't gate). */
+  droneReportPresent?: boolean;
+  /** false when the day has no parsed "Звіт" at all (nobody attributable to pay). Defaults true. */
+  hasZvit?: boolean;
 }
 
 export interface DayVerdict {
@@ -47,6 +64,12 @@ export interface DayVerdict {
   airborneReported: boolean;
   /** Reported deployment window, when known. */
   deployWindow?: { start: string; end: string };
+  /** Звіт deployment minutes (gate axis); absent on legacy reports. */
+  deployMin?: number | null;
+  /** false when no drone-count report was attributed to the day; absent = ungated. */
+  droneReportPresent?: boolean;
+  /** false when the day has no parsed "Звіт"; absent = true. */
+  hasZvit?: boolean;
   /** Per-person / per-category drone counts for the day (display only; not a gate). */
   droneReport?: DroneEntry[];
 }
@@ -54,30 +77,48 @@ export interface DayVerdict {
 export function verdictForDay(input: VerdictInput): DayVerdict {
   const { flightDate, airborneMinutes, videoMinutes, datasetStatus, today, graceWorkingDays } = input;
   const airborneReported = input.airborneReported ?? true;
+  const droneReportPresent = input.droneReportPresent ?? true;
+  const hasZvit = input.hasZvit ?? true;
+  const deployMin = input.deployMin;
   const ratio = airborneMinutes > 0 ? videoMinutes / airborneMinutes : null;
-  const videoOk = ratio !== null && ratio >= MIN_RATIO;
+  const videoOk = ratio !== null && ratio >= MIN_RATIO && videoMinutes >= MIN_VIDEO_MIN;
   const datasetOk = datasetStatus === "POSTED" || datasetStatus === "WAIVED";
   const windowEnd = addWorkingDays(flightDate, graceWorkingDays);
   const withinGrace = today <= windowEnd;
+  // Deploy/drone/Звіт axes only bind when the day actually flew — a no-fly day
+  // has no pay at stake and stays on the review path.
+  const flew = airborneMinutes > 0 || !airborneReported;
+  const deployShort = flew && typeof deployMin === "number" && deployMin < MIN_DEPLOY_MIN; // hard fail
+  const deployUnknown = flew && deployMin === null;                                        // curable gap
+  const droneMissing = flew && !droneReportPresent;                                        // hard fail
+  const noZvit = flew && !hasZvit;                                                         // curable gap
 
   const reasons: string[] = [];
   if (!videoOk) {
-    reasons.push(
-      ratio === null
-        ? airborneReported
+    if (ratio === null) {
+      reasons.push(
+        airborneReported
           ? "drones did not fly (0 flights, 0 min airborne)"
-          : "flight reported but airborne time not recorded"
-        : `video ${videoMinutes.toFixed(0)}m is ${(ratio * 100).toFixed(0)}% of airborne ${airborneMinutes.toFixed(0)}m (< 50%)`,
-    );
+          : "flight reported but airborne time not recorded",
+      );
+    } else if (ratio < MIN_RATIO) {
+      reasons.push(`video ${videoMinutes.toFixed(0)}m is ${(ratio * 100).toFixed(0)}% of airborne ${airborneMinutes.toFixed(0)}m (< 50%)`);
+    } else {
+      reasons.push(`video ${videoMinutes.toFixed(1)}m is under the ${MIN_VIDEO_MIN}-minute floor`);
+    }
   }
+  if (deployShort) reasons.push(`deployment ${deployMin}m is under 3h`);
+  if (deployUnknown) reasons.push("deployment window not recorded in the Звіт");
+  if (droneMissing) reasons.push("no drone-count report in #field-qa");
+  if (noZvit) reasons.push("flight detected but no Звіт (crew/deployment unknown)");
   if (datasetStatus === "MISSING") reasons.push("no #datasets notice for the day");
   if (datasetStatus === "WAIVED") reasons.push("no dataset — reason accepted (waived)");
   if (datasetStatus === "DECLINED") reasons.push("dataset reason declined by an admin");
 
   let status: VerdictStatus;
-  if (datasetStatus === "DECLINED") {
+  if (datasetStatus === "DECLINED" || deployShort || droneMissing) {
     status = "REJECTED";
-  } else if (videoOk && datasetOk) {
+  } else if (videoOk && datasetOk && !deployUnknown && !noZvit) {
     status = "ACCEPTED";
   } else if (withinGrace) {
     status = "PENDING";
@@ -85,5 +126,9 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
     status = "NEEDS_REVIEW";
   }
 
-  return { date: flightDate, status, airborneMinutes, videoMinutes, ratio, datasetStatus, withinGrace, reasons, roster: [], unknownInitials: [], airborneReported, deployWindow: input.deployWindow };
+  return {
+    date: flightDate, status, airborneMinutes, videoMinutes, ratio, datasetStatus, withinGrace,
+    reasons, roster: [], unknownInitials: [], airborneReported, deployWindow: input.deployWindow,
+    deployMin, droneReportPresent, hasZvit,
+  };
 }

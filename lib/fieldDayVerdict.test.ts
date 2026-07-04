@@ -92,6 +92,73 @@ describe("verdictForDay", () => {
   });
 });
 
+describe("unified gate axes", () => {
+  // 2026-06-30 shape: video 29m vs 18.1m airborne (160%), dataset posted.
+  const base = {
+    flightDate: "2026-06-30",
+    airborneMinutes: 18.1,
+    videoMinutes: 29,
+    datasetStatus: "POSTED" as const,
+    today: "2026-07-03",
+    graceWorkingDays: 3,
+  };
+
+  it("REJECTS a flown day whose deployment is under 3h (hard fail)", () => {
+    const v = verdictForDay({ ...base, deployMin: 120 });
+    expect(v.status).toBe("REJECTED");
+    expect(v.reasons).toContain("deployment 120m is under 3h");
+  });
+
+  it("ACCEPTS when deploy >= 180 and every other axis passes", () => {
+    const v = verdictForDay({ ...base, deployMin: 240, droneReportPresent: true, hasZvit: true });
+    expect(v.status).toBe("ACCEPTED");
+  });
+
+  it("REJECTS a flown day with no drone-count report (hard fail)", () => {
+    const v = verdictForDay({ ...base, deployMin: 240, droneReportPresent: false });
+    expect(v.status).toBe("REJECTED");
+    expect(v.reasons).toContain("no drone-count report in #field-qa");
+  });
+
+  it("hard fail outranks curable gaps (short deploy + missing dataset → REJECTED, not PENDING)", () => {
+    const v = verdictForDay({ ...base, datasetStatus: "MISSING", deployMin: 120 });
+    expect(v.status).toBe("REJECTED");
+  });
+
+  it("Звіт without a deploy window is a curable gap: PENDING in grace, NEEDS_REVIEW after", () => {
+    expect(verdictForDay({ ...base, deployMin: null }).status).toBe("PENDING");
+    const late = verdictForDay({ ...base, deployMin: null, today: "2026-07-10" });
+    expect(late.status).toBe("NEEDS_REVIEW");
+    expect(late.reasons).toContain("deployment window not recorded in the Звіт");
+  });
+
+  it("a flown day with no Звіт at all can never auto-accept", () => {
+    const v = verdictForDay({ ...base, hasZvit: false, today: "2026-07-10" });
+    expect(v.status).toBe("NEEDS_REVIEW");
+    expect(v.reasons).toContain("flight detected but no Звіт (crew/deployment unknown)");
+  });
+
+  it("video under the 2-minute floor fails even when the 50% ratio passes", () => {
+    const v = verdictForDay({ ...base, airborneMinutes: 2, videoMinutes: 1.5, deployMin: 240 });
+    expect(v.status).toBe("PENDING");
+    expect(v.reasons).toContain("video 1.5m is under the 2-minute floor");
+  });
+
+  it("a no-fly day is never hard-rejected for deploy/drone axes", () => {
+    const v = verdictForDay({
+      ...base, airborneMinutes: 0, videoMinutes: 0, droneReportPresent: false, deployMin: 120,
+    });
+    expect(v.status).toBe("PENDING"); // did-not-fly stays a review path, not a rejection
+  });
+
+  it("legacy input (no new fields) keeps today's behavior", () => {
+    const v = verdictForDay(base);
+    expect(v.status).toBe("ACCEPTED");
+    expect(v.droneReportPresent).toBe(true);
+    expect(v.hasZvit).toBe(true);
+  });
+});
+
 describe("verdictForDay with DatasetStatus", () => {
   const base = {
     flightDate: "2026-06-10",
