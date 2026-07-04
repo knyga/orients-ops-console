@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDayMessage, formatOverride, publishableDays, ROSTER_MARKER, splitRosterSuffix, withRosterSuffix, parseRosterSuffix, withDroneLine } from "./verdictPublish";
+import { formatDayMessage, formatOverride, formatTimeTail, formatDuration, publishableDays, ROSTER_MARKER, splitRosterSuffix, withRosterSuffix, parseRosterSuffix, withDroneLine } from "./verdictPublish";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
@@ -70,7 +70,7 @@ describe("formatDayMessage", () => {
     }));
     expect(msg).toContain("за телеметрією польотів не було (0 хв у повітрі), хоча у звіті — виїзд 17:00–20:00");
     expect(msg).toContain("немає повідомлення про датасет");
-    expect(msg).not.toContain("/ 0 хв у повітрі"); // short tail — no redundant airborne clause
+    expect(msg).toContain("(виїзд 17:00–20:00; у повітрі 0 хв;"); // uniform tail
     expect(msg).toContain("👥 У полі: Андріан, Сергій.");
   });
 
@@ -86,8 +86,8 @@ describe("formatDayMessage", () => {
       roster: ["Андріан", "Сергій"],
     }));
     expect(msg).toContain("політ відбувся (17:00–20:00), але час у повітрі не вказано");
-    expect(msg).not.toContain("хв у повітрі,"); // trailing parenthetical dropped the airborne clause
-    expect(msg).not.toContain("0 хв у повітрі");
+    expect(msg).toContain("у повітрі — не вказано"); // uniform tail, honest about the unknown
+    expect(msg).not.toContain("у повітрі 0 хв");
     expect(msg).toContain("👥 У полі: Андріан, Сергій.");
   });
 
@@ -303,6 +303,70 @@ describe("REJECTED rendering", () => {
     });
     expect(msg).toContain("відхилено (Oleksandr K): день не зараховано");
     expect(msg).not.toMatch(/відхилено:\s{2}/);
+  });
+});
+
+describe("formatDuration", () => {
+  it("renders minutes-only under an hour", () => expect(formatDuration(45)).toBe("45 хв"));
+  it("renders whole hours without minutes", () => expect(formatDuration(240)).toBe("4 год"));
+  it("renders mixed hours and minutes", () => expect(formatDuration(510)).toBe("8 год 30 хв"));
+  it("rounds fractional minutes without producing 60 хв", () => expect(formatDuration(119.7)).toBe("2 год"));
+});
+
+describe("formatTimeTail", () => {
+  const base = day({
+    deployWindow: { start: "08:00", end: "16:30" }, deployMin: 510,
+    airborneMinutes: 45, videoMinutes: 30, ratio: 30 / 45, datasetStatus: "POSTED",
+  });
+
+  it("renders all four segments in order", () => {
+    expect(formatTimeTail(base)).toBe("(виїзд 08:00–16:30 — 8 год 30 хв; у повітрі 45 хв; відео 30 хв — 67%; датасет ✓)");
+  });
+  it("window-only when duration is unknown", () => {
+    expect(formatTimeTail({ ...base, deployMin: null })).toContain("виїзд 08:00–16:30;");
+  });
+  it("duration-only when the window is unknown", () => {
+    expect(formatTimeTail({ ...base, deployWindow: undefined, deployMin: 240 })).toContain("(виїзд 4 год;");
+  });
+  it("flew but no deploy info → виїзд — не вказано", () => {
+    expect(formatTimeTail({ ...base, deployWindow: undefined, deployMin: undefined })).toContain("(виїзд — не вказано;");
+  });
+  it("reported no-fly day with no deploy info omits the виїзд segment", () => {
+    const t = formatTimeTail({ ...base, deployWindow: undefined, deployMin: undefined, airborneMinutes: 0, ratio: null, airborneReported: true });
+    expect(t).not.toContain("виїзд");
+    expect(t).toContain("(у повітрі 0 хв;");
+  });
+  it("airborne unreported → у повітрі — не вказано", () => {
+    const t = formatTimeTail({ ...base, airborneMinutes: 0, ratio: null, airborneReported: false });
+    expect(t).toContain("у повітрі — не вказано");
+    expect(t).not.toContain("у повітрі 0 хв");
+  });
+  it("null ratio drops the percent", () => {
+    expect(formatTimeTail({ ...base, ratio: null })).toContain("відео 30 хв;");
+  });
+});
+
+describe("uniform tail on every status", () => {
+  const timed = (over: Partial<DayVerdict>) => day({
+    deployWindow: { start: "08:00", end: "16:30" }, deployMin: 510,
+    airborneMinutes: 45, videoMinutes: 30, ratio: 30 / 45, datasetStatus: "POSTED", ...over,
+  });
+  const TAIL = "(виїзд 08:00–16:30 — 8 год 30 хв; у повітрі 45 хв; відео 30 хв — 67%; датасет ✓)";
+
+  it("ACCEPTED", () => {
+    expect(formatDayMessage(timed({}))).toContain(`— прийнято ${TAIL}.`);
+  });
+  it("NEEDS_REVIEW", () => {
+    expect(formatDayMessage(timed({ status: "NEEDS_REVIEW", datasetStatus: "MISSING" })))
+      .toContain("(виїзд 08:00–16:30 — 8 год 30 хв; у повітрі 45 хв; відео 30 хв — 67%; без датасету).");
+  });
+  it("ACCEPTED_EXCEPTION", () => {
+    expect(formatDayMessage(timed({ status: "ACCEPTED_EXCEPTION", reasons: ["exception (Oleksandr K): форс-мажор"] })))
+      .toContain(`виняток (Oleksandr K): форс-мажор ${TAIL}.`);
+  });
+  it("REJECTED", () => {
+    expect(formatDayMessage(timed({ status: "REJECTED", deployMin: 120, reasons: ["deployment 120m is under 3h"] })))
+      .toContain("(виїзд 08:00–16:30 — 2 год; у повітрі 45 хв; відео 30 хв — 67%; датасет ✓).");
   });
 });
 

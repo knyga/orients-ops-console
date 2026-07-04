@@ -131,43 +131,64 @@ function datasetMarker(status: DayVerdict["datasetStatus"]): string {
   }
 }
 
+/** Format minutes as «N год M хв» (whole hours «N год», sub-hour «M хв»). Pure. */
+export function formatDuration(min: number): string {
+  const total = Math.round(min);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m} хв`;
+  if (m === 0) return `${h} год`;
+  return `${h} год ${m} хв`;
+}
+
+/**
+ * The uniform facts tail shown on EVERY published verdict, regardless of
+ * status: time in the field (виїзд), time in the air, video minutes/ratio,
+ * dataset marker. States facts only — the status clause explains the why.
+ * A day that flew without deploy data says «виїзд — не вказано»; a reported
+ * no-fly day with no deploy data omits the виїзд segment. Pure.
+ */
+export function formatTimeTail(day: DayVerdict): string {
+  const parts: string[] = [];
+  const w = day.deployWindow;
+  const dur = typeof day.deployMin === "number" ? formatDuration(day.deployMin) : null;
+  const flew = day.airborneMinutes > 0 || !day.airborneReported;
+  if (w && dur) parts.push(`виїзд ${w.start}–${w.end} — ${dur}`);
+  else if (w) parts.push(`виїзд ${w.start}–${w.end}`);
+  else if (dur) parts.push(`виїзд ${dur}`);
+  else if (flew) parts.push("виїзд — не вказано");
+  parts.push(day.airborneReported ? `у повітрі ${day.airborneMinutes.toFixed(0)} хв` : "у повітрі — не вказано");
+  const vid = `відео ${day.videoMinutes.toFixed(0)} хв`;
+  parts.push(day.ratio === null ? vid : `${vid} — ${(day.ratio * 100).toFixed(0)}%`);
+  parts.push(datasetMarker(day.datasetStatus));
+  return `(${parts.join("; ")})`;
+}
+
 /**
  * The Slack message text the bot would post for a single day's verdict — in
  * Ukrainian, the field team's language. For NEEDS_REVIEW the gap wording is
  * rebuilt here from the verdict's structured fields (mirroring askGaps.ts), so
  * the English `day.reasons` (kept for the internal web/reports) never leaks to
  * the channel. ACCEPTED_EXCEPTION rebuilds the same gaps and keeps only the
- * human exception note (the last reason) verbatim.
+ * human exception note (the last reason) verbatim. Every status ends with the
+ * same uniform facts tail (formatTimeTail).
  */
 export function formatDayMessage(day: DayVerdict): string {
   const icon = ICON[day.status] ?? "";
   const date = dateWithWeekday(day.date);
-  const air = day.airborneMinutes.toFixed(0);
-  const vid = day.videoMinutes.toFixed(0);
-  const pct = day.ratio === null ? "—" : `${(day.ratio * 100).toFixed(0)}%`;
-  const ds = datasetMarker(day.datasetStatus);
+  const tail = formatTimeTail(day);
 
+  let body: string;
   if (day.status === "REJECTED") {
     // A human rejection (applyResolution appends `rejected[(by)]: note` last)
     // must surface its note verbatim — machine gaps alone can be empty then.
     const last = day.reasons[day.reasons.length - 1] ?? "";
     const note = /^rejected/.test(last) ? last.replace(/^rejected/, "відхилено") : "";
     const parts = [...ukrainianGaps(day), note].filter(Boolean);
-    const tail = day.airborneReported && day.airborneMinutes > 0
-      ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
-      : `(відео ${vid} хв, ${ds})`;
-    return withDroneRegion(
-      withRosterSuffix(`⛔ ${date} — відхилено: ${parts.join("; ")} ${tail}.`, day.roster),
-      day,
-    );
-  }
-  if (day.status === "ACCEPTED") {
-    return withDroneRegion(
-      withRosterSuffix(`✅ ${date} — прийнято (відео ${vid} хв — це ${pct} від ${air} хв у повітрі; ${ds}).`, day.roster),
-      day,
-    );
-  }
-  if (day.status === "ACCEPTED_EXCEPTION") {
+    body = `⛔ ${date} — відхилено: ${parts.join("; ")} ${tail}.`;
+  } else if (day.status === "ACCEPTED") {
+    body = `✅ ${date} — прийнято ${tail}.`;
+  } else if (day.status === "ACCEPTED_EXCEPTION") {
     // Machine gaps are rebuilt in Ukrainian (the English strings in day.reasons
     // never reach the channel). The human exception note is the LAST reason
     // (applyResolution appends `exception[(by)]: note` last); keep its text
@@ -176,19 +197,12 @@ export function formatDayMessage(day: DayVerdict): string {
       ? day.reasons[day.reasons.length - 1].replace(/^exception/, "виняток")
       : "";
     const parts = [...ukrainianGaps(day), note].filter(Boolean);
-    return withDroneRegion(
-      withRosterSuffix(`🟡 ${date} — прийнято (виняток): ${parts.join("; ")}.`, day.roster),
-      day,
-    );
+    body = `🟡 ${date} — прийнято (виняток): ${parts.join("; ")} ${tail}.`;
+  } else {
+    // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
+    body = `${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} ${tail}.`;
   }
-  // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
-  const tail = day.airborneReported && day.airborneMinutes > 0
-    ? `(відео ${vid} хв / ${air} хв у повітрі, ${ds})`
-    : `(відео ${vid} хв, ${ds})`;
-  return withDroneRegion(
-    withRosterSuffix(`${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} ${tail}.`, day.roster),
-    day,
-  );
+  return withDroneRegion(withRosterSuffix(body, day.roster), day);
 }
 
 /**
