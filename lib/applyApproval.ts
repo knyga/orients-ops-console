@@ -32,12 +32,76 @@ export interface ApproverDecisionResult {
   alreadyAcked: boolean;
 }
 
+export interface AmendVerdictArgs {
+  entry: PublishedEntry;
+  period: Period;
+  decision: ResolutionDecision;
+  by: string;
+  reason: string;
+  trigger: SendTrigger;
+  /** Post the generic "Зафіксовано" threaded ack. Callers with an axis-specific ack pass false. */
+  postAck: boolean;
+}
+
 /**
- * The override effect: write the resolution, amend the original verdict in Slack
- * (strike-through + new state), post a threaded ack, and stamp the published
- * entry's `override`. Skips entirely when this same decision was already acked
- * (so Slack's at-least-once delivery / a CLI re-run never double-posts). A
- * CHANGED decision re-acks (formatOverride always strikes the ORIGINAL text).
+ * Amend a published verdict in Slack: strike the BODY (preserving the disjoint
+ * 👥 crew suffix + 🛸 drone line), optionally post the generic threaded ack, and
+ * stamp the entry's `override`. Skips entirely when this same decision was
+ * already acked (Slack's at-least-once delivery / a CLI re-run never
+ * double-posts); a CHANGED decision re-amends (formatOverride always strikes
+ * the ORIGINAL text). Shared by the day axis and the dataset-decline path.
+ */
+export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<ApproverDecisionResult> {
+  const { entry, period, decision, by, reason, trigger, postAck } = args;
+
+  if (entry.override?.decision === decision) {
+    return { applied: false, alreadyAcked: true };
+  }
+
+  const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
+  if (!channel) {
+    return { applied: false, alreadyAcked: false };
+  }
+
+  const { body, rosterLine, droneLine } = splitRosterSuffix(entry.text);
+  const { updatedText: struck, replyText } = formatOverride(body, decision, by, reason);
+  const tail = [rosterLine, droneLine].filter(Boolean).join("\n");
+  const updatedText = tail ? `${struck}\n${tail}` : struck;
+  // Key the edit + ack by the DECISION, not the (non-deterministic) reason text,
+  // so a redelivered Slack event dedups to a single post while a genuine flip
+  // (accept → reject) still reposts. See lib/outboundKeys.ts.
+  const { editKey, ackKey } = approvalOutboundKeys(entry.date, decision);
+  await updateMessage(channel.id, entry.ts, updatedText, {
+    key: editKey,
+    feature: "approval",
+    channel: channel.name,
+    trigger,
+  });
+  if (postAck) {
+    await postMessage(
+      channel.id,
+      replyText,
+      {
+        key: ackKey,
+        feature: "approval",
+        channel: channel.name,
+        trigger,
+      },
+      entry.ts,
+    );
+  }
+
+  await writePublished(period, {
+    [entry.date]: { ...entry, override: { decision, by, ackedAt: new Date().toISOString() } },
+  });
+
+  return { applied: true, alreadyAcked: false };
+}
+
+/**
+ * The override effect: write the day-axis resolution, then amend the verdict in
+ * Slack + ack + stamp `override` (amendPublishedVerdict). Skips entirely when
+ * this same decision was already acked.
  */
 export async function applyApproverDecision(
   args: ApproverDecisionArgs,
@@ -58,46 +122,8 @@ export async function applyApproverDecision(
     by,
   });
 
-  const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
-  if (!channel) {
-    // Resolution is recorded, but without a tracked channel we cannot edit/ack.
-    return { applied: false, alreadyAcked: false };
-  }
-
-  // Strike only the verdict BODY; preserve the crew suffix (👥 У полі: …) and the
-  // drone line so an override and the other edits touch disjoint regions of the
-  // message.
-  const { body, rosterLine, droneLine } = splitRosterSuffix(entry.text);
-  const { updatedText: struck, replyText } = formatOverride(body, decision, by, reason);
-  const tail = [rosterLine, droneLine].filter(Boolean).join("\n");
-  const updatedText = tail ? `${struck}\n${tail}` : struck;
-  // Key the edit + ack by the DECISION, not the (non-deterministic) reason text,
-  // so a redelivered Slack event dedups to a single post while a genuine flip
-  // (accept → reject) still reposts. See lib/outboundKeys.ts.
-  const { editKey, ackKey } = approvalOutboundKeys(entry.date, decision);
-  await updateMessage(channel.id, entry.ts, updatedText, {
-    key: editKey,
-    feature: "approval",
-    channel: channel.name,
-    trigger,
-  });
-  await postMessage(
-    channel.id,
-    replyText,
-    {
-      key: ackKey,
-      feature: "approval",
-      channel: channel.name,
-      trigger,
-    },
-    entry.ts,
-  );
-
-  await writePublished(period, {
-    [entry.date]: { ...entry, override: { decision, by, ackedAt: new Date().toISOString() } },
-  });
-
-  return { applied: true, alreadyAcked: false };
+  // Resolution is recorded even when no tracked channel exists to edit/ack.
+  return amendPublishedVerdict({ entry, period, decision, by, reason, trigger, postAck: true });
 }
 
 export interface ApproverReplyArgs {

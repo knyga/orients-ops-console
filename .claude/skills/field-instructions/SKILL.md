@@ -38,7 +38,10 @@ Run `npm run slack-sync` first (reads the mirror). After `--write`, re-run
 ## How it applies (reuse, disjoint regions)
 `lib/applyInstruction.ts` routes to the existing primitives: day →
 `applyApproverDecision` (strikes the body), crew/eligibility → `applyRosterDecision`
-(edits the `👥 У полі:` suffix), dataset/video → `upsertResolution`, airborne →
+(edits the `👥 У полі:` suffix), dataset/video → `upsertResolution` — a dataset
+**decline** additionally strikes the body via `amendPublishedVerdict` (it
+machine-rejects the day, and nothing re-edits an already-published message),
+skipped when a day/video exception rescues the day — airborne →
 `upsertAirborneOverride` (overlays `computeVerdicts` step 1). Each axis owns its
 Slack region + Ukrainian ack, so they never clobber each other. Crew corrections
 seed the baseline from the **current effective crew** (published suffix), so

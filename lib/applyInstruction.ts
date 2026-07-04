@@ -7,7 +7,10 @@
  * Each axis is responsible for its own Ukrainian ack, so callers do not double-ack:
  *  - day        → applyApproverDecision (strikes the body + acks)
  *  - crew/elig  → applyRosterDecision   (edits the 👥 suffix + acks)
- *  - dataset    → upsertResolution(dataset) + ack
+ *  - dataset    → upsertResolution(dataset) + ack; a DECLINE also strikes the
+ *                 body (amendPublishedVerdict) — it machine-rejects the day and
+ *                 nothing downstream re-edits an already-published message —
+ *                 unless a day/video exception rescues the day
  *  - video      → upsertResolution(video, accepted_exception) + ack
  *  - airborne   → upsertAirborneOverride + ack (body re-renders on next field-verdict)
  * Idempotent via the primitives' own guards + content-rev outbound keys.
@@ -17,9 +20,9 @@ import { postMessage } from "./slack";
 import { contentRev, instructionAckKey, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { type PublishedEntry } from "./published";
-import { upsertResolution } from "./resolutions";
+import { dayRescuedByException, readResolutions, upsertResolution } from "./resolutions";
 import { upsertAirborneOverride } from "./airborneOverrides";
-import { applyApproverDecision } from "./applyApproval";
+import { amendPublishedVerdict, applyApproverDecision } from "./applyApproval";
 import { applyRosterDecision } from "./applyRosterCorrection";
 import { buildRosterOutcome } from "./instructionOutcome";
 import { parseRosterSuffix } from "./verdictPublish";
@@ -88,6 +91,13 @@ export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ ap
     await upsertResolution({ date: entry.date, axis: "dataset", decision, note: c.reason, source: evidence || "slack", recordedAt: new Date().toISOString(), by });
     const label = decision === "rejected" ? "датасет ⛔ причину відхилено" : "датасет 📝 виняток (не потрібен)";
     const applied = await ack(entry, `📝 Зафіксовано: ${label} — ${by}. Причина: ${c.reason}`, "dataset", trigger);
+    if (decision === "rejected" && !dayRescuedByException(entry.date, await readResolutions())) {
+      // A dataset decline machine-rejects the day (fieldDayVerdict), and nothing
+      // downstream ever re-edits an already-published day — so amend it now.
+      // A waive is NOT amended: the resulting status depends on the other gates
+      // and only the next verdict recompute knows it.
+      await amendPublishedVerdict({ entry, period, decision: "rejected", by, reason: c.reason, trigger, postAck: false });
+    }
     return { applied };
   }
 

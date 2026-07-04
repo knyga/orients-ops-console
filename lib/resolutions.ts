@@ -104,6 +104,20 @@ export function deriveDatasetStatus(
 }
 
 /**
+ * Whether a day/video-axis `accepted_exception` would rescue the day from a
+ * machine auto-REJECT (mirrors applyResolution: a day/video `rejected` veto
+ * wins over any exception). Consulted before amending a published verdict to
+ * ⛔ on a dataset decline — a rescued day is NOT rejected. Pure.
+ */
+export function dayRescuedByException(date: string, resolutions: Resolution[]): boolean {
+  const forDate = resolutions.filter(
+    (r) => r.date === date && (r.axis === "video" || r.axis === "day"),
+  );
+  if (forDate.some((r) => r.decision === "rejected")) return false;
+  return forDate.some((r) => r.decision === "accepted_exception");
+}
+
+/**
  * Apply the VIDEO/DAY-axis overlay to a verdict (pure). The dataset axis is
  * handled by deriveDatasetStatus + verdictForDay; here we only honour exceptions
  * and vetoes that target the video gate or the whole day:
