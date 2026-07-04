@@ -78,6 +78,13 @@
       "when": 1782985797755,
       "tag": "0010_superb_jack_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783199612627,
+      "tag": "0011_new_blindfold",
+      "breakpoints": true
     }
   ]
 }

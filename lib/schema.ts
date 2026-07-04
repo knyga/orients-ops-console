@@ -118,13 +118,17 @@ export const published = pgTable(
   {
     period: text("period").notNull(),
     date: text("date").notNull(),
+    /** Звіт ts for a per-report verdict; null = legacy day entry / no-Звіт row. */
+    reportTs: text("report_ts"),
+    /** reportKey(date, reportTs) — the store key. Legacy rows: the bare date. */
+    verdictKey: text("verdict_key").notNull(),
     channel: text("channel").notNull(),
     text: text("text").notNull(),
     ts: text("ts").notNull(),
     postedAt: text("posted_at").notNull(),
     override: jsonb("override"), // { decision, by, ackedAt } | null
   },
-  (t) => [primaryKey({ columns: [t.period, t.date] })],
+  (t) => [primaryKey({ columns: [t.period, t.verdictKey] })],
 );
 
 /** Asked questions (S5) + their lifecycle state. */
@@ -193,10 +197,12 @@ export const bonusNotified = pgTable(
   {
     period: text("period").notNull(),
     date: text("date").notNull(),
+    reportTs: text("report_ts"),
+    verdictKey: text("verdict_key").notNull(),
     threadTs: text("thread_ts"),
     dms: jsonb("dms").notNull(), // { slackId, ts, amount }[]
   },
-  (t) => [primaryKey({ columns: [t.period, t.date] })],
+  (t) => [primaryKey({ columns: [t.period, t.verdictKey] })],
 );
 
 /** The web's render source — one row per (feature, period). */
