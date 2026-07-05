@@ -3,7 +3,7 @@ import { dayPersonBonuses, dayTotal, formatThreadBreakdown, formatDm, formatNoBo
 import type { DayBonus } from "./fieldBonus";
 
 const counted = (over: Partial<DayBonus> = {}): DayBonus => ({
-  date: "2026-06-19", roster: ["Андріан", "Тарас"], deployMin: 240, videoMin: 10,
+  date: "2026-06-19", reportTs: null, reportCount: 1, roster: ["Андріан", "Тарас"], deployMin: 240, videoMin: 10,
   counted: true, early: false, weekend: false, reason: "counted", status: "ACCEPTED", ...over,
 });
 

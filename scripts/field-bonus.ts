@@ -21,14 +21,14 @@ async function main(): Promise<void> {
     const { TRACKED_CHANNELS } = await import("../lib/slackChannels");
     const { formatThreadBreakdown, formatDm, formatNoBonusNote } = await import("../lib/bonusNotify");
     const { buildNotifyPlan, formatNotifyDryRun } = await import("./fieldBonusReport");
+    const { reportKey } = await import("../lib/fieldDayVerdict");
 
     const key = periodKey(period);
-    const verdict = await readReportJson<{ days: { date: string; status: string }[] }>("field-verdict", key);
+    const verdict = await readReportJson<{ days: { date: string; reportTs: string | null; status: string }[] }>("field-verdict", key);
     if (!verdict) { process.stderr.write(`field-bonus: no field-verdict report for ${key} — run field-verdict --write first.\n`); process.exit(1); }
-    const verdictByDate = new Map(verdict.days.map((d) => [d.date, d.status as import("../lib/fieldDayVerdict").VerdictStatus]));
+    const verdictByReport = new Map(verdict.days.map((d) => [reportKey(d.date, d.reportTs), d.status as import("../lib/fieldDayVerdict").VerdictStatus]));
 
     const published = await readPublished(period);
-    const publishedDates = new Set(Object.keys(published));
 
     // Resolve each roster name once against the live directory.
     const users = await listUsers();
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
     const slackIdByName = new Map(names.map((n) => [n, matchSlackId(n, users)] as const));
 
     let log = await readNotified(period);
-    const plan = buildNotifyPlan({ days: report.days, verdictByDate, publishedDates, slackIdByName, log });
+    const plan = buildNotifyPlan({ days: report.days, verdictByReport, published, slackIdByName, log });
 
     if (!args.publish) { console.log(formatNotifyDryRun(plan, args.channel)); return; }
 
@@ -46,16 +46,23 @@ async function main(): Promise<void> {
 
     for (const item of plan) {
       if (!item.published) { process.stderr.write(`field-bonus: ${item.date} not published yet — skipping thread+DMs.\n`); continue; }
-      const rootTs = published[item.date].ts;
+      const notifyKey = reportKey(item.date, item.reportTs);
+      // Resolve the published thread root the same way isPublished checked it:
+      // the exact verdictKey, falling back to the legacy bare-date entry only
+      // for the day's sole report.
+      const entry = published[notifyKey] ??
+        (item.reportTs !== null && item.reportCount === 1 ? published[item.date] : undefined);
+      if (!entry) { process.stderr.write(`field-bonus: ${item.date} published entry not found — skipping thread+DMs.\n`); continue; }
+      const rootTs = entry.ts;
       if (item.threadPending) {
         const text = item.earned ? formatThreadBreakdown(item.date, item.people) : formatNoBonusNote(item.date, item.reason);
         const ts = await postMessage(channel.id, text, {
-          key: bonusThreadKey(item.date),
+          key: bonusThreadKey(notifyKey),
           feature: "bonus",
           channel: channel.name,
           trigger: "cli",
         }, rootTs);
-        log = recordThread(log, item.date, ts);
+        log = recordThread(log, notifyKey, ts);
         await writeNotified(period, log);
         process.stderr.write(`field-bonus: posted ${item.earned ? "breakdown" : "no-bonus note"} for ${item.date}\n`);
       }
@@ -63,12 +70,12 @@ async function main(): Promise<void> {
         if (t.slackId === null) continue;
         const dm = await openDm(t.slackId);
         const ts = await postMessage(dm, formatDm(item.date, t.amount), {
-          key: bonusDmKey(item.date, t.slackId),
+          key: bonusDmKey(notifyKey, t.slackId),
           feature: "bonus",
           channel: `dm:${t.slackId}`,
           trigger: "cli",
         });
-        log = recordDm(log, item.date, t.slackId, ts, t.amount.total);
+        log = recordDm(log, notifyKey, t.slackId, ts, t.amount.total);
         await writeNotified(period, log);
         process.stderr.write(`field-bonus: DMed ${t.name} for ${item.date} (${t.amount.total} грн)\n`);
       }

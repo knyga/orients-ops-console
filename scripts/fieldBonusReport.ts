@@ -2,8 +2,9 @@
 import { parsePeriodKey, type Period } from "../lib/period";
 import type { BonusReport, DayBonus } from "../lib/fieldBonus";
 import { dayPersonBonuses, type PersonAmount } from "../lib/bonusNotify";
-import { isThreadNotified, isDmSent, type NotifiedLog } from "../lib/bonusNotified";
-import type { VerdictStatus } from "../lib/fieldDayVerdict";
+import { isThreadNotifiedFor, isDmSentFor, type NotifiedLog } from "../lib/bonusNotified";
+import { isPublished, type PublishedLog } from "../lib/published";
+import { reportKey, type VerdictStatus } from "../lib/fieldDayVerdict";
 
 export interface BonusArgs { start?: string; end?: string; format?: string; write: boolean; ask: boolean; publish: boolean; notify: boolean; channel?: string; sheet?: string }
 
@@ -35,8 +36,8 @@ export function toCsv(report: BonusReport): string {
   const rows = report.people.map((p) => [p.name, p.trips, p.early, p.weekend, p.gross, p.penaltyPct, p.net].join(","));
   const lines = [head, ...rows];
   if (report.pendingDays.length) {
-    lines.push("", "pending,date,status,roster,amountAtStake");
-    for (const d of report.pendingDays) lines.push(`pending,${d.date},${d.status},"${d.roster.join(", ")}",${d.amountAtStake}`);
+    lines.push("", "pending,date,reportTs,status,roster,amountAtStake");
+    for (const d of report.pendingDays) lines.push(`pending,${d.date},${d.reportTs ?? ""},${d.status},"${d.roster.join(", ")}",${d.amountAtStake}`);
   }
   return lines.join("\n");
 }
@@ -61,6 +62,8 @@ export interface NotifyTarget { name: string; amount: PersonAmount; slackId: str
 
 export interface NotifyPlanItem {
   date: string;
+  reportTs: string | null;
+  reportCount: number;
   earned: boolean;
   reason: string;
   people: PersonAmount[];
@@ -71,29 +74,32 @@ export interface NotifyPlanItem {
 }
 
 /**
- * Which settled days still need a thread post and/or DMs. A day is in the plan
- * iff its verdict is FINAL: ACCEPTED, ACCEPTED_EXCEPTION, or REJECTED.
- * PENDING and NEEDS_REVIEW are skipped (NEEDS_REVIEW may still flip to an
- * exception). Earned = verdict is accepted AND the bonus DayBonus is counted.
- * Fully-notified days are dropped.
+ * Which settled reports still need a thread post and/or DMs. A report is in
+ * the plan iff its verdict is FINAL: ACCEPTED, ACCEPTED_EXCEPTION, or
+ * REJECTED. PENDING and NEEDS_REVIEW are skipped (NEEDS_REVIEW may still flip
+ * to an exception). Earned = verdict is accepted AND the bonus DayBonus is
+ * counted. Fully-notified reports are dropped. Verdict/notified/published
+ * lookups are all report-scoped (reportKey(date, reportTs)) with the same
+ * legacy bare-date fallback for single-report days.
  */
 export function buildNotifyPlan(input: {
   days: DayBonus[];
-  verdictByDate: Map<string, VerdictStatus>;
-  publishedDates: Set<string>;
+  verdictByReport: Map<string, VerdictStatus>;
+  published: PublishedLog;
   slackIdByName: Map<string, string | null>;
   log: NotifiedLog;
 }): NotifyPlanItem[] {
-  const { days, verdictByDate, publishedDates, slackIdByName, log } = input;
+  const { days, verdictByReport, published, slackIdByName, log } = input;
   const plan: NotifyPlanItem[] = [];
   for (const day of days) {
-    const status = verdictByDate.get(day.date);
+    const target = { date: day.date, reportTs: day.reportTs, reportCount: day.reportCount };
+    const status = verdictByReport.get(reportKey(day.date, day.reportTs));
     if (!status || status === "PENDING" || status === "NEEDS_REVIEW") continue; // only final statuses
     const people = dayPersonBonuses(day);
     const accepted = status === "ACCEPTED" || status === "ACCEPTED_EXCEPTION";
     const earned = accepted && people.length > 0;
     const reason = accepted ? day.reason : "виїзд відхилено";
-    const threadPending = !isThreadNotified(log, day.date);
+    const threadPending = !isThreadNotifiedFor(log, target);
 
     const pendingDms: NotifyTarget[] = [];
     const unmatched: string[] = [];
@@ -101,12 +107,16 @@ export function buildNotifyPlan(input: {
       for (const amount of people) {
         const slackId = slackIdByName.get(amount.name) ?? null;
         if (slackId === null) { unmatched.push(amount.name); continue; }
-        if (isDmSent(log, day.date, slackId)) continue;
+        if (isDmSentFor(log, target, slackId)) continue;
         pendingDms.push({ name: amount.name, amount, slackId });
       }
     }
     if (!threadPending && pendingDms.length === 0 && unmatched.length === 0) continue;
-    plan.push({ date: day.date, earned, reason, people, threadPending, pendingDms, unmatched, published: publishedDates.has(day.date) });
+    plan.push({
+      date: day.date, reportTs: day.reportTs, reportCount: day.reportCount,
+      earned, reason, people, threadPending, pendingDms, unmatched,
+      published: isPublished(published, target),
+    });
   }
   return plan;
 }

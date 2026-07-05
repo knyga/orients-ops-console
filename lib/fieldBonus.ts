@@ -8,8 +8,8 @@
  * the team-wide >3-loss cutoff. No DB/Next imports — unit-tested in isolation.
  */
 import type { Period } from "./period";
-import { applyRosterCorrection, type RosterCorrection } from "./rosterCorrection";
-import { MIN_DEPLOY_MIN, MIN_VIDEO_MIN, type VerdictStatus } from "./fieldDayVerdict";
+import { applyRosterCorrection, correctionForReport, type RosterCorrection } from "./rosterCorrection";
+import { MIN_DEPLOY_MIN, MIN_VIDEO_MIN, reportKey, type VerdictStatus } from "./fieldDayVerdict";
 
 export const TRIP = 700;
 export const EARLY = 200;
@@ -26,6 +26,10 @@ export interface LossRecord { date: string; found: boolean; note: string }
 /** One flight day, already qualified by the verdict — the calculator's only input shape. */
 export interface QualifiedDay {
   date: string;
+  /** Звіт message ts — the report's identity; null = synthetic no-Звіт row or legacy. */
+  reportTs: string | null;
+  /** How many reports this flight day has (>1 = multi-trip day). */
+  reportCount: number;
   status: VerdictStatus;
   roster: string[];
   unknownInitials: string[];
@@ -35,12 +39,12 @@ export interface QualifiedDay {
   reasons: string[];
   flew: boolean; // pending money is only at stake when the day flew
 }
-export interface PendingDay { date: string; roster: string[]; status: VerdictStatus; reasons: string[]; amountAtStake: number }
-export interface DayBonus { date: string; roster: string[]; deployMin: number | null; videoMin: number; counted: boolean; early: boolean; weekend: boolean; reason: string; status: VerdictStatus }
+export interface PendingDay { date: string; reportTs: string | null; roster: string[]; status: VerdictStatus; reasons: string[]; amountAtStake: number }
+export interface DayBonus { date: string; reportTs: string | null; reportCount: number; roster: string[]; deployMin: number | null; videoMin: number; counted: boolean; early: boolean; weekend: boolean; reason: string; status: VerdictStatus }
 export interface PersonBonus { name: string; trips: number; early: number; weekend: number; gross: number; penaltyPct: number; net: number }
 export interface Penalty { group: string[]; lossesInWindow: number; pct: number; reason: string }
 export interface Flag { kind: "unknown_initial" | "qualifying_unrecorded" | "counted_no_video" | "no_drone_count"; date: string; detail: string }
-export interface BonusReport { period: Period; days: DayBonus[]; people: PersonBonus[]; penalties: Penalty[]; teamZeroed: boolean; flags: Flag[]; total: number; voidedDays: { date: string; roster: string[]; reason: string }[]; pendingDays: PendingDay[] }
+export interface BonusReport { period: Period; days: DayBonus[]; people: PersonBonus[]; penalties: Penalty[]; teamZeroed: boolean; flags: Flag[]; total: number; voidedDays: { date: string; reportTs: string | null; roster: string[]; reason: string }[]; pendingDays: PendingDay[] }
 
 const TZ = "Europe/Kyiv";
 function isWeekend(date: string): boolean {
@@ -60,7 +64,6 @@ export function computeBonuses(input: {
   corrections?: RosterCorrection[];
 }): BonusReport {
   const { period, days: qualified, losses, corrections = [] } = input;
-  const correctionFor = (date: string) => corrections.find((c) => c.date === date);
   const flags: Flag[] = [];
   const days: DayBonus[] = [];
   const pendingDays: PendingDay[] = [];
@@ -72,19 +75,21 @@ export function computeBonuses(input: {
     const earlyEligible = sm != null && sm <= EARLY_CUTOFF_MIN;
     const early = counted && earlyEligible;
     const weekend = counted && isWeekend(q.date);
-    const eff = applyRosterCorrection(q.roster, counted, correctionFor(q.date));
+    const correction = correctionForReport(corrections, q.date, q.reportTs, q.reportCount);
+    const eff = applyRosterCorrection(q.roster, counted, correction);
     const reason = counted ? "counted" : q.reasons.join("; ") || q.status;
-    days.push({ date: q.date, roster: eff.roster, deployMin: q.deployMin, videoMin: q.videoMin, counted, early, weekend, reason, status: q.status });
+    days.push({ date: q.date, reportTs: q.reportTs, reportCount: q.reportCount, roster: eff.roster, deployMin: q.deployMin, videoMin: q.videoMin, counted, early, weekend, reason, status: q.status });
     if ((q.status === "PENDING" || q.status === "NEEDS_REVIEW") && q.flew) {
       const perPerson = TRIP + (earlyEligible ? EARLY : 0) + (isWeekend(q.date) ? WEEKEND : 0);
-      pendingDays.push({ date: q.date, roster: eff.roster, status: q.status, reasons: q.reasons, amountAtStake: perPerson * eff.roster.length });
+      pendingDays.push({ date: q.date, reportTs: q.reportTs, roster: eff.roster, status: q.status, reasons: q.reasons, amountAtStake: perPerson * eff.roster.length });
     }
   }
 
   // Per-person tallies — honour per-person eligibility overrides.
   const tally = new Map<string, { trips: number; early: number; weekend: number; dates: string[] }>();
   for (const d of days) {
-    const eff = applyRosterCorrection(d.roster, d.counted, correctionFor(d.date));
+    const correction = correctionForReport(corrections, d.date, d.reportTs, d.reportCount ?? 1);
+    const eff = applyRosterCorrection(d.roster, d.counted, correction);
     for (const { name, counted } of eff.perPerson) {
       if (!counted) continue;
       const t = tally.get(name) ?? { trips: 0, early: 0, weekend: 0, dates: [] };
@@ -93,12 +98,14 @@ export function computeBonuses(input: {
     }
   }
 
-  // Flight groups = sets of people who fly together on a counted day.
-  const groupKeyByDate = new Map<string, string>();
-  for (const d of days) if (d.counted) groupKeyByDate.set(d.date, [...d.roster].sort().join("+"));
+  // Flight groups = sets of people who fly together on a counted trip — one
+  // trip per ACCEPTED *report*, not per date, so a two-report day contributes
+  // two independent trips (each can carry its own loss/penalty exposure).
+  const groupKeyByTrip = new Map<string, string>();
+  for (const d of days) if (d.counted) groupKeyByTrip.set(reportKey(d.date, d.reportTs), [...d.roster].sort().join("+"));
   const tripsByGroup = new Map<string, string[]>();
-  for (const [date, key] of [...groupKeyByDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    const arr = tripsByGroup.get(key) ?? []; arr.push(date); tripsByGroup.set(key, arr);
+  for (const [tripKey, groupKey] of [...groupKeyByTrip.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const arr = tripsByGroup.get(groupKey) ?? []; arr.push(tripKey); tripsByGroup.set(groupKey, arr);
   }
   // Losses are keyed by flight DATE; the upstream extractor (lib/lossExtract)
   // produces at most one loss record per report/date, so deduping by date is
@@ -110,11 +117,12 @@ export function computeBonuses(input: {
   // Worst penalty per group: max losses inside any window of 12 consecutive trips.
   const penalties: Penalty[] = [];
   const pctByGroup = new Map<string, number>();
-  for (const [key, dates] of tripsByGroup.entries()) {
+  for (const [key, tripKeys] of tripsByGroup.entries()) {
     let worst = 0;
-    for (let i = 0; i < dates.length; i++) {
-      const window = dates.slice(i, i + LOSS_WINDOW);
-      const inWindow = window.filter((d) => lostDates.has(d)).length;
+    for (let i = 0; i < tripKeys.length; i++) {
+      const window = tripKeys.slice(i, i + LOSS_WINDOW);
+      // tripKey is `date` or `date#reportTs` — the date is always the first 10 chars.
+      const inWindow = window.filter((k) => lostDates.has(k.slice(0, 10))).length;
       worst = Math.max(worst, inWindow);
     }
     const pct = worst >= 3 ? 1 : worst >= 2 ? 0.5 : 0;
@@ -131,6 +139,6 @@ export function computeBonuses(input: {
   });
 
   const total = people.reduce((s, p) => s + p.net, 0);
-  const voidedDays = days.filter((d) => d.status === "REJECTED").map((d) => ({ date: d.date, roster: d.roster, reason: d.reason }));
+  const voidedDays = days.filter((d) => d.status === "REJECTED").map((d) => ({ date: d.date, reportTs: d.reportTs, roster: d.roster, reason: d.reason }));
   return { period, days, people, penalties, teamZeroed, flags, total, voidedDays, pendingDays };
 }

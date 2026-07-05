@@ -37,8 +37,13 @@ export async function computeBonusReport(
   const aliases = mergeAliases(SEED_ALIASES, await readAliases());
   const messages = (await readChannelMessages("field-qa", period)).filter((m) => !m.deleted);
   const reports = parseMonth(messages, aliases);
-  const parsedByDate = new Map(reports.map((r) => [r.flightDate, r]));
+  // Keyed by report ts — the money math (arrival time, deploy window) belongs
+  // to the specific Звіт a verdict day was resolved from, not just its date
+  // (a multi-report day has one Звіт per trip, each with its own start time).
+  const parsedByReportTs = new Map(reports.map((r) => [r.reportTs, r]));
 
+  // Losses loop unchanged — one loss record per report/date; two same-date
+  // crashes on different reports still dedup to one loss date downstream.
   const losses: LossRecord[] = [];
   for (const r of reports) {
     if (!r.crashText) continue;
@@ -48,23 +53,28 @@ export async function computeBonusReport(
   log(`field-bonus: ${losses.filter((l) => !l.found).length} unrecovered loss(es)`);
 
   const corrections = await readRosterCorrections();
-  const days: QualifiedDay[] = verdicts.days.map((d) => ({
-    date: d.date,
-    status: d.status,
-    roster: d.roster,
-    unknownInitials: d.unknownInitials,
-    deployMin: d.deployMin ?? parsedByDate.get(d.date)?.deployMin ?? null,
-    videoMin: roundVideoMin(d.videoMinutes),
-    start: parsedByDate.get(d.date)?.start ?? null,
-    reasons: d.reasons,
-    // Flight evidence = airborne minutes, an unquantified Звіт, or a known
-    // deploy window (0-airborne + deploy window = contradictory data, still
-    // money at stake for review).
-    flew:
-      d.airborneMinutes > 0 ||
-      !d.airborneReported ||
-      (d.deployMin ?? parsedByDate.get(d.date)?.deployMin ?? null) != null,
-  }));
+  const days: QualifiedDay[] = verdicts.days.map((d) => {
+    const parsed = d.reportTs ? parsedByReportTs.get(d.reportTs) : undefined;
+    return {
+      date: d.date,
+      reportTs: d.reportTs,
+      reportCount: d.reportCount,
+      status: d.status,
+      roster: d.roster,
+      unknownInitials: d.unknownInitials,
+      deployMin: d.deployMin ?? parsed?.deployMin ?? null,
+      videoMin: roundVideoMin(d.videoMinutes),
+      start: parsed?.start ?? null,
+      reasons: d.reasons,
+      // Flight evidence = airborne minutes, an unquantified Звіт, or a known
+      // deploy window (0-airborne + deploy window = contradictory data, still
+      // money at stake for review).
+      flew:
+        d.airborneMinutes > 0 ||
+        !d.airborneReported ||
+        (d.deployMin ?? parsed?.deployMin ?? null) != null,
+    };
+  });
   const report = computeBonuses({ period, days, losses, corrections });
   log(`field-bonus: ${report.days.filter((x) => x.counted).length} counted day(s), ${report.pendingDays.length} pending, ${report.voidedDays.length} voided`);
 

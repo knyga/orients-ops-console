@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { computeBonuses, TRIP, EARLY, WEEKEND, type QualifiedDay } from "./fieldBonus";
+import type { VerdictStatus } from "./fieldDayVerdict";
 
 const PERIOD = { start: "2026-06-01", end: "2026-06-30" };
 const qd = (over: Partial<QualifiedDay>): QualifiedDay => ({
-  date: "2026-06-02", status: "ACCEPTED", roster: ["Андріан", "Надія"], unknownInitials: [],
+  date: "2026-06-02", reportTs: null, reportCount: 1, status: "ACCEPTED", roster: ["Андріан", "Надія"], unknownInitials: [],
   deployMin: 270, videoMin: 44.8, start: "13:00", reasons: [], flew: true, ...over,
 });
 
@@ -26,7 +27,7 @@ describe("status-driven pay", () => {
       qd({ date: "2026-06-27", status: "NEEDS_REVIEW", roster: ["Андріан", "Сергій"], reasons: ["no #datasets notice for the day"] }),
     ]});
     expect(r.pendingDays).toEqual([{
-      date: "2026-06-27", roster: ["Андріан", "Сергій"], status: "NEEDS_REVIEW",
+      date: "2026-06-27", reportTs: null, roster: ["Андріан", "Сергій"], status: "NEEDS_REVIEW",
       reasons: ["no #datasets notice for the day"],
       amountAtStake: 2 * (TRIP + WEEKEND), // 06-27 is a Saturday
     }]);
@@ -44,7 +45,7 @@ describe("status-driven pay", () => {
     const r = computeBonuses({ period: PERIOD, losses: [], days: [
       qd({ date: "2026-06-30", status: "REJECTED", reasons: ["deployment 120m is under 3h"], roster: ["Влад", "Любомир"] }),
     ]});
-    expect(r.voidedDays).toEqual([{ date: "2026-06-30", roster: ["Влад", "Любомир"], reason: "deployment 120m is under 3h" }]);
+    expect(r.voidedDays).toEqual([{ date: "2026-06-30", reportTs: null, roster: ["Влад", "Любомир"], reason: "deployment 120m is under 3h" }]);
   });
 
   it("early bonus still keys off the Звіт start time", () => {
@@ -57,7 +58,7 @@ describe("status-driven pay", () => {
 describe("computeBonuses loss/penalty/team-zero (adapted to QualifiedDay)", () => {
   const period = { start: "2026-05-01", end: "2026-05-31" };
   const qday = (over: Partial<QualifiedDay>): QualifiedDay => ({
-    date: "2026-05-01", status: "ACCEPTED", roster: ["Андріан"], unknownInitials: [],
+    date: "2026-05-01", reportTs: null, reportCount: 1, status: "ACCEPTED", roster: ["Андріан"], unknownInitials: [],
     deployMin: 180, videoMin: 9, start: "14:00", reasons: [], flew: true, ...over,
   });
 
@@ -101,7 +102,7 @@ describe("computeBonuses with roster corrections", () => {
   const period = { start: "2026-06-01", end: "2026-06-30" };
   // One qualifying day (ACCEPTED verdict): both crew get a trip.
   const days: QualifiedDay[] = [
-    { date: "2026-06-10", status: "ACCEPTED", roster: ["Андріан", "Любомир"], unknownInitials: [], deployMin: 240, videoMin: 30, start: "08:00", reasons: [], flew: true },
+    { date: "2026-06-10", reportTs: null, reportCount: 1, status: "ACCEPTED", roster: ["Андріан", "Любомир"], unknownInitials: [], deployMin: 240, videoMin: 30, start: "08:00", reasons: [], flew: true },
   ];
 
   it("uses a corrected crew", () => {
@@ -117,5 +118,31 @@ describe("computeBonuses with roster corrections", () => {
   it("works unchanged when no corrections are passed", () => {
     const r = computeBonuses({ period, days, losses: [] });
     expect(r.people.map((p) => p.name).sort()).toEqual(["Андріан", "Любомир"]);
+  });
+});
+
+describe("computeBonuses pays per accepted report (multi-report day)", () => {
+  const period = { start: "2026-07-01", end: "2026-07-31" };
+  const day = (reportTs: string, status: VerdictStatus, roster: string[], deployMin: number): QualifiedDay =>
+    ({ date: "2026-07-01", reportTs, reportCount: 2, status, roster, unknownInitials: [], deployMin, videoMin: 142, start: "12:30", reasons: [], flew: true });
+
+  it("pays a person once per ACCEPTED report — twice on a two-report day", () => {
+    const r = computeBonuses({
+      period,
+      days: [day("1.0", "ACCEPTED", ["Андріан", "Надія"], 220), day("2.0", "ACCEPTED", ["Влад", "Надія"], 110)],
+      losses: [],
+    });
+    expect(r.people.find((p) => p.name === "Надія")?.trips).toBe(2);
+    expect(r.people.find((p) => p.name === "Андріан")?.trips).toBe(1);
+  });
+
+  it("a REJECTED second report voids only itself", () => {
+    const r = computeBonuses({
+      period,
+      days: [day("1.0", "ACCEPTED", ["Андріан", "Надія"], 220), day("2.0", "REJECTED", ["Влад", "Надія"], 110)],
+      losses: [],
+    });
+    expect(r.voidedDays).toEqual([{ date: "2026-07-01", reportTs: "2.0", roster: ["Влад", "Надія"], reason: expect.any(String) }]);
+    expect(r.people.find((p) => p.name === "Надія")?.trips).toBe(1);
   });
 });
