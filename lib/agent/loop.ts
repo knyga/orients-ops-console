@@ -24,7 +24,11 @@ const BUDGET_MS = 50_000;
 // max_tokens headroom; still well under the ~16K non-streaming HTTP-timeout threshold.
 const MAX_TOKENS = 4096;
 
-const SYSTEM = [
+// The model has no clock: without an explicit date it guesses from training data
+// (it once told a user June 2026 was "the future") and mis-builds relative JQL.
+const kyivDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" });
+const systemPrompt = (nowMs: number) => [
+  `Сьогодні ${kyivDay.format(nowMs)} (Europe/Kyiv). Відлічуй «сьогодні», «цього місяця» тощо від цієї дати.`,
   "Ти — асистент інженерної команди Orients у Slack. Ти вмієш шукати і змінювати задачі в Jira через інструменти.",
   "Правило мови: у вільній розмові й відповідях відповідай мовою користувача; підтвердження та echo для записів — українською.",
   "Маршрутизація виконавців у Jira автоматична — просто передай імʼя людини в jira_create.",
@@ -84,7 +88,7 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
       model: MODEL,
       max_tokens: MAX_TOKENS,
       thinking: { type: "adaptive" },
-      system: SYSTEM,
+      system: systemPrompt(started),
       tools: anthropicTools,
       messages,
     });

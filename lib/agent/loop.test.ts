@@ -79,6 +79,14 @@ describe("runAgent", () => {
     expect(res.text).toContain("не встиг");
   });
 
+  it("tells the model today's Kyiv date in the system prompt", async () => {
+    const client = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] }]);
+    // 2026-07-05T23:30Z is already 2026-07-06 in Kyiv (UTC+3) — the date must be Kyiv's, not UTC's.
+    await runAgent("яка дата?", { client, tools: [readTool], now: () => Date.UTC(2026, 6, 5, 23, 30) });
+    const body = client.messages.create.mock.calls[0][0] as { system: string };
+    expect(body.system).toContain("2026-07-06");
+  });
+
   it("seeds prior history before the new user message", async () => {
     const client = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] }]);
     await runAgent("new question", {
