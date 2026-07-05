@@ -80,6 +80,26 @@ describe("computeBackfillPlan", () => {
     expect(plan[0].newText).toBe(formatDayMessage(v1));
   });
 
+  it("carries the entry's OWN (date, reportTs) as the write-back identity, not the matched verdict's", () => {
+    // A multi-report day: the second entry's write-back key must stay scoped to
+    // ITS report, so the CLI never edits/dedups against the wrong published row.
+    const v1 = verdict({ reportTs: "111.1", reportSeq: 1, reportCount: 2 });
+    const v2 = verdict({ reportTs: "222.2", reportSeq: 2, reportCount: 2, status: "NEEDS_REVIEW" });
+    const e2 = entry({ reportTs: "222.2", ts: "2.2" });
+    const plan = computeBackfillPlan(logOf(e2), [v1, v2]);
+    expect(plan[0].reportTs).toBe("222.2");
+    expect(plan[0].reportSeq).toBe(2);
+    expect(plan[0].reportCount).toBe(2);
+  });
+
+  it("a legacy (reportTs null) entry keeps reportTs null even after resolving to the day's single verdict row", () => {
+    const v = verdict({});
+    const plan = computeBackfillPlan(logOf(entry({})), [v]);
+    expect(plan[0].reportTs).toBeNull();
+    expect(plan[0].reportSeq).toBe(1);
+    expect(plan[0].reportCount).toBe(1);
+  });
+
   it("skips a legacy (reportTs null) entry when its day now has multiple reports (ambiguous)", () => {
     const v1 = verdict({ reportTs: "111.1", reportSeq: 1, reportCount: 2 });
     const v2 = verdict({ reportTs: "222.2", reportSeq: 2, reportCount: 2 });

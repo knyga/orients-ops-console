@@ -22,6 +22,13 @@ export type BackfillReason = "needs-update" | "already-current" | "overridden" |
 
 export interface BackfillItem {
   date: string;
+  /** The published entry's report identity — the exact write-back key
+   *  (reportKey(date, reportTs)); null for a legacy pre-per-report entry. */
+  reportTs: string | null;
+  /** The matched verdict row's report position, when one was found (for the
+   *  «виїзд N/M» display label). Absent (1/1) when no verdict matched. */
+  reportSeq: number;
+  reportCount: number;
   channel: string;
   ts: string;
   oldText: string;
@@ -49,7 +56,18 @@ export function computeBackfillPlan(
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((entry) => {
       const overridden = entry.override != null;
-      const base = { date: entry.date, channel: entry.channel, ts: entry.ts, oldText: entry.text, overridden };
+      // The write-back identity is always the ENTRY's own (date, reportTs) — the
+      // exact key it was read from (identical to a legacy bare date when
+      // reportTs is null), never the matched verdict's — so a re-run edits the
+      // same published row it read.
+      const base = {
+        date: entry.date,
+        reportTs: entry.reportTs,
+        channel: entry.channel,
+        ts: entry.ts,
+        oldText: entry.text,
+        overridden,
+      };
       // A legacy (reportTs === null) entry resolves to the day's single row when
       // unambiguous; on a multi-report day it is left unresolved (no-verdict skip).
       const verdict =
@@ -59,15 +77,16 @@ export function computeBackfillPlan(
           : undefined);
 
       if (!verdict) {
-        return { ...base, newText: entry.text, action: "skip" as const, reason: "no-verdict" as const };
+        return { ...base, reportSeq: 1, reportCount: 1, newText: entry.text, action: "skip" as const, reason: "no-verdict" as const };
       }
+      const withReportMeta = { ...base, reportSeq: verdict.reportSeq, reportCount: verdict.reportCount };
       const newText = formatDayMessage(verdict);
       if (overridden) {
-        return { ...base, newText, action: "skip" as const, reason: "overridden" as const };
+        return { ...withReportMeta, newText, action: "skip" as const, reason: "overridden" as const };
       }
       if (entry.text === newText) {
-        return { ...base, newText, action: "skip" as const, reason: "already-current" as const };
+        return { ...withReportMeta, newText, action: "skip" as const, reason: "already-current" as const };
       }
-      return { ...base, newText, action: "update" as const, reason: "needs-update" as const };
+      return { ...withReportMeta, newText, action: "update" as const, reason: "needs-update" as const };
     });
 }

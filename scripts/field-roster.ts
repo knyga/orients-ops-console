@@ -17,8 +17,9 @@ import { classifyRosterCorrection } from "../lib/rosterCorrectionClassify";
 import { approverFor } from "../lib/approvers";
 import { applyRosterDecision } from "../lib/applyRosterCorrection";
 import { readChannelMessages } from "../lib/slackMirror";
-import { readPublished } from "../lib/published";
+import { readPublished, type PublishedEntry } from "../lib/published";
 import { parseMonth } from "../lib/fieldReports";
+import { reportKey } from "../lib/fieldDayVerdict";
 import { readAliases, mergeAliases } from "../lib/rosterAliases";
 import { SEED_ALIASES, resolveInitial } from "../lib/fieldRoster";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
@@ -60,9 +61,27 @@ async function main(): Promise<void> {
   const aliases = mergeAliases(SEED_ALIASES, await readAliases());
   const readWindow = { start: period.start, end: today > period.end ? today : period.end };
 
-  // Parsed baseline crew per flight day, from the #field-qa "Звіт" reports.
+  // Parsed baseline crew per Звіт, from the #field-qa "Звіт" reports. Keyed by
+  // exact reportKey(flightDate, reportTs) so a multi-report day resolves each
+  // published entry against ITS OWN report's crew, not whichever report a
+  // bare-date Map happened to keep last.
   const fieldQaMessages = (await readChannelMessages("field-qa", readWindow)).filter((m) => !m.deleted);
-  const parsedByDate = new Map(parseMonth(fieldQaMessages, aliases).map((r) => [r.flightDate, r.roster]));
+  const parsedReports = parseMonth(fieldQaMessages, aliases);
+  const parsedByKey = new Map(parsedReports.map((r) => [reportKey(r.flightDate, r.reportTs), r.roster]));
+  const parsedCountByDate = new Map<string, number>();
+  for (const r of parsedReports) parsedCountByDate.set(r.flightDate, (parsedCountByDate.get(r.flightDate) ?? 0) + 1);
+
+  /** The baseline crew a published entry's correction replays onto: the exact
+   *  report when known, else (a legacy entry) the day's single parsed report
+   *  when unambiguous — mirrors the backfill/verdict fallback convention. */
+  function baselineRosterFor(entry: PublishedEntry): string[] {
+    const exact = parsedByKey.get(reportKey(entry.date, entry.reportTs));
+    if (exact) return exact;
+    if (entry.reportTs === null && parsedCountByDate.get(entry.date) === 1) {
+      return parsedReports.find((r) => r.flightDate === entry.date)!.roster;
+    }
+    return [];
+  }
 
   let applied = 0;
   for (const entry of entries) {
@@ -88,7 +107,7 @@ async function main(): Promise<void> {
       console.log(`• ${entry.date} ← ${approver.name}: "${r.text.slice(0, 80)}" → ${c.kind}`);
     }
 
-    const outcome = decideRosterCorrection(parsedByDate.get(entry.date) ?? [], classified);
+    const outcome = decideRosterCorrection(baselineRosterFor(entry), classified);
     if (!outcome) continue;
 
     console.log(`  ⇒ ${args.write ? "applying" : "would apply"}: ${entry.date} → crew [${outcome.roster.join(", ")}]` +

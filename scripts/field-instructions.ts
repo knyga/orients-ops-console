@@ -9,12 +9,15 @@
  *
  *  MANUAL (--date D + one of --set-crew/--add-crew/--remove-crew/--airborne/
  *  --accept/--reject): apply one specific correction the approver decided out of
- *  band. Used to clear a day the thread never stated as a clean instruction.
+ *  band. Used to clear a day the thread never stated as a clean instruction. A
+ *  date with more than one published report (a multi-Звіт day) REFUSES with a
+ *  listing of each report's ts + crew unless `--report <ts>` picks one.
  *
  * Usage:
  *   npm run field-instructions -- --start 2026-06-01 --end 2026-06-30          # dry-run sweep
  *   npm run field-instructions -- --start … --end … --write                    # apply sweep
  *   npm run field-instructions -- --date 2026-06-25 --set-crew "Влад,Тарас" --by "Oleksandr K" --write
+ *   npm run field-instructions -- --date 2026-07-01 --report 172... --accept --write  # multi-report day
  * Defaults to the current Kyiv month. Run `npm run slack-sync` first.
  * Classification needs ANTHROPIC_API_KEY. Runs under --conditions=react-server.
  */
@@ -30,6 +33,7 @@ import {
   buildManualInstruction,
   filterEntriesToWindow,
   parseArgs,
+  resolveManualEntry,
   resolvePeriod,
   type Period,
 } from "./fieldInstructionsReport";
@@ -66,8 +70,9 @@ async function main(): Promise<void> {
   // MANUAL mode — a single explicit correction for --date.
   const manual = buildManualInstruction(args);
   if (args.date && manual) {
-    const entry = entries.find((e) => e.date === args.date);
-    if (!entry) { process.stderr.write(`field-instructions: no published verdict for ${args.date}.\n`); return; }
+    const resolved = resolveManualEntry(entries, args.date, args.report);
+    if (resolved.error) { process.stderr.write(`field-instructions: ${resolved.error}\n`); return; }
+    const entry = resolved.entry!;
     process.stdout.write(`• ${args.date} ⇒ ${args.write ? "applying" : "would apply"}: ${renderProposalSummary(args.date, manual.instruction)} (by ${by})\n`);
     if (args.write) {
       const res = await applyInstruction({ entry, period, axis: manual.axis, instruction: manual.instruction, by, evidence: "manual", trigger: "cli" });

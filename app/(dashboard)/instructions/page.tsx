@@ -14,6 +14,7 @@ interface Proposal {
 
 interface CorrectionRow {
   date: string;
+  reportTs?: string;
   axis: string;
   summary: string;
   by: string;
@@ -127,8 +128,11 @@ export default function InstructionsPage() {
                   </thead>
                   <tbody>
                     {report.corrections.map((c, i) => (
-                      <tr key={`${c.date}-${c.axis}-${i}`} className="border-b border-slate-100">
-                        <td className="py-1 pr-4 font-mono">{c.date}</td>
+                      <tr key={`${c.date}-${c.reportTs ?? ""}-${c.axis}-${i}`} className="border-b border-slate-100">
+                        <td className="py-1 pr-4 font-mono">
+                          {c.date}
+                          {c.reportTs && <span className="ml-1 text-xs text-slate-400">#{c.reportTs}</span>}
+                        </td>
                         <td className="py-1 pr-4">{c.axis}</td>
                         <td className="py-1 pr-4">{c.summary}</td>
                         <td className="py-1 pr-4 text-slate-500">{c.by}</td>

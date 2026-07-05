@@ -5,6 +5,8 @@
  * live in ../lib/applyInstruction + the events route.
  */
 import type { InstructionAxis, InstructionClassification } from "../lib/instructionClassifyPrompt";
+import type { PublishedEntry } from "../lib/published";
+import { parseRosterSuffix } from "../lib/verdictPublish";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -28,6 +30,8 @@ export interface ParsedArgs {
   reject?: boolean;
   by?: string;
   reason?: string;
+  /** Disambiguates --date when the day has more than one published report. */
+  report?: string;
 }
 
 const names = (v: string | undefined): string[] | undefined =>
@@ -51,6 +55,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (flag === "--reject") { a.reject = true; }
     else if (flag === "--by") { a.by = value; i += 1; }
     else if (flag === "--reason") { a.reason = value; i += 1; }
+    else if (flag === "--report") { a.report = value; i += 1; }
   }
   return a;
 }
@@ -114,4 +119,41 @@ export function buildManualInstruction(
     return { axis: "day", instruction: { intent: "instruction", axis: "day", decision: "accepted_exception", reason } };
   }
   return null;
+}
+
+export interface ManualEntryResolution {
+  entry?: PublishedEntry;
+  error?: string;
+}
+
+/**
+ * Resolve which published entry a manual `--date` correction targets. A date
+ * with exactly one published report resolves unambiguously (unchanged
+ * single-Звіт behaviour); a date with SEVERAL published reports requires
+ * `--report <ts>` and REFUSES with a clear listing otherwise — applying blind
+ * to "the day" would silently pick one report's thread over the other's.
+ */
+export function resolveManualEntry(
+  entries: PublishedEntry[],
+  date: string,
+  reportTs?: string,
+): ManualEntryResolution {
+  const dateEntries = entries.filter((e) => e.date === date);
+  if (dateEntries.length === 0) return { error: `no published verdict for ${date}.` };
+  if (dateEntries.length === 1) return { entry: dateEntries[0] };
+  if (!reportTs) {
+    const list = dateEntries
+      .map((e) => {
+        const crew = parseRosterSuffix(e.text).join(", ") || "—";
+        const firstLine = e.text.split("\n")[0];
+        return `    --report ${e.reportTs ?? "(null)"}  ${firstLine}  [crew: ${crew}]`;
+      })
+      .join("\n");
+    return {
+      error: `${date} has ${dateEntries.length} published reports — pass --report <ts> to target one:\n${list}`,
+    };
+  }
+  const found = dateEntries.find((e) => e.reportTs === reportTs);
+  if (!found) return { error: `no published report with ts ${reportTs} on ${date}.` };
+  return { entry: found };
 }

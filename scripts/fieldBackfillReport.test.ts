@@ -4,6 +4,9 @@ import type { BackfillItem } from "../lib/backfillPublished";
 
 const item = (over: Partial<BackfillItem>): BackfillItem => ({
   date: "2026-06-08",
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   channel: "field-qa",
   ts: "1.1",
   oldText: "⚠️ 2026-06-08 — needs review: …",
@@ -41,5 +44,11 @@ describe("formatDryRun", () => {
   it("notes when no channel is set", () => {
     const out = formatDryRun([item({})], undefined, { start: "2026-06-01", end: "2026-06-30" });
     expect(out).toContain("no channel");
+  });
+
+  it("labels a multi-report day's update with «виїзд N/M», not the bare date", () => {
+    const plan = [item({ date: "2026-07-01", reportTs: "222.2", reportSeq: 2, reportCount: 2 })];
+    const out = formatDryRun(plan, "field-qa", { start: "2026-07-01", end: "2026-07-01" });
+    expect(out).toContain("2026-07-01 (виїзд 2/2):");
   });
 });

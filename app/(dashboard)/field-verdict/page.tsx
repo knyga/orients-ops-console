@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { DayVerdict, VerdictStatus } from "@/lib/fieldDayVerdict";
+import { reportKey, type DayVerdict, type VerdictStatus } from "@/lib/fieldDayVerdict";
 import { formatDroneLine } from "@/lib/droneReport";
 
 /** The committed verdict artifact shape (reports/field-verdict/<key>.json). */
@@ -169,8 +169,15 @@ export default function FieldVerdictPage() {
                 report.days.map((d) => {
                   const st = STATUS_STYLE[d.status];
                   return (
-                    <tr key={d.date} className="border-b border-slate-100 last:border-0">
-                      <td className="px-3 py-2 tabular-nums text-slate-900">{d.date}</td>
+                    <tr key={reportKey(d.date, d.reportTs)} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-2 tabular-nums text-slate-900">
+                        {d.date}
+                        {d.reportCount > 1 && (
+                          <span className="ml-1 text-xs text-slate-400">
+                            (виїзд {d.reportSeq}/{d.reportCount})
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${st.cls}`}>
                           {st.icon} {st.label}

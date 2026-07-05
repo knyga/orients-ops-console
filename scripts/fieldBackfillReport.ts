@@ -6,6 +6,12 @@
 import type { Period } from "./fieldPublishReport";
 import type { BackfillItem } from "../lib/backfillPublished";
 
+/** "date" for a single-report day, "date (виїзд N/M)" on a multi-report day —
+ *  matches the «виїзд N/M» convention on the published verdict messages. */
+function label(item: BackfillItem): string {
+  return item.reportCount > 1 ? `${item.date} (виїзд ${item.reportSeq}/${item.reportCount})` : item.date;
+}
+
 /** The dry-run text: what would change, what is skipped (and why), nothing sent. */
 export function formatDryRun(
   plan: BackfillItem[],
@@ -28,7 +34,7 @@ export function formatDryRun(
   lines.push("");
 
   for (const u of updates) {
-    lines.push(`  ${u.date}:`);
+    lines.push(`  ${label(u)}:`);
     lines.push(`    old: ${u.oldText}`);
     lines.push(`    new: ${u.newText}`);
   }
@@ -36,7 +42,7 @@ export function formatDryRun(
   if (overridden.length) {
     lines.push("");
     lines.push("  Skipped (overridden — would clobber the struck amendment; handle manually):");
-    for (const o of overridden) lines.push(`    ${o.date}`);
+    for (const o of overridden) lines.push(`    ${label(o)}`);
   }
   if (noVerdict.length) {
     lines.push("");

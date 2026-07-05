@@ -2,6 +2,7 @@
 
 import { usePeriodReport } from "@/lib/usePeriodReport";
 import type { BonusReport } from "@/lib/fieldBonus";
+import { reportKey } from "@/lib/fieldDayVerdict";
 
 export default function FieldBonusPage() {
   const {
@@ -208,8 +209,9 @@ export default function FieldBonusPage() {
               </p>
               <ul className="mt-2 space-y-1 text-sm text-amber-900">
                 {report.voidedDays.map((d) => (
-                  <li key={d.date} className="tabular-nums">
-                    {d.date} — {d.roster.join(", ") || "(no crew parsed)"} — {d.reason}
+                  <li key={reportKey(d.date, d.reportTs)} className="tabular-nums">
+                    {d.date}
+                    {d.reportTs && <span className="text-xs text-amber-600"> #{d.reportTs}</span>} — {d.roster.join(", ") || "(no crew parsed)"} — {d.reason}
                   </li>
                 ))}
               </ul>
@@ -228,8 +230,9 @@ export default function FieldBonusPage() {
               </p>
               <ul className="mt-2 space-y-1 text-sm text-sky-900">
                 {report.pendingDays.map((d) => (
-                  <li key={d.date} className="tabular-nums">
-                    {d.date} — {d.roster.join(", ") || "(no crew parsed)"} — ₴{d.amountAtStake.toLocaleString("uk-UA")} at stake
+                  <li key={reportKey(d.date, d.reportTs)} className="tabular-nums">
+                    {d.date}
+                    {d.reportTs && <span className="text-xs text-sky-600"> #{d.reportTs}</span>} — {d.roster.join(", ") || "(no crew parsed)"} — ₴{d.amountAtStake.toLocaleString("uk-UA")} at stake
                     <span className="text-xs text-sky-600"> ({d.reasons.join("; ")})</span>
                   </li>
                 ))}

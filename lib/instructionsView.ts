@@ -9,6 +9,10 @@ import type { RosterCorrection } from "./rosterCorrection";
 
 export interface CorrectionRow {
   date: string;
+  /** The Звіт this correction is scoped to, when the source record carries one
+   *  (roster/resolution axes); absent for a day-wide write (incl. all airborne
+   *  overrides, which are day-shared by design — see lib/airborneOverride.ts). */
+  reportTs?: string;
   axis: "crew" | "eligibility" | "day" | "dataset" | "video" | "airborne";
   summary: string;
   by: string;
@@ -32,6 +36,7 @@ export function mergeCorrections(
     const hasCrew = Array.isArray(r.roster) && r.roster.length > 0;
     rows.push({
       date: r.date,
+      ...(r.reportTs ? { reportTs: r.reportTs } : {}),
       axis: hasCrew ? "crew" : "eligibility",
       summary: hasCrew ? `склад: ${r.roster!.join(", ")}` : `облік: ${JSON.stringify(r.eligibility ?? {})}`,
       by: r.by,
@@ -44,6 +49,7 @@ export function mergeCorrections(
     if (!inWindow(r.date, start, end)) continue;
     rows.push({
       date: r.date,
+      ...(r.reportTs ? { reportTs: r.reportTs } : {}),
       axis: r.axis,
       summary: `${r.decision}${r.note ? `: ${r.note}` : ""}`,
       by: r.by ?? "",
