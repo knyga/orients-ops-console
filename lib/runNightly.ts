@@ -1,7 +1,8 @@
 /**
  * Shared orchestration for the autonomous nightly field pipeline. SERVER-ONLY.
  * Runs sync → (per window month: extract → verdict) → (per window month:
- * publish), called by BOTH /api/cron/field-nightly (publish:true) and the
+ * publish → refresh stale published messages), called by BOTH
+ * /api/cron/field-nightly (publish:true) and the
  * `field-nightly` CLI (dry-run default). Sequential + in-process: any stage
  * failure short-circuits BEFORE publishing, so the bot never posts on stale or
  * partial data. On failure (or an "extracted days but the verdict pass produced
@@ -17,6 +18,7 @@ import { crewFromLiveSheet } from "./crewLive";
 import { applyCrewCorrections } from "./crewImport";
 import { computeVerdicts } from "./computeVerdicts";
 import { publishSettledDays } from "./publishVerdicts";
+import { refreshPublishedDays } from "./refreshPublished";
 import { periodKey, readReportJson } from "./reports";
 import type { VerdictReport } from "../scripts/fieldVerdictReport";
 import { TRACKED_CHANNELS } from "./slackChannels";
@@ -32,6 +34,8 @@ export interface NightlyMonthResult {
   extractedDays: number;
   posted: string[];
   skipped: string[];
+  /** Published entries (verdictKeys) whose message was re-rendered and edited (dry-run: would be). */
+  refreshed: string[];
 }
 
 export interface NightlySummary {
@@ -135,10 +139,13 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
     for (const c of computed) {
       let posted: string[] = [];
       let skipped: string[] = [];
+      let refreshed: string[] = [];
       if (opts.publish) {
         ({ posted, skipped } = await publishSettledDays(c.report.days, channel, c.period, { onLog: log }));
+        ({ refreshed } = await refreshPublishedDays(c.report.days, c.period, { onLog: log }));
       } else {
         log(`field-nightly (dry-run): would publish settled days for ${c.period.start}..${c.period.end}`);
+        ({ refreshed } = await refreshPublishedDays(c.report.days, c.period, { dryRun: true, onLog: log }));
       }
       // Anomaly worth alerting on: extraction found flight days for this month but
       // the verdict pass produced NO days at all — a silent integration break
@@ -157,6 +164,7 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
         extractedDays: c.extractedDays,
         posted,
         skipped,
+        refreshed,
       });
     }
 

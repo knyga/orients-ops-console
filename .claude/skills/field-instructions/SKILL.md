@@ -52,3 +52,9 @@ seed the baseline from the **current effective crew** (published suffix), so
   day window (`filterEntriesToWindow`) so a single-day run doesn't touch the month.
 - The bonus gate (3h deploy + video) is separate: adding crew to a 0-video day
   fixes attribution/display but earns no bonus for that day.
+- A dataset **waive**, **video** exception, or **airborne** override changes the
+  verdict but the published message is only re-rendered by the NIGHTLY refresh
+  stage (`lib/refreshPublished.ts`) — expect the Slack edit by the next morning.
+  Day rejections / dataset declines strike immediately. For a prior-month day
+  outside the nightly window, re-run `field-verdict -- --write` then
+  `npm run field-backfill`.

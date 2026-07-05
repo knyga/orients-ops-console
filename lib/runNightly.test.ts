@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { syncAllChannels, extractFieldQa, computeVerdicts, publishSettledDays, openDm, postMessage, readReportJson } =
+const { syncAllChannels, extractFieldQa, computeVerdicts, publishSettledDays, refreshPublishedDays, openDm, postMessage, readReportJson } =
   vi.hoisted(() => ({
     syncAllChannels: vi.fn(),
     extractFieldQa: vi.fn(),
     computeVerdicts: vi.fn(),
     publishSettledDays: vi.fn(),
+    refreshPublishedDays: vi.fn(),
     openDm: vi.fn(),
     postMessage: vi.fn(),
     readReportJson: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock("./syncChannels", () => ({ syncAllChannels, todayInFieldTz: () => "2026-
 vi.mock("./fieldQaExtract", () => ({ extractFieldQa }));
 vi.mock("./computeVerdicts", () => ({ computeVerdicts }));
 vi.mock("./publishVerdicts", () => ({ publishSettledDays }));
+vi.mock("./refreshPublished", () => ({ refreshPublishedDays }));
 vi.mock("./slack", () => ({ openDm, postMessage }));
 vi.mock("./reports", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
@@ -24,13 +26,14 @@ vi.mock("./reports", async (orig) => {
 import { runNightly } from "./runNightly";
 
 beforeEach(() => {
-  for (const m of [syncAllChannels, extractFieldQa, computeVerdicts, publishSettledDays, openDm, postMessage, readReportJson])
+  for (const m of [syncAllChannels, extractFieldQa, computeVerdicts, publishSettledDays, refreshPublishedDays, openDm, postMessage, readReportJson])
     m.mockReset();
   readReportJson.mockResolvedValue(null); // default: no committed report → extract
   syncAllChannels.mockResolvedValue({ summaries: [], failures: 0 });
   extractFieldQa.mockResolvedValue({ days: [{ date: "2026-07-14" }], report: {} });
   computeVerdicts.mockResolvedValue({ days: [{ date: "2026-07-14", status: "ACCEPTED" }], summary: {} });
   publishSettledDays.mockResolvedValue({ posted: ["2026-07-14"], skipped: [] });
+  refreshPublishedDays.mockResolvedValue({ refreshed: [], skipped: [] });
   openDm.mockResolvedValue("D0OPERATOR");
   postMessage.mockResolvedValue("1.1");
 });
@@ -88,5 +91,22 @@ describe("runNightly", () => {
     expect(res.months).toHaveLength(1);
     expect(openDm).toHaveBeenCalledOnce();
     expect(postMessage).toHaveBeenCalledOnce();
+  });
+
+  it("publish: refreshes published entries after publishing and surfaces the keys", async () => {
+    refreshPublishedDays.mockResolvedValue({ refreshed: ["2026-07-10"], skipped: [] });
+    const res = await runNightly({ publish: true, today: "2026-07-15" });
+    expect(refreshPublishedDays).toHaveBeenCalledOnce();
+    const [days, period, opts] = refreshPublishedDays.mock.calls[0];
+    expect(days).toBe((await computeVerdicts.mock.results[0].value).days); // the fresh verdict report's days
+    expect(period).toMatchObject({ start: "2026-07-01" });
+    expect(opts?.dryRun).toBeFalsy();
+    expect(res.months[0].refreshed).toEqual(["2026-07-10"]);
+  });
+
+  it("dry-run: plans the refresh without editing (dryRun: true)", async () => {
+    await runNightly({ publish: false, today: "2026-07-15" });
+    expect(refreshPublishedDays).toHaveBeenCalledOnce();
+    expect(refreshPublishedDays.mock.calls[0][2]).toMatchObject({ dryRun: true });
   });
 });
