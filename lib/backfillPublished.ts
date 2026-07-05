@@ -36,6 +36,8 @@ export interface BackfillItem {
   action: "update" | "skip";
   reason: BackfillReason;
   overridden: boolean;
+  /** The matched verdict's status; null when no verdict matched (reason "no-verdict"). */
+  status: DayVerdict["status"] | null;
 }
 
 /** One item per published entry, sorted by date. Pure. */
@@ -77,9 +79,9 @@ export function computeBackfillPlan(
           : undefined);
 
       if (!verdict) {
-        return { ...base, reportSeq: 1, reportCount: 1, newText: entry.text, action: "skip" as const, reason: "no-verdict" as const };
+        return { ...base, reportSeq: 1, reportCount: 1, newText: entry.text, action: "skip" as const, reason: "no-verdict" as const, status: null };
       }
-      const withReportMeta = { ...base, reportSeq: verdict.reportSeq, reportCount: verdict.reportCount };
+      const withReportMeta = { ...base, reportSeq: verdict.reportSeq, reportCount: verdict.reportCount, status: verdict.status };
       const newText = formatDayMessage(verdict);
       if (overridden) {
         return { ...withReportMeta, newText, action: "skip" as const, reason: "overridden" as const };

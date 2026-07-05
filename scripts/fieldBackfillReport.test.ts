@@ -14,6 +14,7 @@ const item = (over: Partial<BackfillItem>): BackfillItem => ({
   action: "update",
   reason: "needs-update",
   overridden: false,
+  status: "NEEDS_REVIEW",
   ...over,
 });
 

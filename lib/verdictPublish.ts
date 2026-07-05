@@ -83,15 +83,19 @@ export function parseRosterSuffix(text: string): string[] {
     .filter(Boolean);
 }
 
+/** Statuses the bot will post/keep posted (settled + actionable) — shared by the publish and refresh drivers. */
+export function isPublishableStatus(status: DayVerdict["status"]): boolean {
+  return (
+    status === "ACCEPTED" ||
+    status === "NEEDS_REVIEW" ||
+    status === "ACCEPTED_EXCEPTION" ||
+    status === "REJECTED"
+  );
+}
+
 /** Days the bot will publish a verdict for (settled + actionable). */
 export function publishableDays(days: DayVerdict[]): DayVerdict[] {
-  return days.filter(
-    (d) =>
-      d.status === "ACCEPTED" ||
-      d.status === "NEEDS_REVIEW" ||
-      d.status === "ACCEPTED_EXCEPTION" ||
-      d.status === "REJECTED",
-  );
+  return days.filter((d) => isPublishableStatus(d.status));
 }
 
 export interface OverrideMessages {
