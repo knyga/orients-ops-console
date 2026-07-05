@@ -40,3 +40,61 @@ describe("applyProposal", () => {
     await expect(applyProposal("nope" as never, {})).rejects.toThrow(/Unknown proposal kind/);
   });
 });
+
+describe("applyProposal jira_move_to_sprint", () => {
+  it("moves the issue straight into a resolved sprint id", async () => {
+    const f = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    const out = await applyProposal("jira_move_to_sprint", {
+      key: "ATP-1714",
+      boardId: 1,
+      sprintId: 1223,
+      sprintName: "ATP 41",
+    });
+    expect(out).toContain("ATP-1714");
+    expect(out).toContain("ATP 41");
+    expect(String(f.mock.calls[0][0])).toContain("/rest/agile/1.0/sprint/1223/issue");
+  });
+
+  it("re-resolves by name at apply time when sprintId is null (sprint created meanwhile)", async () => {
+    const f = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/board/1/sprint"))
+        return new Response(JSON.stringify({ isLast: true, values: [{ id: 77, name: "ATP 41", state: "future" }] }));
+      return new Response(null, { status: 204 });
+    });
+    const out = await applyProposal("jira_move_to_sprint", {
+      key: "ATP-1714",
+      boardId: 1,
+      sprintId: null,
+      sprintName: "ATP 41",
+    });
+    expect(out).toContain("ATP 41");
+    const urls = f.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("/rest/agile/1.0/sprint/77/issue"))).toBe(true);
+    // no create happened
+    expect(urls.some((u) => /\/rest\/agile\/1\.0\/sprint(\?|$)/.test(u))).toBe(false);
+  });
+
+  it("creates the sprint first when it still does not exist, then moves the issue", async () => {
+    const f = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/board/1/sprint"))
+        return new Response(JSON.stringify({ isLast: true, values: [] }));
+      if (url.endsWith("/rest/agile/1.0/sprint") && init?.method === "POST")
+        return new Response(JSON.stringify({ id: 88, name: "ATP 41", state: "future" }), { status: 201 });
+      return new Response(null, { status: 204 });
+    });
+    const out = await applyProposal("jira_move_to_sprint", {
+      key: "ATP-1714",
+      boardId: 1,
+      sprintId: null,
+      sprintName: "ATP 41",
+    });
+    expect(out).toContain("ATP 41");
+    expect(out).toContain("створено");
+    const createCall = f.mock.calls.find((c) => String(c[0]).endsWith("/rest/agile/1.0/sprint"));
+    expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({ name: "ATP 41", originBoardId: 1 });
+    const urls = f.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("/rest/agile/1.0/sprint/88/issue"))).toBe(true);
+  });
+});

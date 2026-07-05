@@ -7,9 +7,22 @@
  *
  * SERVER-ONLY reachable (lib/jira reads JIRA_* env).
  */
-import { createIssue, addComment, transitionIssue, updateIssue } from "@/lib/jira";
+import {
+  createIssue,
+  addComment,
+  transitionIssue,
+  updateIssue,
+  listSprints,
+  createSprint,
+  moveIssueToSprint,
+} from "@/lib/jira";
 
-export type ProposalKind = "jira_create" | "jira_comment" | "jira_transition" | "jira_update";
+export type ProposalKind =
+  | "jira_create"
+  | "jira_comment"
+  | "jira_transition"
+  | "jira_update"
+  | "jira_move_to_sprint";
 
 function str(params: Record<string, unknown>, key: string): string {
   const v = params[key];
@@ -39,6 +52,29 @@ export async function applyProposal(kind: ProposalKind, params: Record<string, u
       const fields = (params.fields ?? {}) as Record<string, unknown>;
       await updateIssue(str(params, "key"), fields);
       return `✅ ${str(params, "key")} оновлено`;
+    }
+    case "jira_move_to_sprint": {
+      const key = str(params, "key");
+      const sprintName = str(params, "sprintName");
+      const boardId = typeof params.boardId === "number" ? params.boardId : Number(params.boardId);
+      let sprintId = typeof params.sprintId === "number" ? params.sprintId : null;
+      let created = false;
+      // A propose-time "create it" plan re-checks at apply time: the sprint may
+      // have appeared between the proposal and the confirmation.
+      if (sprintId === null) {
+        const future = await listSprints(boardId, "future");
+        const existing = future.find((s) => s.name.trim().toLowerCase() === sprintName.trim().toLowerCase());
+        if (existing) {
+          sprintId = existing.id;
+        } else {
+          sprintId = (await createSprint(boardId, sprintName)).id;
+          created = true;
+        }
+      }
+      await moveIssueToSprint(sprintId, key);
+      return created
+        ? `✅ ${key} додано до спринту «${sprintName}» (спринт створено)`
+        : `✅ ${key} додано до спринту «${sprintName}»`;
     }
     default:
       throw new Error(`Unknown proposal kind: ${kind}`);

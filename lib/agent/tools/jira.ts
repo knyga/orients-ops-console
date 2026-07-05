@@ -6,9 +6,10 @@
  *
  * Reachable only under server-only conditions (lib/jira.ts). Needs JIRA_* env.
  */
-import { searchIssues } from "@/lib/jira";
+import { searchIssues, listSprints, boardIdFromEnv } from "@/lib/jira";
 import { routeIssue, routingConfigFromEnv, describeAssignee } from "@/lib/jiraRouting";
 import { personByQuery } from "@/lib/people";
+import { planNextSprint } from "@/lib/sprintPlan";
 import { applyProposal } from "@/lib/proposalExecutor";
 import type { Proposal, Tool } from "./types";
 
@@ -82,6 +83,35 @@ async function jiraTransitionProposal(args: Record<string, unknown>): Promise<Pr
     params,
     echoUk: `📝 Переведу ${key} (transition ${transitionId}).\nПродовжити? (так/ні)`,
     apply: () => applyProposal("jira_transition", params),
+  };
+}
+
+/** Resolve "next sprint" against the live board: active sprint's number + 1,
+ *  reusing an existing future sprint or planning a create. The read happens at
+ *  propose time so the echo names the real sprint; the executor re-resolves a
+ *  planned create at apply time (the sprint may appear between the two). */
+export async function jiraNextSprintProposal(args: Record<string, unknown>): Promise<Proposal> {
+  const key = str(args, "key");
+  const boardId = boardIdFromEnv();
+
+  const active = await listSprints(boardId, "active");
+  if (!active.length) throw new Error(`Board ${boardId} has no active sprint — cannot determine the next one.`);
+  const future = await listSprints(boardId, "future");
+
+  const plan = planNextSprint(active[0].name, future);
+  if (!plan) {
+    throw new Error(`Active sprint "${active[0].name}" has no number to increment — name the target sprint explicitly.`);
+  }
+
+  const params = { key, boardId, sprintId: plan.sprintId, sprintName: plan.sprintName };
+  const sprintNote = plan.create
+    ? `«${plan.sprintName}» — спринт ще не існує, створю його`
+    : `«${plan.sprintName}»`;
+  return {
+    kind: "jira_move_to_sprint",
+    params,
+    echoUk: `📝 Додам ${key} до наступного спринту ${sprintNote} (активний — «${active[0].name}»).\nПродовжити? (так/ні)`,
+    apply: () => applyProposal("jira_move_to_sprint", params),
   };
 }
 
@@ -164,8 +194,23 @@ export const jiraTools: Tool[] = [
     propose: jiraTransitionProposal,
   },
   {
+    name: "jira_add_to_next_sprint",
+    description:
+      "Move a Jira issue into the NEXT sprint (the active sprint's number + 1, e.g. ATP 40 → ATP 41). Resolves the sprint on the board automatically and creates it first if it does not exist yet. Use this for requests like 'додай в наступний спринт' — do NOT use jira_update for sprint changes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Issue key to move, e.g. ATP-1714." },
+      },
+      required: ["key"],
+    },
+    kind: "write",
+    propose: jiraNextSprintProposal,
+  },
+  {
     name: "jira_update",
-    description: "Update fields on a Jira issue.",
+    description:
+      "Update fields on a Jira issue. NOT for sprint moves — the Sprint field cannot be set here; use jira_add_to_next_sprint instead.",
     inputSchema: {
       type: "object",
       properties: {

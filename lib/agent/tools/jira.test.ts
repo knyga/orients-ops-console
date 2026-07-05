@@ -1,14 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-const { searchIssues, createIssue, addComment, updateIssue, transitionIssue } = vi.hoisted(() => ({
-  searchIssues: vi.fn(),
-  createIssue: vi.fn(),
-  addComment: vi.fn(),
-  updateIssue: vi.fn(),
-  transitionIssue: vi.fn(),
-}));
+const { searchIssues, createIssue, addComment, updateIssue, transitionIssue, listSprints, createSprint, moveIssueToSprint } =
+  vi.hoisted(() => ({
+    searchIssues: vi.fn(),
+    createIssue: vi.fn(),
+    addComment: vi.fn(),
+    updateIssue: vi.fn(),
+    transitionIssue: vi.fn(),
+    listSprints: vi.fn(),
+    createSprint: vi.fn(),
+    moveIssueToSprint: vi.fn(),
+  }));
 
-vi.mock("@/lib/jira", () => ({ searchIssues, createIssue, addComment, updateIssue, transitionIssue }));
+vi.mock("@/lib/jira", () => ({
+  searchIssues,
+  createIssue,
+  addComment,
+  updateIssue,
+  transitionIssue,
+  listSprints,
+  createSprint,
+  moveIssueToSprint,
+  boardIdFromEnv: () => Number(process.env.JIRA_BOARD_ID ?? "1"),
+}));
 // lib/jiraRouting and lib/people are NOT mocked — they use real routing + registry to test integration
 
 import { jiraTools, jiraCreateProposal } from "./jira";
@@ -103,11 +117,51 @@ describe("jiraCreateProposal (Mr-Lab routing)", () => {
 });
 
 describe("jira write tools", () => {
-  it("registers create/comment/transition/update as write tools with propose()", () => {
-    for (const name of ["jira_create", "jira_comment", "jira_transition", "jira_update"]) {
+  it("registers create/comment/transition/update/next-sprint as write tools with propose()", () => {
+    for (const name of ["jira_create", "jira_comment", "jira_transition", "jira_update", "jira_add_to_next_sprint"]) {
       const t = findTool(jiraTools, name)!;
       expect(t.kind).toBe("write");
       expect(typeof t.propose).toBe("function");
     }
+  });
+});
+
+describe("jira_add_to_next_sprint tool", () => {
+  const propose = (args: Record<string, unknown>) => findTool(jiraTools, "jira_add_to_next_sprint")!.propose!(args);
+
+  it("resolves active+1 to an existing future sprint", async () => {
+    listSprints.mockImplementation(async (_board: number, state: string) =>
+      state === "active"
+        ? [{ id: 1190, name: "ATP 40", state: "active" }]
+        : [{ id: 1223, name: "ATP 41", state: "future" }],
+    );
+    const p = await propose({ key: "ATP-1714" });
+    expect(p.kind).toBe("jira_move_to_sprint");
+    expect(p.params).toEqual({ key: "ATP-1714", boardId: 1, sprintId: 1223, sprintName: "ATP 41" });
+    expect(p.echoUk).toContain("ATP-1714");
+    expect(p.echoUk).toContain("ATP 41");
+    expect(p.echoUk).not.toContain("створю");
+  });
+
+  it("plans a create when the next sprint does not exist yet, and says so in the echo", async () => {
+    listSprints.mockImplementation(async (_board: number, state: string) =>
+      state === "active" ? [{ id: 1190, name: "ATP 40", state: "active" }] : [],
+    );
+    const p = await propose({ key: "ATP-1714" });
+    expect(p.params).toEqual({ key: "ATP-1714", boardId: 1, sprintId: null, sprintName: "ATP 41" });
+    expect(p.echoUk).toContain("створю");
+    expect(p.echoUk).toContain("ATP 41");
+  });
+
+  it("throws when the board has no active sprint", async () => {
+    listSprints.mockResolvedValue([]);
+    await expect(propose({ key: "ATP-1714" })).rejects.toThrow(/active/i);
+  });
+
+  it("throws when the active sprint name has no number to increment", async () => {
+    listSprints.mockImplementation(async (_board: number, state: string) =>
+      state === "active" ? [{ id: 5, name: "Kanban", state: "active" }] : [],
+    );
+    await expect(propose({ key: "ATP-1714" })).rejects.toThrow(/Kanban/);
   });
 });

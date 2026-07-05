@@ -248,6 +248,61 @@ export async function transitionIssue(key: string, transitionId: string): Promis
   });
 }
 
+/** The scrum board sprints live on. Board 1 is the team's ATP board — hardcoded
+ *  like DEFAULT_PROJECT (a board id is config, not a secret); JIRA_BOARD_ID
+ *  can override it. */
+export function boardIdFromEnv(): number {
+  return Number(process.env.JIRA_BOARD_ID ?? "1");
+}
+
+export interface Sprint {
+  id: number;
+  name: string;
+  state: string;
+}
+
+export async function listSprints(
+  boardId: number,
+  state: "active" | "future" | "closed",
+): Promise<Sprint[]> {
+  const cfg = config();
+  const sprints: Sprint[] = [];
+  let startAt = 0;
+  let isLast = false;
+  while (!isLast) {
+    const params = new URLSearchParams({ state, startAt: String(startAt), maxResults: "50" });
+    const res = await fetch(`${cfg.baseUrl}/rest/agile/1.0/board/${boardId}/sprint?${params}`, {
+      headers: { Accept: API_VERSION, Authorization: authHeader(cfg) },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new JiraError(
+        `Jira API returned ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 300)}` : ""}`,
+        res.status,
+      );
+    }
+    const page = (await res.json()) as { isLast?: boolean; values?: Sprint[] };
+    const values = page.values ?? [];
+    for (const s of values) sprints.push({ id: s.id, name: s.name, state: s.state });
+    isLast = page.isLast !== false;
+    startAt += values.length;
+  }
+  return sprints;
+}
+
+export async function createSprint(boardId: number, name: string): Promise<Sprint> {
+  const out = (await jiraWrite("/rest/agile/1.0/sprint", "POST", {
+    name,
+    originBoardId: boardId,
+  })) as Sprint;
+  return { id: out.id, name: out.name, state: out.state };
+}
+
+export async function moveIssueToSprint(sprintId: number, key: string): Promise<void> {
+  await jiraWrite(`/rest/agile/1.0/sprint/${sprintId}/issue`, "POST", { issues: [key] });
+}
+
 export interface SearchRow {
   key: string;
   summary: string;
