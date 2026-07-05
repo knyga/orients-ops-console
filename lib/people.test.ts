@@ -10,8 +10,9 @@ import {
 
 const FIX: Person[] = [
   { name: "Oleksandr K", role: "CEO/CTO", slackId: "U1", jiraAccount: "acc-o", githubLogin: "oknyga", rosterInitial: "О" },
-  { name: "Bohdan Forostianyi", role: "Head of Engineering", slackId: "U2", githubLogin: "bohdanf" },
-  { name: "Bohdana Petrenko", role: "developer", slackId: "U3" },
+  { name: "Bohdan Forostianyi", role: "Head of Engineering", slackId: "U2", githubLogin: "bohdanf", aliases: ["Богдан Форостяний"] },
+  { name: "Bohdana Petrenko", role: "developer", slackId: "U3", aliases: ["Богдана Петренко"] },
+  { name: "Taras Panasyuk", role: "field operator", slackId: "U4", aliases: ["Тарас Панасюк"] },
 ];
 
 describe("personByQuery", () => {
@@ -31,6 +32,16 @@ describe("personByQuery", () => {
   });
   it("returns unknown when nothing matches", () => {
     expect(personByQuery("zzz", FIX)).toEqual({ unknown: "zzz" });
+  });
+  it("matches an exact Cyrillic alias case-insensitively", () => {
+    expect(personByQuery("тарас панасюк", FIX)).toEqual({ person: FIX[3] });
+  });
+  it("matches a unique substring of an alias", () => {
+    expect(personByQuery("Тарас", FIX)).toEqual({ person: FIX[3] });
+  });
+  it("returns ambiguous when an alias substring hits more than one", () => {
+    const r = personByQuery("Богдан", FIX);
+    expect(r).toEqual({ ambiguous: [FIX[1], FIX[2]] });
   });
 });
 

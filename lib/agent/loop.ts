@@ -101,8 +101,26 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
     const write = uses.find((u) => findTool(tools, u.name)?.kind === "write");
     if (write) {
       const tool = findTool(tools, write.name)!;
-      const proposal = await tool.propose!(write.input);
-      return { kind: "proposal", text: proposal.echoUk, proposal };
+      try {
+        const proposal = await tool.propose!(write.input);
+        return { kind: "proposal", text: proposal.echoUk, proposal };
+      } catch (err) {
+        // A propose failure (e.g. an unresolvable person) must not kill the
+        // turn: feed it back as a tool_result so the model can recover or ask
+        // the user, like the read-tool error path below. Every tool_use in the
+        // response needs a result, so the skipped ones get a stub.
+        const message = err instanceof Error ? err.message : String(err);
+        messages.push({ role: "assistant", content: resp.content });
+        messages.push({
+          role: "user",
+          content: uses.map((u) =>
+            u.id === write.id
+              ? { type: "tool_result", tool_use_id: u.id, content: `Error: ${message}`, is_error: true }
+              : { type: "tool_result", tool_use_id: u.id, content: "Skipped: another tool call in this turn failed." },
+          ),
+        });
+        continue;
+      }
     }
     // Otherwise execute all read tool_uses and feed results back.
     messages.push({ role: "assistant", content: resp.content });

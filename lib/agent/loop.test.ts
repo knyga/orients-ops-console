@@ -58,6 +58,27 @@ describe("runAgent", () => {
     expect(client.messages.create).toHaveBeenCalledTimes(1);
   });
 
+  it("feeds a propose error back to the model instead of throwing", async () => {
+    const failingWrite: Tool = {
+      ...writeTool,
+      propose: async () => {
+        throw new Error("Unknown person: Тарас Панасюк");
+      },
+    };
+    const client = fakeClient([
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "w1", name: "demo_write", input: {} }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "Не знаю такої людини — уточни імʼя." }] },
+    ]);
+    const res = await runAgent("create", { client, tools: [failingWrite] });
+    expect(res.kind).toBe("text");
+    expect(res.text).toContain("уточни");
+    // second call must carry the propose error as a tool_result for w1
+    const secondBody = client.messages.create.mock.calls[1][0] as { messages: { role: string; content: unknown }[] };
+    const asString = JSON.stringify(secondBody.messages);
+    expect(asString).toContain("tool_result");
+    expect(asString).toContain("Unknown person");
+  });
+
   it("stops with an error text after exceeding maxIters", async () => {
     const toolUse = { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t", name: "demo_read", input: {} }] };
     const client = fakeClient([toolUse, toolUse, toolUse]);

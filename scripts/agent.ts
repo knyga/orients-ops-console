@@ -23,7 +23,9 @@ async function main(): Promise<void> {
   const yes = argv.includes("--yes");
   const threadIdx = argv.indexOf("--thread");
   const threadRef = threadIdx >= 0 ? argv[threadIdx + 1] : undefined;
-  const rest = argv.filter((a, i) => a !== "--yes" && a !== "--thread" && i !== threadIdx + 1);
+  const rest = argv.filter(
+    (a, i) => a !== "--yes" && a !== "--thread" && (threadIdx < 0 || i !== threadIdx + 1),
+  );
   const prompt = rest.join(" ").trim();
   if (!prompt || (threadIdx >= 0 && !threadRef)) {
     console.error(
