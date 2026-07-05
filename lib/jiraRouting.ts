@@ -47,6 +47,15 @@ export interface IssueRouting {
   jiraAccountId: string | null;
 }
 
+/** Human label for a routing's assignee — for proposal echoes and dry-run
+ *  plans. Raw accountIds are meaningless to people; those stay in the create
+ *  params only. */
+export function describeAssignee(person: Person, routing: IssueRouting): string {
+  if (!routing.assignInDescription) return person.name;
+  if (routing.jiraAccountId) return `Mr Lab (фактичний виконавець: ${person.name})`;
+  return `(не призначено — ${person.name} вказаний в описі)`;
+}
+
 export function routeIssue(person: Person, cfg: RoutingConfig): IssueRouting {
   const isMrLab = cfg.mrLabPeople.includes(person.name);
   if (isMrLab) {

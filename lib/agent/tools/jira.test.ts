@@ -49,6 +49,14 @@ describe("jiraCreateProposal (Mr-Lab routing)", () => {
     expect(p.echoUk).toContain("Taras Panasyuk");
   });
 
+  it("echoes a human assignee label, never the raw accountId", async () => {
+    const p = await jiraCreateProposal({ person: "Taras", summary: "S", description: "" });
+    expect(p.echoUk).toContain("Mr Lab");
+    expect(p.echoUk).not.toContain("mrlab-acc-1");
+    // the raw id still goes to Jira in params
+    expect(p.params.assigneeAccountId).toBe("mrlab-acc-1");
+  });
+
   it("apply() POSTs and returns the created key + url", async () => {
     createIssue.mockResolvedValue({ key: "ATP-3", url: "https://ex.atlassian.net/browse/ATP-3" });
 

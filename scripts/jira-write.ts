@@ -13,7 +13,7 @@
  * JIRA_* env; JIRA_DEFAULT_PROJECT + JIRA_MRLAB_ACCOUNT_ID override the hardcoded defaults.
  */
 import { personByQuery } from "../lib/people";
-import { routeIssue, routingConfigFromEnv } from "../lib/jiraRouting";
+import { routeIssue, routingConfigFromEnv, describeAssignee } from "../lib/jiraRouting";
 import { createIssue } from "../lib/jira";
 
 function flag(name: string): string | undefined {
@@ -56,7 +56,7 @@ async function main(): Promise<void> {
 
   const plan = {
     project: routing.projectKey,
-    assignee: routing.jiraAccountId ?? `(in description) ${person.name}`,
+    assignee: describeAssignee(person, routing),
     summary,
     description,
   };

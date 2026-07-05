@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeIssue, type RoutingConfig } from "./jiraRouting";
+import { routeIssue, describeAssignee, type RoutingConfig } from "./jiraRouting";
 import type { Person } from "./people";
 
 const CFG: RoutingConfig = {
@@ -29,5 +29,29 @@ describe("routeIssue", () => {
   it("Mr Lab user wins over the person's own accountId (description carries the person)", () => {
     const r = routeIssue(p({ name: "Liubomyr Zaiats", jiraAccountId: "acc-9" }), CFG);
     expect(r).toEqual({ projectKey: "OPS", assignInDescription: true, jiraAccountId: "mrlab-acc-1" });
+  });
+});
+
+describe("describeAssignee (human label, never a raw accountId)", () => {
+  it("labels an Mr-Lab routing as Mr Lab with the real person, no accountId", () => {
+    const person = p({ name: "Taras Panasyuk" });
+    const label = describeAssignee(person, routeIssue(person, CFG));
+    expect(label).toContain("Mr Lab");
+    expect(label).toContain("Taras Panasyuk");
+    expect(label).not.toContain("mrlab-acc-1");
+  });
+
+  it("labels a real assignee by name, not accountId", () => {
+    const person = p({ name: "Denys Borysov", jiraAccountId: "acc-123" });
+    const label = describeAssignee(person, routeIssue(person, CFG));
+    expect(label).toBe("Denys Borysov");
+    expect(label).not.toContain("acc-123");
+  });
+
+  it("labels an unassigned (in-description) routing", () => {
+    const person = p({ name: "Denys Borysov" });
+    const label = describeAssignee(person, routeIssue(person, CFG));
+    expect(label).toContain("не призначено");
+    expect(label).toContain("Denys Borysov");
   });
 });

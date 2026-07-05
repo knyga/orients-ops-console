@@ -7,7 +7,7 @@
  * Reachable only under server-only conditions (lib/jira.ts). Needs JIRA_* env.
  */
 import { searchIssues } from "@/lib/jira";
-import { routeIssue, routingConfigFromEnv } from "@/lib/jiraRouting";
+import { routeIssue, routingConfigFromEnv, describeAssignee } from "@/lib/jiraRouting";
 import { personByQuery } from "@/lib/people";
 import { applyProposal } from "@/lib/proposalExecutor";
 import type { Proposal, Tool } from "./types";
@@ -50,7 +50,7 @@ export async function jiraCreateProposal(args: Record<string, unknown>): Promise
   const person = resolved.person;
   const routing = routeIssue(person, routingConfigFromEnv());
   const description = routing.assignInDescription ? `Виконавець: ${person.name}\n\n${desc}`.trim() : desc;
-  const assignee = routing.jiraAccountId ?? `(в описі) ${person.name}`;
+  const assignee = describeAssignee(person, routing);
 
   const params = { projectKey: routing.projectKey, summary, description, assigneeAccountId: routing.jiraAccountId };
   return {
