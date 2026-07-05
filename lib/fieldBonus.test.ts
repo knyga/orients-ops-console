@@ -145,4 +145,23 @@ describe("computeBonuses pays per accepted report (multi-report day)", () => {
     expect(r.voidedDays).toEqual([{ date: "2026-07-01", reportTs: "2.0", roster: ["Влад", "Надія"], reason: expect.any(String) }]);
     expect(r.people.find((p) => p.name === "Надія")?.trips).toBe(1);
   });
+
+  it("one unrecovered loss on a same-crew two-trips-one-day does NOT double-count as 2 losses in the window", () => {
+    // Same crew flies twice on 2026-07-01 (two ACCEPTED reports); exactly one
+    // drone is lost that day. Losses are per-DATE, so this is 1 loss, not 2 —
+    // worst=1 stays below the >=2 threshold, so no penalty should apply.
+    const r = computeBonuses({
+      period,
+      days: [day("1.0", "ACCEPTED", ["Влад", "Тарас"], 220), day("2.0", "ACCEPTED", ["Влад", "Тарас"], 110)],
+      losses: [{ date: "2026-07-01", found: false, note: "lost in field" }],
+    });
+    expect(r.penalties).toEqual([]);
+    const vlad = r.people.find((p) => p.name === "Влад");
+    const taras = r.people.find((p) => p.name === "Тарас");
+    expect(vlad).toMatchObject({ trips: 2, penaltyPct: 0 });
+    expect(taras).toMatchObject({ trips: 2, penaltyPct: 0 });
+    // No penalty applied: nets are the full, unreduced gross.
+    expect(vlad?.net).toBe(vlad?.gross);
+    expect(taras?.net).toBe(taras?.gross);
+  });
 });

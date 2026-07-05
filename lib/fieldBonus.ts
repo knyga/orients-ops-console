@@ -122,7 +122,9 @@ export function computeBonuses(input: {
     for (let i = 0; i < tripKeys.length; i++) {
       const window = tripKeys.slice(i, i + LOSS_WINDOW);
       // tripKey is `date` or `date#reportTs` — the date is always the first 10 chars.
-      const inWindow = window.filter((k) => lostDates.has(k.slice(0, 10))).length;
+      // Losses are per-DATE, so a two-report day on one lost date must count once,
+      // not once per report — dedupe to distinct lost dates within the window.
+      const inWindow = new Set(window.map((k) => k.slice(0, 10)).filter((d) => lostDates.has(d))).size;
       worst = Math.max(worst, inWindow);
     }
     const pct = worst >= 3 ? 1 : worst >= 2 ? 0.5 : 0;

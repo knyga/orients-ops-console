@@ -18,6 +18,7 @@ import { renderProposalSummary } from "./proposalSummary";
 import { postMessage } from "./slack";
 import { contentRev, instructionAckKey, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
+import { reportKey } from "./fieldDayVerdict";
 import type { PublishedEntry } from "./published";
 import type { InstructionClassification } from "./instructionClassifyPrompt";
 import type { Period } from "./period";
@@ -70,7 +71,7 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
       await postMessage(
         channel.id,
         text,
-        { key: instructionAckKey(entry.date, "cancel", contentRev(text)), feature: "instruction", channel: channel.name, trigger },
+        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "cancel", contentRev(text)), feature: "instruction", channel: channel.name, trigger },
         entry.ts,
       );
     }
@@ -96,7 +97,7 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
       await postMessage(
         channel.id,
         text,
-        { key: instructionAckKey(entry.date, "propose", contentRev(text)), feature: "instruction", channel: channel.name, trigger },
+        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "propose", contentRev(text)), feature: "instruction", channel: channel.name, trigger },
         entry.ts,
       );
     }
