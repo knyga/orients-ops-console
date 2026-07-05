@@ -2,9 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Published verdict Slack messages never go stale — the nightly pipeline re-renders every published day from the fresh verdict report and edits the changed ones.
+> **Amended 2026-07-05:** rebased on the multi-report flight-days migration (per-Звіт
+> verdicts): `PublishedLog` is keyed by `verdictKey` (`reportKey(date, reportTs)`),
+> `computeBackfillPlan` takes a `DayVerdict[]`, and every edit/dedup key is
+> report-exact (mirroring `scripts/field-backfill.ts`).
 
-**Architecture:** A new server-only driver `lib/refreshPublishedDays` reuses the existing pure planner `computeBackfillPlan` (diffs stored text vs fresh `formatDayMessage`, skips overridden/no-verdict/already-current days) and applies the `update` items via `chat.update`, rewriting the stored text after each edit. `lib/runNightly.ts` calls it per window month right after `publishSettledDays`. Spec: `docs/superpowers/specs/2026-07-04-nightly-published-verdict-refresh-design.md`.
+**Goal:** Published verdict Slack messages never go stale — the nightly pipeline re-renders every published report from the fresh verdict report and edits the changed ones.
+
+**Architecture:** A new server-only driver `lib/refreshPublishedDays` reuses the existing pure planner `computeBackfillPlan` (diffs stored text vs fresh `formatDayMessage`, skips overridden/no-verdict/already-current entries) and applies the `update` items via `chat.update`, rewriting the stored text after each edit. `lib/runNightly.ts` calls it per window month right after `publishSettledDays`. Spec: `docs/superpowers/specs/2026-07-04-nightly-published-verdict-refresh-design.md`.
 
 **Tech Stack:** Next.js 16 lib modules (TypeScript strict), Vitest, existing Slack client (`lib/slack.ts` reserve-then-send chokepoint).
 
@@ -12,9 +17,11 @@
 
 - `lib/refreshPublished.ts` MUST import `"server-only"` (it writes to Slack); tests rely on the repo's vitest alias that maps `server-only` to an empty module.
 - Effectful driver only — all pure logic stays in the existing `lib/backfillPublished.ts` / `lib/verdictPublish.ts`; do not duplicate their logic.
-- Idempotency: every Slack edit is keyed `backfillEditKey(date, contentRev(newText))` and the published log is persisted after EACH edit.
-- Never edit an overridden day (approver strike owns the message) and never rewrite a message to a non-publishable (PENDING) render.
-- The dashboard/web surface does not change; `publishSettledDays` and the `field-backfill` CLI do not change.
+- **Per-report keying:** every published-log lookup, write-back, and outbound dedup key is `reportKey(item.date, item.reportTs)` (the verdictKey) — never a bare date, which on a multi-report day would hit the wrong row (mirror the loop in `scripts/field-backfill.ts:100-118`).
+- Idempotency: every Slack edit is keyed `backfillEditKey(reportKey(date, reportTs), contentRev(newText))` and the edited entry is persisted after EACH edit (single-entry `writePublished(period, recordPublished({}, entry))`, the `lib/applyApproval.ts` pattern).
+- Never edit an overridden entry (approver strike owns the message) and never rewrite a message to a non-publishable (PENDING) render.
+- The dashboard/web surface does not change; `publishSettledDays` and the `field-backfill` CLI behavior do not change (`BackfillItem` gains one additive field).
+- SHARED CHECKOUT: stage ONLY your own files via explicit `git add <path>`, NEVER `git add -A`. Peer WIP in tree (`lib/agent/loop.ts`, `lib/agent/loop.test.ts`, `next-env.d.ts`) — leave untouched.
 - Run tests with `npx vitest run <file>`; full suite `npm test`; lint `npm run lint`.
 
 ---
@@ -23,11 +30,14 @@
 
 **Files:**
 - Create: `lib/refreshPublished.ts`
+- Modify: `lib/verdictPublish.ts:86-95` (extract `isPublishableStatus`, reimplement `publishableDays` with it)
+- Modify: `lib/backfillPublished.ts` (add additive `status` field to `BackfillItem`)
+- Modify: `lib/backfillPublished.test.ts` ONLY if an exact-object assertion breaks on the additive field (check with `npx vitest run lib/backfillPublished.test.ts` — expected: still green, the file asserts on projected fields)
 - Test: `lib/refreshPublished.test.ts`
 
 **Interfaces:**
-- Consumes: `computeBackfillPlan(log, verdictByDate)` from `lib/backfillPublished.ts`; `publishableDays`, `formatDayMessage` from `lib/verdictPublish.ts`; `readPublished`/`recordPublished`/`writePublished` from `lib/published.ts`; `updateMessage(channelId, ts, text, {key, feature, channel, trigger})` from `lib/slack.ts`; `backfillEditKey(date, rev)`, `contentRev(text)`, `SendTrigger` from `lib/outboundKeys.ts`; `TRACKED_CHANNELS` from `lib/slackChannels.ts`; `Period` from `scripts/fieldPublishReport.ts`.
-- Produces: `refreshPublishedDays(days: DayVerdict[], period: Period, opts?: {dryRun?: boolean; onLog?: (m: string) => void; trigger?: SendTrigger}): Promise<RefreshResult>` where `RefreshResult = { refreshed: string[]; skipped: { date: string; reason: BackfillReason | "not-publishable" | "untracked-channel" }[] }`. In dry-run, `refreshed` lists the days that WOULD be edited. Task 2 imports `refreshPublishedDays` and `RefreshResult`.
+- Consumes: `computeBackfillPlan(log: PublishedLog, verdicts: DayVerdict[]): BackfillItem[]` from `lib/backfillPublished.ts` (items carry `date`, `reportTs`, `channel`, `ts`, `oldText`, `newText`, `action`, `reason`); `formatDayMessage(day)` from `lib/verdictPublish.ts`; `readPublished(period)`/`recordPublished(log, entry)`/`writePublished(period, log)` from `lib/published.ts` (log keyed by verdictKey); `updateMessage(channelId, ts, text, {key, feature, channel, trigger})` from `lib/slack.ts`; `backfillEditKey(key, rev)`, `contentRev(text)`, `SendTrigger` from `lib/outboundKeys.ts`; `TRACKED_CHANNELS` from `lib/slackChannels.ts`; `reportKey(date, reportTs)`, `DayVerdict` from `lib/fieldDayVerdict.ts`; `Period` from `scripts/fieldPublishReport.ts`.
+- Produces: `isPublishableStatus(status: VerdictStatus): boolean` (exported from `lib/verdictPublish.ts`); `BackfillItem.status: DayVerdict["status"] | null`; `refreshPublishedDays(days: DayVerdict[], period: Period, opts?: {dryRun?: boolean; onLog?: (m: string) => void; trigger?: SendTrigger}): Promise<RefreshResult>` where `RefreshResult = { refreshed: string[]; skipped: { key: string; reason: BackfillReason | "not-publishable" | "untracked-channel" }[] }` — `refreshed`/`skipped[].key` are verdictKeys; in dry-run, `refreshed` lists the entries that WOULD be edited. Task 2 imports `refreshPublishedDays` and `RefreshResult`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -54,9 +64,12 @@ import type { PublishedEntry } from "./published";
 
 const period = { start: "2026-07-01", end: "2026-07-31" };
 
-// Minimal type-valid verdict; status/dataset overridable per test.
+// Minimal type-valid verdict; fields overridable per test.
 const day = (date: string, over: Partial<DayVerdict> = {}): DayVerdict => ({
   date,
+  reportTs: null,
+  reportSeq: 1,
+  reportCount: 1,
   status: "ACCEPTED",
   airborneMinutes: 20,
   videoMinutes: 40,
@@ -72,6 +85,7 @@ const day = (date: string, over: Partial<DayVerdict> = {}): DayVerdict => ({
 
 const entry = (date: string, text: string, over: Partial<PublishedEntry> = {}): PublishedEntry => ({
   date,
+  reportTs: null,
   channel: "field-qa",
   text,
   postedAt: "2026-07-02T04:00:00.000Z",
@@ -86,7 +100,7 @@ beforeEach(() => {
 });
 
 describe("refreshPublishedDays", () => {
-  it("edits a stale published day and rewrites its stored text", async () => {
+  it("edits a stale published entry and rewrites its stored text", async () => {
     const d = day("2026-07-02");
     readPublished.mockResolvedValue({ "2026-07-02": entry("2026-07-02", "старий текст") });
     const res = await refreshPublishedDays([d], period);
@@ -99,7 +113,7 @@ describe("refreshPublishedDays", () => {
     expect(newText).toBe(formatDayMessage(d));
     expect(meta).toMatchObject({ feature: "verdict", channel: "field-qa", trigger: "cron" });
     expect(meta.key).toMatch(/^backfill-edit:2026-07-02:/); // content-rev'd
-    // Stored text rewritten so a re-run is a no-op.
+    // Stored text rewritten (single-entry upsert) so a re-run is a no-op.
     expect(writePublished).toHaveBeenCalledWith(
       period,
       expect.objectContaining({
@@ -108,7 +122,30 @@ describe("refreshPublishedDays", () => {
     );
   });
 
-  it("persists the log after EACH edit (mid-run failure loses nothing)", async () => {
+  it("targets the exact report row on a multi-report day (verdictKey, never bare date)", async () => {
+    const d1 = day("2026-07-02", { reportTs: "111.1", reportSeq: 1, reportCount: 2 });
+    const d2 = day("2026-07-02", { reportTs: "222.2", reportSeq: 2, reportCount: 2 });
+    readPublished.mockResolvedValue({
+      "2026-07-02#111.1": entry("2026-07-02", "старий 1/2", { reportTs: "111.1", ts: "1783.911" }),
+      "2026-07-02#222.2": entry("2026-07-02", formatDayMessage(d2), { reportTs: "222.2", ts: "1783.922" }),
+    });
+    const res = await refreshPublishedDays([d1, d2], period);
+
+    expect(res.refreshed).toEqual(["2026-07-02#111.1"]);
+    expect(updateMessage).toHaveBeenCalledTimes(1);
+    const [, ts, newText, meta] = updateMessage.mock.calls[0];
+    expect(ts).toBe("1783.911"); // report 1's own message
+    expect(newText).toBe(formatDayMessage(d1));
+    expect(meta.key).toMatch(/^backfill-edit:2026-07-02#111\.1:/);
+    expect(writePublished).toHaveBeenCalledWith(
+      period,
+      expect.objectContaining({
+        "2026-07-02#111.1": expect.objectContaining({ text: formatDayMessage(d1) }),
+      }),
+    );
+  });
+
+  it("persists after EACH edit (mid-run failure loses nothing)", async () => {
     readPublished.mockResolvedValue({
       "2026-07-02": entry("2026-07-02", "старий 02"),
       "2026-07-03": entry("2026-07-03", "старий 03"),
@@ -118,7 +155,7 @@ describe("refreshPublishedDays", () => {
     expect(writePublished).toHaveBeenCalledTimes(2);
   });
 
-  it("skips overridden days — the approver strike owns the message", async () => {
+  it("skips overridden entries — the approver strike owns the message", async () => {
     readPublished.mockResolvedValue({
       "2026-07-02": entry("2026-07-02", "~struck~", {
         override: { decision: "rejected", by: "Oleksandr K", ackedAt: "2026-07-03T00:00:00.000Z" },
@@ -127,10 +164,10 @@ describe("refreshPublishedDays", () => {
     const res = await refreshPublishedDays([day("2026-07-02")], period);
     expect(updateMessage).not.toHaveBeenCalled();
     expect(res.refreshed).toEqual([]);
-    expect(res.skipped).toEqual([{ date: "2026-07-02", reason: "overridden" }]);
+    expect(res.skipped).toEqual([{ key: "2026-07-02", reason: "overridden" }]);
   });
 
-  it("skips already-current and no-verdict days", async () => {
+  it("skips already-current and no-verdict entries", async () => {
     const d = day("2026-07-02");
     readPublished.mockResolvedValue({
       "2026-07-02": entry("2026-07-02", formatDayMessage(d)), // current
@@ -140,8 +177,8 @@ describe("refreshPublishedDays", () => {
     expect(updateMessage).not.toHaveBeenCalled();
     expect(res.skipped).toEqual(
       expect.arrayContaining([
-        { date: "2026-07-02", reason: "already-current" },
-        { date: "2026-07-03", reason: "no-verdict" },
+        { key: "2026-07-02", reason: "already-current" },
+        { key: "2026-07-03", reason: "no-verdict" },
       ]),
     );
   });
@@ -153,7 +190,7 @@ describe("refreshPublishedDays", () => {
       period,
     );
     expect(updateMessage).not.toHaveBeenCalled();
-    expect(res.skipped).toEqual([{ date: "2026-07-02", reason: "not-publishable" }]);
+    expect(res.skipped).toEqual([{ key: "2026-07-02", reason: "not-publishable" }]);
   });
 
   it("skips entries whose channel is not tracked", async () => {
@@ -162,10 +199,10 @@ describe("refreshPublishedDays", () => {
     });
     const res = await refreshPublishedDays([day("2026-07-02")], period);
     expect(updateMessage).not.toHaveBeenCalled();
-    expect(res.skipped).toEqual([{ date: "2026-07-02", reason: "untracked-channel" }]);
+    expect(res.skipped).toEqual([{ key: "2026-07-02", reason: "untracked-channel" }]);
   });
 
-  it("dry-run: reports would-edit days but writes nothing", async () => {
+  it("dry-run: reports would-edit entries but writes nothing", async () => {
     readPublished.mockResolvedValue({ "2026-07-02": entry("2026-07-02", "старий текст") });
     const res = await refreshPublishedDays([day("2026-07-02")], period, { dryRun: true });
     expect(res.refreshed).toEqual(["2026-07-02"]);
@@ -182,7 +219,42 @@ Expected: FAIL — `Cannot find module './refreshPublished'` (or equivalent reso
 
 - [ ] **Step 3: Write the implementation**
 
-Create `lib/refreshPublished.ts`:
+3a. In `lib/verdictPublish.ts`, replace the `publishableDays` function (keep its doc comment) with:
+
+```ts
+/** Statuses the bot will post/keep posted (settled + actionable) — shared by the publish and refresh drivers. */
+export function isPublishableStatus(status: DayVerdict["status"]): boolean {
+  return (
+    status === "ACCEPTED" ||
+    status === "NEEDS_REVIEW" ||
+    status === "ACCEPTED_EXCEPTION" ||
+    status === "REJECTED"
+  );
+}
+
+/** Days the bot will publish a verdict for (settled + actionable). */
+export function publishableDays(days: DayVerdict[]): DayVerdict[] {
+  return days.filter((d) => isPublishableStatus(d.status));
+}
+```
+
+3b. In `lib/backfillPublished.ts`, add the matched verdict's status to `BackfillItem` (additive):
+
+- In the interface, after `overridden: boolean;` add:
+
+```ts
+  /** The matched verdict's status; null when no verdict matched (reason "no-verdict"). */
+  status: DayVerdict["status"] | null;
+```
+
+- In the `if (!verdict)` branch's returned object add `status: null,`.
+- In `withReportMeta` add `status: verdict.status`:
+
+```ts
+      const withReportMeta = { ...base, reportSeq: verdict.reportSeq, reportCount: verdict.reportCount, status: verdict.status };
+```
+
+3c. Create `lib/refreshPublished.ts`:
 
 ```ts
 /**
@@ -190,16 +262,18 @@ Create `lib/refreshPublished.ts`:
  * report. SERVER-ONLY (edits Slack + rewrites the published log). Mirrors
  * lib/publishVerdicts.ts in shape: pure planning lives in
  * lib/backfillPublished.computeBackfillPlan (edit only when the stored text
- * differs from the fresh formatDayMessage render; skip overridden days — the
- * approver strike owns the message — plus no-verdict and already-current days);
+ * differs from the fresh formatDayMessage render; skip overridden entries — the
+ * approver strike owns the message — plus no-verdict and already-current ones);
  * this is the effectful driver, called by lib/runNightly per window month.
  *
  * Guards beyond the planner: never rewrite a settled message to a
  * non-publishable (⏳ PENDING) render — grace only shrinks, so it should be
  * unreachable, but the write is outward-facing — and skip entries whose channel
- * is no longer tracked. Idempotent: edits are keyed
- * backfillEditKey(date, contentRev(newText)) and the log is persisted after
- * EACH edit, so a re-run (or a mid-run failure retried next night) is a no-op.
+ * is no longer tracked. Idempotent: every key is the entry's verdictKey
+ * (reportKey(date, reportTs) — report-exact on multi-report days), edits are
+ * keyed backfillEditKey(verdictKey, contentRev(newText)), and each edited entry
+ * is upserted immediately, so a re-run (or a mid-run failure retried next
+ * night) is a no-op.
  */
 import "server-only";
 import { updateMessage } from "./slack";
@@ -207,17 +281,18 @@ import { backfillEditKey, contentRev, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { readPublished, recordPublished, writePublished } from "./published";
 import { computeBackfillPlan, type BackfillReason } from "./backfillPublished";
-import { publishableDays } from "./verdictPublish";
-import type { DayVerdict } from "./fieldDayVerdict";
+import { isPublishableStatus } from "./verdictPublish";
+import { reportKey, type DayVerdict } from "./fieldDayVerdict";
 import type { Period } from "../scripts/fieldPublishReport";
 
 export interface RefreshSkip {
-  date: string;
+  /** The entry's verdictKey (reportKey(date, reportTs)). */
+  key: string;
   reason: BackfillReason | "not-publishable" | "untracked-channel";
 }
 
 export interface RefreshResult {
-  /** Days edited (dry-run: days that WOULD be edited). */
+  /** verdictKeys edited (dry-run: that WOULD be edited). */
   refreshed: string[];
   skipped: RefreshSkip[];
 }
@@ -225,7 +300,7 @@ export interface RefreshResult {
 export interface RefreshOptions {
   dryRun?: boolean;
   onLog?: (message: string) => void;
-  /** Audit-log origin recorded for each edit. Default "cron"; the CLI path passes "cli". */
+  /** Audit-log origin recorded for each edit. Default "cron"; a CLI path passes "cli". */
   trigger?: SendTrigger;
 }
 
@@ -237,58 +312,55 @@ export async function refreshPublishedDays(
   const log = opts.onLog ?? (() => {});
   const trigger = opts.trigger ?? "cron";
 
-  let publishedLog = await readPublished(period);
-  const verdictByDate: Record<string, DayVerdict> = {};
-  for (const d of days) verdictByDate[d.date] = d;
-  const publishable = new Set(publishableDays(days).map((d) => d.date));
-
+  const publishedLog = await readPublished(period);
   const refreshed: string[] = [];
   const skipped: RefreshSkip[] = [];
-  for (const item of computeBackfillPlan(publishedLog, verdictByDate)) {
+  for (const item of computeBackfillPlan(publishedLog, days)) {
+    const key = reportKey(item.date, item.reportTs);
     if (item.action === "skip") {
-      skipped.push({ date: item.date, reason: item.reason });
+      skipped.push({ key, reason: item.reason });
       continue;
     }
-    if (!publishable.has(item.date)) {
-      skipped.push({ date: item.date, reason: "not-publishable" });
+    if (item.status === null || !isPublishableStatus(item.status)) {
+      skipped.push({ key, reason: "not-publishable" });
       continue;
     }
     const channel = TRACKED_CHANNELS.find((c) => c.name === item.channel);
     if (!channel) {
-      skipped.push({ date: item.date, reason: "untracked-channel" });
+      skipped.push({ key, reason: "untracked-channel" });
       continue;
     }
     if (opts.dryRun) {
-      refreshed.push(item.date);
-      log(`field-refresh (dry-run): would update ${item.date} in #${channel.name}`);
+      refreshed.push(key);
+      log(`field-refresh (dry-run): would update ${key} in #${channel.name}`);
       continue;
     }
     await updateMessage(channel.id, item.ts, item.newText, {
-      key: backfillEditKey(item.date, contentRev(item.newText)),
+      key: backfillEditKey(key, contentRev(item.newText)),
       feature: "verdict",
       channel: channel.name,
       trigger,
     });
-    // Rewrite the stored text so a re-run is a no-op; persist after EACH edit
-    // so a mid-run failure loses nothing.
-    publishedLog = recordPublished(publishedLog, { ...publishedLog[item.date], text: item.newText });
-    await writePublished(period, publishedLog);
-    refreshed.push(item.date);
-    log(`field-refresh: updated ${item.date} in #${channel.name} (ts ${item.ts})`);
+    // Rewrite the stored text so a re-run is a no-op; single-entry upsert after
+    // EACH edit so a mid-run failure loses nothing.
+    await writePublished(period, recordPublished({}, { ...publishedLog[key], text: item.newText }));
+    refreshed.push(key);
+    log(`field-refresh: updated ${key} in #${channel.name} (ts ${item.ts})`);
   }
   return { refreshed, skipped };
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run tests to verify they pass**
 
-Run: `npx vitest run lib/refreshPublished.test.ts`
-Expected: PASS (7 tests).
+Run: `npx vitest run lib/refreshPublished.test.ts lib/backfillPublished.test.ts lib/publishVerdicts.test.ts lib/verdictPublish.test.ts`
+Expected: PASS (the three existing files stay green — the `BackfillItem.status` field is additive and `publishableDays` behavior is unchanged). If a `backfillPublished.test.ts` exact-object assertion trips on the new field, extend that fixture's expected object with the correct `status` value (do not weaken the assertion).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lib/refreshPublished.ts lib/refreshPublished.test.ts
+git add lib/refreshPublished.ts lib/refreshPublished.test.ts lib/verdictPublish.ts lib/backfillPublished.ts
+# plus lib/backfillPublished.test.ts ONLY if you had to touch it
 git commit -m "feat(nightly): refreshPublishedDays — re-render published verdicts, edit stale messages
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -305,8 +377,8 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Modify: `.claude/skills/field-instructions/SKILL.md` (Gotchas)
 
 **Interfaces:**
-- Consumes: `refreshPublishedDays(days, period, {dryRun?, onLog?, trigger?}): Promise<RefreshResult>` from Task 1 (`lib/refreshPublished.ts`).
-- Produces: `NightlyMonthResult` gains `refreshed: string[]` (consumed by the `field-nightly` CLI's summary output via `NightlySummary`, no CLI change needed — it prints the JSON summary as-is).
+- Consumes: `refreshPublishedDays(days, period, {dryRun?, onLog?, trigger?}): Promise<RefreshResult>` from Task 1 (`lib/refreshPublished.ts`); `RefreshResult.refreshed: string[]` (verdictKeys).
+- Produces: `NightlyMonthResult` gains `refreshed: string[]` (surfaced through `NightlySummary`; the `field-nightly` CLI prints the summary JSON as-is, no CLI change needed).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -332,21 +404,21 @@ Add after the other `vi.mock` calls:
 vi.mock("./refreshPublished", () => ({ refreshPublishedDays }));
 ```
 
-In `beforeEach`, add `refreshPublishedDays` to the reset loop and default it:
+In `beforeEach`, add `refreshPublishedDays` to the reset loop's array and default it:
 
 ```ts
 refreshPublishedDays.mockResolvedValue({ refreshed: [], skipped: [] });
 ```
 
-Add the two new cases inside `describe("runNightly", …)`:
+Add two new cases inside `describe("runNightly", …)` (fixture note: the `computeVerdicts` mock's `days` array is whatever the existing `beforeEach` sets — assert against that same reference):
 
 ```ts
-  it("publish: refreshes published days after publishing and surfaces the dates", async () => {
+  it("publish: refreshes published entries after publishing and surfaces the keys", async () => {
     refreshPublishedDays.mockResolvedValue({ refreshed: ["2026-07-10"], skipped: [] });
     const res = await runNightly({ publish: true, today: "2026-07-15" });
     expect(refreshPublishedDays).toHaveBeenCalledOnce();
     const [days, period, opts] = refreshPublishedDays.mock.calls[0];
-    expect(days).toEqual([{ date: "2026-07-14", status: "ACCEPTED" }]); // the fresh verdict report
+    expect(days).toBe((await computeVerdicts.mock.results[0].value).days); // the fresh verdict report's days
     expect(period).toMatchObject({ start: "2026-07-01" });
     expect(opts?.dryRun).toBeFalsy();
     expect(res.months[0].refreshed).toEqual(["2026-07-10"]);
@@ -362,7 +434,7 @@ Add the two new cases inside `describe("runNightly", …)`:
 - [ ] **Step 2: Run tests to verify the new ones fail**
 
 Run: `npx vitest run lib/runNightly.test.ts`
-Expected: the two new tests FAIL (`refreshPublishedDays` never called / `refreshed` undefined); the six existing tests still PASS.
+Expected: the two new tests FAIL (`refreshPublishedDays` never called / `refreshed` undefined); all existing tests still PASS.
 
 - [ ] **Step 3: Wire the stage in `lib/runNightly.ts`**
 
@@ -381,12 +453,12 @@ export interface NightlyMonthResult {
   extractedDays: number;
   posted: string[];
   skipped: string[];
-  /** Already-published days whose message was re-rendered and edited (dry-run: would be). */
+  /** Published entries (verdictKeys) whose message was re-rendered and edited (dry-run: would be). */
   refreshed: string[];
 }
 ```
 
-In the stage-3 loop, refresh AFTER publishing (a just-posted day's stored text
+In the stage-3 loop, refresh AFTER publishing (a just-posted entry's stored text
 equals the fresh render, so the refresh sees it `already-current`):
 
 ```ts
@@ -419,14 +491,14 @@ Also extend the module's top doc comment: change `(per window month: publish)` t
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run lib/runNightly.test.ts`
-Expected: PASS (8 tests). Then run the full suite: `npm test` — expected all green; `npm run lint` — 0 errors.
+Expected: PASS (all existing + 2 new). Then the full suite: `npm test` — all green; `npm run lint` — 0 errors.
 
 - [ ] **Step 5: Update docs**
 
-In `CLAUDE.md`, in the `npm run field-nightly` bullet, extend the pipeline description sentence `… → verdict compute → publish settled verdicts to #field-qa, over the catch-up window …` to:
+In `CLAUDE.md`, in the `npm run field-nightly` bullet, extend the pipeline description `… → verdict compute → publish settled verdicts to #field-qa, over the catch-up window …` to:
 
 ```
-… → verdict compute → publish settled verdicts to #field-qa → refresh already-published days whose re-rendered message changed (dataset waives, video exceptions, airborne overrides, late data — edits the Slack message in place via lib/refreshPublished.ts, skipping approver-overridden days), over the catch-up window …
+… → verdict compute → publish settled verdicts to #field-qa → refresh already-published messages whose re-rendered text changed (dataset waives, video exceptions, airborne overrides, late data — edits the Slack message in place via lib/refreshPublished.ts, skipping approver-overridden entries), over the catch-up window …
 ```
 
 In `.claude/skills/field-instructions/SKILL.md`, add to **Gotchas**:
@@ -455,4 +527,4 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 - `npm test` — full suite green.
 - `npm run lint` — 0 errors.
-- End-to-end (read-only): `npm run field-nightly` (dry-run) — the log should list `field-refresh (dry-run): would update …` lines for any currently-stale July days and the summary JSON should carry `refreshed` per month. No Slack writes in dry-run.
+- End-to-end (read-only): `npm run field-nightly` (dry-run) — the log should list `field-refresh (dry-run): would update …` lines for any currently-stale entries and the summary JSON should carry `refreshed` per month. No Slack writes in dry-run.
