@@ -101,12 +101,16 @@ describe("runNightly", () => {
     expect(days).toBe((await computeVerdicts.mock.results[0].value).days); // the fresh verdict report's days
     expect(period).toMatchObject({ start: "2026-07-01" });
     expect(opts?.dryRun).toBeFalsy();
+    expect(opts?.runDate).toBe("2026-07-15");
     expect(res.months[0].refreshed).toEqual(["2026-07-10"]);
+    // Refresh reads the published log AFTER publishing has (idempotently) recorded
+    // today's posts — running it first could refresh against a stale log.
+    expect(publishSettledDays.mock.invocationCallOrder[0]).toBeLessThan(refreshPublishedDays.mock.invocationCallOrder[0]);
   });
 
   it("dry-run: plans the refresh without editing (dryRun: true)", async () => {
     await runNightly({ publish: false, today: "2026-07-15" });
     expect(refreshPublishedDays).toHaveBeenCalledOnce();
-    expect(refreshPublishedDays.mock.calls[0][2]).toMatchObject({ dryRun: true });
+    expect(refreshPublishedDays.mock.calls[0][2]).toMatchObject({ dryRun: true, runDate: "2026-07-15" });
   });
 });

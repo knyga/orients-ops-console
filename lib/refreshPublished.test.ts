@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { updateMessage, readPublished, writePublished } = vi.hoisted(() => ({
+const { updateMessage, readPublished, writePublished, findPublishedByTs } = vi.hoisted(() => ({
   updateMessage: vi.fn(),
   readPublished: vi.fn(),
   writePublished: vi.fn(),
+  findPublishedByTs: vi.fn(),
 }));
 vi.mock("./slack", () => ({ updateMessage }));
 vi.mock("./published", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
-  return { ...actual, readPublished, writePublished }; // keep the real recordPublished
+  return { ...actual, readPublished, writePublished, findPublishedByTs }; // keep the real recordPublished
 });
 
 import { refreshPublishedDays } from "./refreshPublished";
@@ -51,13 +52,21 @@ beforeEach(() => {
   updateMessage.mockReset().mockResolvedValue(undefined);
   readPublished.mockReset().mockResolvedValue({});
   writePublished.mockReset().mockResolvedValue(undefined);
+  // Default: look up the fresh entry by ts from whatever log the test configured
+  // via readPublished — i.e. "nothing changed since planning". Tests exercising
+  // the TOCTOU guard override this per-test.
+  findPublishedByTs.mockReset().mockImplementation(async (ts: string) => {
+    const log = await readPublished(period);
+    const found = Object.values(log as Record<string, PublishedEntry>).find((e) => e.ts === ts);
+    return found ? { period, entry: found } : null;
+  });
 });
 
 describe("refreshPublishedDays", () => {
   it("edits a stale published entry and rewrites its stored text", async () => {
     const d = day("2026-07-02");
     readPublished.mockResolvedValue({ "2026-07-02": entry("2026-07-02", "старий текст") });
-    const res = await refreshPublishedDays([d], period);
+    const res = await refreshPublishedDays([d], period, { runDate: "2026-07-10" });
 
     expect(res.refreshed).toEqual(["2026-07-02"]);
     expect(updateMessage).toHaveBeenCalledTimes(1);
@@ -66,7 +75,7 @@ describe("refreshPublishedDays", () => {
     expect(ts).toBe("1783.02");
     expect(newText).toBe(formatDayMessage(d));
     expect(meta).toMatchObject({ feature: "verdict", channel: "field-qa", trigger: "cron" });
-    expect(meta.key).toMatch(/^backfill-edit:2026-07-02:/); // content-rev'd
+    expect(meta.key).toMatch(/^backfill-edit:2026-07-02:[0-9a-z]+:2026-07-10$/); // content-rev'd + date-salted
     // Stored text rewritten (single-entry upsert) so a re-run is a no-op.
     expect(writePublished).toHaveBeenCalledWith(
       period,
@@ -83,14 +92,14 @@ describe("refreshPublishedDays", () => {
       "2026-07-02#111.1": entry("2026-07-02", "старий 1/2", { reportTs: "111.1", ts: "1783.911" }),
       "2026-07-02#222.2": entry("2026-07-02", formatDayMessage(d2), { reportTs: "222.2", ts: "1783.922" }),
     });
-    const res = await refreshPublishedDays([d1, d2], period);
+    const res = await refreshPublishedDays([d1, d2], period, { runDate: "2026-07-10" });
 
     expect(res.refreshed).toEqual(["2026-07-02#111.1"]);
     expect(updateMessage).toHaveBeenCalledTimes(1);
     const [, ts, newText, meta] = updateMessage.mock.calls[0];
     expect(ts).toBe("1783.911"); // report 1's own message
     expect(newText).toBe(formatDayMessage(d1));
-    expect(meta.key).toMatch(/^backfill-edit:2026-07-02#111\.1:/);
+    expect(meta.key).toMatch(/^backfill-edit:2026-07-02#111\.1:[0-9a-z]+:2026-07-10$/);
     expect(writePublished).toHaveBeenCalledWith(
       period,
       expect.objectContaining({
@@ -154,6 +163,50 @@ describe("refreshPublishedDays", () => {
     const res = await refreshPublishedDays([day("2026-07-02")], period);
     expect(updateMessage).not.toHaveBeenCalled();
     expect(res.skipped).toEqual([{ key: "2026-07-02", reason: "untracked-channel" }]);
+  });
+
+  it("skips (changed-since-plan) when the fresh entry has an override acquired since planning", async () => {
+    const plannedEntry = entry("2026-07-02", "старий текст");
+    readPublished.mockResolvedValue({ "2026-07-02": plannedEntry });
+    findPublishedByTs.mockResolvedValue({
+      period,
+      entry: { ...plannedEntry, override: { decision: "rejected", by: "Oleksandr K", ackedAt: "2026-07-03T00:00:00.000Z" } },
+    });
+
+    const res = await refreshPublishedDays([day("2026-07-02")], period);
+    expect(updateMessage).not.toHaveBeenCalled();
+    expect(writePublished).not.toHaveBeenCalled();
+    expect(res.skipped).toEqual([{ key: "2026-07-02", reason: "changed-since-plan" }]);
+  });
+
+  it("skips (changed-since-plan) when the fresh text differs from what was planned against", async () => {
+    const plannedEntry = entry("2026-07-02", "старий текст");
+    readPublished.mockResolvedValue({ "2026-07-02": plannedEntry });
+    findPublishedByTs.mockResolvedValue({
+      period,
+      entry: { ...plannedEntry, text: "хтось інший вже відредагував" },
+    });
+
+    const res = await refreshPublishedDays([day("2026-07-02")], period);
+    expect(updateMessage).not.toHaveBeenCalled();
+    expect(writePublished).not.toHaveBeenCalled();
+    expect(res.skipped).toEqual([{ key: "2026-07-02", reason: "changed-since-plan" }]);
+  });
+
+  it("salts the edit key with the run date so identical content across nights gets separate edit keys", async () => {
+    const d = day("2026-07-02");
+    readPublished.mockResolvedValue({ "2026-07-02": entry("2026-07-02", "старий текст") });
+
+    await refreshPublishedDays([d], period, { runDate: "2026-07-10" });
+    const key1 = updateMessage.mock.calls[0][3].key;
+
+    updateMessage.mockClear();
+    await refreshPublishedDays([d], period, { runDate: "2026-07-11" });
+    const key2 = updateMessage.mock.calls[0][3].key;
+
+    expect(key1).toMatch(/^backfill-edit:2026-07-02:[0-9a-z]+:2026-07-10$/);
+    expect(key2).toMatch(/^backfill-edit:2026-07-02:[0-9a-z]+:2026-07-11$/);
+    expect(key1).not.toBe(key2); // cross-night flip-flop gets a fresh key, never silently skipped
   });
 
   it("dry-run: reports would-edit entries but writes nothing", async () => {

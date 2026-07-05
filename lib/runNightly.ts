@@ -142,10 +142,10 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
       let refreshed: string[] = [];
       if (opts.publish) {
         ({ posted, skipped } = await publishSettledDays(c.report.days, channel, c.period, { onLog: log }));
-        ({ refreshed } = await refreshPublishedDays(c.report.days, c.period, { onLog: log }));
+        ({ refreshed } = await refreshPublishedDays(c.report.days, c.period, { runDate: today, onLog: log }));
       } else {
         log(`field-nightly (dry-run): would publish settled days for ${c.period.start}..${c.period.end}`);
-        ({ refreshed } = await refreshPublishedDays(c.report.days, c.period, { dryRun: true, onLog: log }));
+        ({ refreshed } = await refreshPublishedDays(c.report.days, c.period, { runDate: today, dryRun: true, onLog: log }));
       }
       // Anomaly worth alerting on: extraction found flight days for this month but
       // the verdict pass produced NO days at all — a silent integration break
