@@ -29,9 +29,23 @@ export async function jiraCreateProposal(args: Record<string, unknown>): Promise
   const desc = optStr(args, "description");
 
   const resolved = personByQuery(personQuery);
-  if ("unknown" in resolved) throw new Error(`Unknown person: ${personQuery}`);
   if ("ambiguous" in resolved) {
     throw new Error(`Ambiguous "${personQuery}": ${resolved.ambiguous.map((p) => p.name).join(", ")}`);
+  }
+  // An unknown person must not block the ticket: propose it unassigned on the
+  // default project, with the requested name kept in the description so a human
+  // can assign it later. (Ambiguity above still stops — picking one of several
+  // matches silently would misroute.)
+  if ("unknown" in resolved) {
+    const cfg = routingConfigFromEnv();
+    const description = `Виконавець: ${personQuery} (не знайдено в реєстрі)\n\n${desc}`.trim();
+    const params = { projectKey: cfg.defaultProject, summary, description, assigneeAccountId: null };
+    return {
+      kind: "jira_create",
+      params,
+      echoUk: `📝 Створю задачу в проєкті ${cfg.defaultProject}, виконавець: (не призначено — «${personQuery}» не знайдено в реєстрі)\nЗаголовок: ${summary}\nОпис: ${description}\nСтворити? (так/ні)`,
+      apply: () => applyProposal("jira_create", params),
+    };
   }
   const person = resolved.person;
   const routing = routeIssue(person, routingConfigFromEnv());
@@ -108,7 +122,7 @@ export const jiraTools: Tool[] = [
   {
     name: "jira_create",
     description:
-      "Create a Jira ticket for a named person. Routing is automatic (Mr-Lab people go to the Mr Lab project). Provide the person's name, a summary, and an optional description.",
+      "Create a Jira ticket for a named person. Routing is automatic (Mr-Lab people go to the Mr Lab project); a person not in the registry still gets a ticket — unassigned, with their name in the description. Provide the person's name, a summary, and an optional description.",
     inputSchema: {
       type: "object",
       properties: {

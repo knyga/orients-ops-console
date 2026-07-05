@@ -73,9 +73,23 @@ describe("jiraCreateProposal (Mr-Lab routing)", () => {
     });
   });
 
-  it("rejects an unknown person", async () => {
-    await expect(jiraCreateProposal({ person: "Nobody McGhost", summary: "S", description: "" })).rejects.toThrow(
-      /Unknown person/,
+  it("proposes an unassigned ticket for an unknown person, name kept in the description", async () => {
+    const p = await jiraCreateProposal({ person: "Nobody McGhost", summary: "S", description: "details" });
+    expect(p.kind).toBe("jira_create");
+    expect(p.params).toEqual({
+      projectKey: "ATP",
+      summary: "S",
+      description: "Виконавець: Nobody McGhost (не знайдено в реєстрі)\n\ndetails",
+      assigneeAccountId: null,
+    });
+    expect(p.echoUk).toContain("не призначено");
+    expect(p.echoUk).toContain("Nobody McGhost");
+  });
+
+  it("still rejects an ambiguous person", async () => {
+    // "Андрій" substring-hits Yefimov / Svidnytskyi / Gresyk via their Cyrillic aliases
+    await expect(jiraCreateProposal({ person: "Андрій", summary: "S", description: "" })).rejects.toThrow(
+      /Ambiguous/,
     );
   });
 });
