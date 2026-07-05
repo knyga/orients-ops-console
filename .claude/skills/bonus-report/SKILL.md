@@ -60,12 +60,16 @@ sums cross-check**, all derivable from the report JSON:
    (date, pay, which bonuses — early/weekend) AND every rejected day they were
    rostered on, with the reason.
 3. **Per-day report** — for each flight day, from `days[]`: status, crew,
-   per-person rate (`700 + 200·early + 300·weekend`), day total paid;
-   rejected days show 0 + reason.
+   per-person rate (`(700 + 200·early + 300·weekend) × splitFactor` — the
+   >2-crew split: with N > 2 bonus-counted people the 2-person pot is divided,
+   `splitFactor = min(2, N) / N`, default 1 when the field is absent on old
+   reports), day total paid; rejected days show 0 + reason.
 4. **Cross-check** — verify with a small script (never hand-sum):
    `sum(people[].net) == sum(day totals) == total`, and per-person
-   trips/early/weekend/net re-derived from `days[]` match `people[]` exactly.
-   State the result explicitly.
+   trips/early/weekend/net re-derived from `days[]` (rate × `splitFactor ?? 1`,
+   iterating `paidRoster ?? roster`) match `people[]` within **±1 ₴ per person**
+   — person gross/net round once at period level, so split-day fractions can
+   differ from per-day rounding by 1 ₴. State the result explicitly.
 
 ## How to read it
 

@@ -40,7 +40,19 @@ export interface QualifiedDay {
   flew: boolean; // pending money is only at stake when the day flew
 }
 export interface PendingDay { date: string; reportTs: string | null; roster: string[]; status: VerdictStatus; reasons: string[]; amountAtStake: number }
-export interface DayBonus { date: string; reportTs: string | null; reportCount: number; roster: string[]; deployMin: number | null; videoMin: number; counted: boolean; early: boolean; weekend: boolean; reason: string; status: VerdictStatus }
+export interface DayBonus {
+  date: string; reportTs: string | null; reportCount: number; roster: string[]; deployMin: number | null; videoMin: number;
+  counted: boolean; early: boolean; weekend: boolean; reason: string; status: VerdictStatus;
+  /**
+   * The rules pot is for a 2-person crew: with >2 bonus-counted people the pot
+   * is split among everyone — each person's day amount is scaled by
+   * min(2, paidN) / paidN. Optional: committed reports predating the split
+   * rule lack it; consumers must default to 1.
+   */
+  splitFactor?: number;
+  /** Bonus-counted crew (roster minus eligibility exclusions). Optional on old committed reports; default to `roster`. */
+  paidRoster?: string[];
+}
 export interface PersonBonus { name: string; trips: number; early: number; weekend: number; gross: number; penaltyPct: number; net: number }
 export interface Penalty { group: string[]; lossesInWindow: number; pct: number; reason: string }
 export interface Flag { kind: "unknown_initial" | "qualifying_unrecorded" | "counted_no_video" | "no_drone_count"; date: string; detail: string }
@@ -77,23 +89,28 @@ export function computeBonuses(input: {
     const weekend = counted && isWeekend(q.date);
     const correction = correctionForReport(corrections, q.date, q.reportTs, q.reportCount);
     const eff = applyRosterCorrection(q.roster, counted, correction);
+    const paidRoster = eff.perPerson.filter((p) => p.counted).map((p) => p.name);
+    const splitFactor = paidRoster.length > 2 ? 2 / paidRoster.length : 1;
     const reason = counted ? "counted" : q.reasons.join("; ") || q.status;
-    days.push({ date: q.date, reportTs: q.reportTs, reportCount: q.reportCount, roster: eff.roster, deployMin: q.deployMin, videoMin: q.videoMin, counted, early, weekend, reason, status: q.status });
+    days.push({ date: q.date, reportTs: q.reportTs, reportCount: q.reportCount, roster: eff.roster, deployMin: q.deployMin, videoMin: q.videoMin, counted, early, weekend, reason, status: q.status, splitFactor, paidRoster });
     if ((q.status === "PENDING" || q.status === "NEEDS_REVIEW") && q.flew) {
       const perPerson = TRIP + (earlyEligible ? EARLY : 0) + (isWeekend(q.date) ? WEEKEND : 0);
-      pendingDays.push({ date: q.date, reportTs: q.reportTs, roster: eff.roster, status: q.status, reasons: q.reasons, amountAtStake: perPerson * eff.roster.length });
+      pendingDays.push({ date: q.date, reportTs: q.reportTs, roster: eff.roster, status: q.status, reasons: q.reasons, amountAtStake: perPerson * Math.min(2, eff.roster.length) });
     }
   }
 
-  // Per-person tallies — honour per-person eligibility overrides.
-  const tally = new Map<string, { trips: number; early: number; weekend: number; dates: string[] }>();
+  // Per-person tallies — honour per-person eligibility overrides. `amount` is
+  // the exact (unrounded) sum of per-day shares; rounding happens once per
+  // person at period level so split fractions don't accumulate drift.
+  const tally = new Map<string, { trips: number; early: number; weekend: number; amount: number; dates: string[] }>();
   for (const d of days) {
     const correction = correctionForReport(corrections, d.date, d.reportTs, d.reportCount ?? 1);
     const eff = applyRosterCorrection(d.roster, d.counted, correction);
+    const share = (TRIP + (d.early ? EARLY : 0) + (d.weekend ? WEEKEND : 0)) * (d.splitFactor ?? 1);
     for (const { name, counted } of eff.perPerson) {
       if (!counted) continue;
-      const t = tally.get(name) ?? { trips: 0, early: 0, weekend: 0, dates: [] };
-      t.trips += 1; if (d.early) t.early += 1; if (d.weekend) t.weekend += 1; t.dates.push(d.date);
+      const t = tally.get(name) ?? { trips: 0, early: 0, weekend: 0, amount: 0, dates: [] };
+      t.trips += 1; if (d.early) t.early += 1; if (d.weekend) t.weekend += 1; t.amount += share; t.dates.push(d.date);
       tally.set(name, t);
     }
   }
@@ -132,11 +149,12 @@ export function computeBonuses(input: {
   }
 
   const people: PersonBonus[] = [...tally.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, t]) => {
-    const gross = TRIP * t.trips + EARLY * t.early + WEEKEND * t.weekend;
+    const gross = Math.round(t.amount);
     // A person's penalty = worst penalty among the groups they flew with.
     let penaltyPct = 0;
     for (const [key, pct] of pctByGroup.entries()) if (key.split("+").includes(name)) penaltyPct = Math.max(penaltyPct, pct);
-    const net = teamZeroed ? 0 : Math.round(gross * (1 - penaltyPct));
+    // Net rounds from the exact amount, not the rounded gross — no double rounding.
+    const net = teamZeroed ? 0 : Math.round(t.amount * (1 - penaltyPct));
     return { name, trips: t.trips, early: t.early, weekend: t.weekend, gross, penaltyPct, net };
   });
 

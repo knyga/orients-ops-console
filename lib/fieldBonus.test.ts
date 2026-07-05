@@ -121,6 +121,66 @@ describe("computeBonuses with roster corrections", () => {
   });
 });
 
+describe(">2-crew split rule (2-person pot divided among everyone)", () => {
+  const period = { start: "2026-07-01", end: "2026-07-31" };
+  const qd3 = (over: Partial<QualifiedDay>): QualifiedDay => ({
+    date: "2026-07-06", reportTs: null, reportCount: 1, status: "ACCEPTED", roster: ["Андріан", "Сергій", "Данило"],
+    unknownInitials: [], deployMin: 240, videoMin: 30, start: "14:00", reasons: [], flew: true, ...over,
+  });
+
+  it("splits a 3-person Saturday pot: each gets round(1000·⅔) = 667", () => {
+    // 2026-07-04 is a Saturday; no start time → no early bonus.
+    const r = computeBonuses({ period, losses: [], days: [qd3({ date: "2026-07-04", status: "ACCEPTED_EXCEPTION", start: null })] });
+    expect(r.people).toHaveLength(3);
+    for (const p of r.people) expect(p).toMatchObject({ trips: 1, weekend: 1, gross: 667, net: 667 });
+    expect(r.days[0].splitFactor).toBeCloseTo(2 / 3, 10);
+    expect(r.days[0].paidRoster).toEqual(["Андріан", "Сергій", "Данило"]);
+  });
+
+  it("splits a 4-person weekday exactly: 350 each", () => {
+    const r = computeBonuses({ period, losses: [], days: [qd3({ roster: ["А", "Б", "В", "Г"] })] });
+    for (const p of r.people) expect(p).toMatchObject({ gross: 350, net: 350 });
+    expect(r.days[0].splitFactor).toBe(0.5);
+  });
+
+  it("rounds once per person-period, not per day (2×466.67 → 933, not 934)", () => {
+    const r = computeBonuses({ period, losses: [], days: [qd3({ date: "2026-07-06" }), qd3({ date: "2026-07-07" })] });
+    for (const p of r.people) expect(p).toMatchObject({ trips: 2, gross: 933, net: 933 });
+  });
+
+  it("keeps 2-person days at full pay with splitFactor 1", () => {
+    const r = computeBonuses({ period, losses: [], days: [qd3({ roster: ["Андріан", "Сергій"] })] });
+    expect(r.people.map((p) => p.gross)).toEqual([TRIP, TRIP]);
+    expect(r.days[0].splitFactor).toBe(1);
+    expect(r.days[0].paidRoster).toEqual(["Андріан", "Сергій"]);
+  });
+
+  it("an eligibility exclusion shrinks the divisor: remaining two get full shares", () => {
+    const r = computeBonuses({ period, losses: [], days: [qd3({})], corrections: [
+      { date: "2026-07-06", eligibility: { Данило: "not_counted" }, note: "n", by: "Oleksandr K", source: "s", recordedAt: "r" },
+    ]});
+    expect(r.people.map((p) => p.name).sort()).toEqual(["Андріан", "Сергій"]);
+    for (const p of r.people) expect(p).toMatchObject({ gross: TRIP, net: TRIP });
+    expect(r.days[0].splitFactor).toBe(1);
+    expect(r.days[0].paidRoster).toEqual(["Андріан", "Сергій"]);
+  });
+
+  it("caps a 3-person pending day's amount at stake at 2 shares", () => {
+    const r = computeBonuses({ period, losses: [], days: [
+      qd3({ date: "2026-07-04", status: "NEEDS_REVIEW", start: null, reasons: ["no #datasets notice for the day"] }),
+    ]});
+    expect(r.pendingDays[0].amountAtStake).toBe(2 * (TRIP + WEEKEND)); // 2000, not 3000
+  });
+
+  it("does not split a date covered by two 2-person reports", () => {
+    const day = (reportTs: string, roster: string[]): QualifiedDay =>
+      ({ date: "2026-07-06", reportTs, reportCount: 2, status: "ACCEPTED", roster, unknownInitials: [], deployMin: 220, videoMin: 30, start: "14:00", reasons: [], flew: true });
+    const r = computeBonuses({ period, losses: [], days: [day("1.0", ["Андріан", "Надія"]), day("2.0", ["Влад", "Надія"])] });
+    expect(r.days.map((d) => d.splitFactor)).toEqual([1, 1]);
+    expect(r.people.find((p) => p.name === "Надія")).toMatchObject({ trips: 2, gross: 2 * TRIP });
+  });
+});
+
 describe("computeBonuses pays per accepted report (multi-report day)", () => {
   const period = { start: "2026-07-01", end: "2026-07-31" };
   const day = (reportTs: string, status: VerdictStatus, roster: string[], deployMin: number): QualifiedDay =>

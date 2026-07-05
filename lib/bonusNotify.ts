@@ -21,9 +21,15 @@ const FINANCE = "Питання щодо виплат — до фінансов�
 
 export function dayPersonBonuses(day: DayBonus): PersonAmount[] {
   if (!day.counted) return [];
-  const early = day.early ? EARLY : 0;
-  const weekend = day.weekend ? WEEKEND : 0;
-  return day.roster.map((name) => ({ name, base: TRIP, early, weekend, total: TRIP + early + weekend }));
+  // splitFactor/paidRoster are absent on reports committed before the >2-crew
+  // split rule — default to full pay for the whole roster.
+  const f = day.splitFactor ?? 1;
+  const early = Math.round((day.early ? EARLY : 0) * f);
+  const weekend = Math.round((day.weekend ? WEEKEND : 0) * f);
+  const total = Math.round((TRIP + (day.early ? EARLY : 0) + (day.weekend ? WEEKEND : 0)) * f);
+  // base absorbs the rounding remainder so the parts always sum to the total.
+  const base = total - early - weekend;
+  return (day.paidRoster ?? day.roster).map((name) => ({ name, base, early, weekend, total }));
 }
 
 export function dayTotal(people: PersonAmount[]): number {

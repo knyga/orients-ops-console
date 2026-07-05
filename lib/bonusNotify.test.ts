@@ -21,6 +21,25 @@ describe("dayPersonBonuses", () => {
   it("returns [] for a non-counted day", () => {
     expect(dayPersonBonuses(counted({ counted: false, reason: "deploy<3h" }))).toEqual([]);
   });
+  it("scales by splitFactor with components summing to the total", () => {
+    // 3-person Saturday: pot 2×(700+300), each round(1000·⅔) = 667.
+    const people = dayPersonBonuses(counted({ roster: ["Андріан", "Сергій", "Данило"], weekend: true, splitFactor: 2 / 3 }));
+    expect(people).toHaveLength(3);
+    for (const p of people) {
+      expect(p.total).toBe(667);
+      expect(p.base + p.early + p.weekend).toBe(p.total);
+      expect(p.weekend).toBe(200); // round(300·⅔)
+    }
+  });
+  it("pays only the paidRoster when eligibility excluded someone", () => {
+    const people = dayPersonBonuses(counted({ roster: ["Андріан", "Сергій", "Данило"], paidRoster: ["Андріан", "Сергій"] }));
+    expect(people.map((p) => p.name)).toEqual(["Андріан", "Сергій"]);
+    expect(people[0].total).toBe(700);
+  });
+  it("defaults to full pay for old committed days without the split fields", () => {
+    const people = dayPersonBonuses(counted({ roster: ["А", "Б", "В"] }));
+    expect(people.map((p) => p.total)).toEqual([700, 700, 700]);
+  });
 });
 
 describe("messages", () => {
