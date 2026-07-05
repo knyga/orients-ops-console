@@ -306,6 +306,38 @@ export async function fetchRawMessages(
   return out;
 }
 
+/** One message of a single thread, as fetchThreadMessages returns it. */
+export interface ThreadMessage {
+  ts: string;
+  user?: string;
+  botId?: string;
+  text: string;
+}
+
+/**
+ * Fetch ONE thread's messages (parent first, then replies, oldest-first) via
+ * conversations.replies. Live — used by the agent's thread-context injection,
+ * which runs on Vercel where the local mirror files don't exist.
+ */
+export async function fetchThreadMessages(
+  channelId: string,
+  threadTs: string,
+): Promise<ThreadMessage[]> {
+  token();
+  const out: ThreadMessage[] = [];
+  let cursor: string | undefined;
+  do {
+    const params = new URLSearchParams({ channel: channelId, ts: threadTs, limit: "200" });
+    if (cursor) params.set("cursor", cursor);
+    const page = await call<RawHistoryResponse>("conversations.replies", params);
+    for (const m of page.messages ?? []) {
+      out.push({ ts: m.ts, user: m.user, botId: m.bot_id, text: m.text ?? "" });
+    }
+    cursor = page.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+  return out;
+}
+
 /** Download a Slack file (e.g. the stats-bot image) as base64. Needs files:read. */
 export async function downloadFileBase64(
   urlPrivate: string,
