@@ -14,6 +14,7 @@ import { insertPending } from "@/lib/agentProposals";
 import { updateMessage } from "@/lib/slack";
 import { agentReplyKey } from "@/lib/outboundKeys";
 import type { ProposalKind } from "@/lib/proposalExecutor";
+import { fetchThreadContext } from "@/lib/agent/threadContext";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +50,22 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const history = await loadTranscript(body.conversationKey);
-    const result = await runSlackTurn(body.question, history);
+    // A mention/thread turn carries threadTs: inject the surrounding thread as
+    // context ("create a ticket from this thread"). Best-effort — a Slack
+    // hiccup must not kill the turn. Memory (appendTurn) keeps the original.
+    let question = body.question;
+    if (body.threadTs) {
+      try {
+        const ctx = await fetchThreadContext(body.channelId, body.threadTs, [
+          body.incomingTs,
+          body.placeholderTs,
+        ]);
+        if (ctx) question = `${ctx}\n\n${body.question}`;
+      } catch (err) {
+        console.error("agent run: thread-context fetch failed:", err);
+      }
+    }
+    const result = await runSlackTurn(question, history);
     if (result.kind === "proposal" && result.proposal) {
       await updateMessage(body.channelId, body.placeholderTs, result.proposal.echoUk, meta);
       await insertPending({

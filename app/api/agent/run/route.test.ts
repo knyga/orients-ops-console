@@ -6,6 +6,7 @@ const h = vi.hoisted(() => ({
   appendTurn: vi.fn(),
   insertPending: vi.fn(),
   updateMessage: vi.fn(),
+  fetchThreadContext: vi.fn(),
 }));
 
 vi.mock("@/lib/agent/slackTurn", () => ({ runSlackTurn: h.runSlackTurn }));
@@ -15,6 +16,7 @@ vi.mock("@/lib/agentThread", () => ({
 }));
 vi.mock("@/lib/agentProposals", () => ({ insertPending: h.insertPending }));
 vi.mock("@/lib/slack", () => ({ updateMessage: h.updateMessage }));
+vi.mock("@/lib/agent/threadContext", () => ({ fetchThreadContext: h.fetchThreadContext }));
 
 import { POST } from "./route";
 
@@ -22,6 +24,7 @@ const SECRET = "s3cret";
 beforeEach(() => {
   Object.values(h).forEach((f) => f.mockReset());
   h.loadTranscript.mockResolvedValue([]);
+  h.fetchThreadContext.mockResolvedValue(null);
   process.env.AGENT_RUN_SECRET = SECRET;
 });
 
@@ -148,5 +151,45 @@ describe("POST /api/agent/run", () => {
       "Не маю відповіді на це.",
       expect.anything(),
     );
+  });
+
+  it("mention with threadTs → prepends the thread transcript to the question", async () => {
+    h.fetchThreadContext.mockResolvedValue("Контекст треду (Slack):\n[Oleksandr K]: bug details");
+    h.runSlackTurn.mockResolvedValue({ kind: "text", text: "answer" });
+    const mentionReq = {
+      surface: "mention",
+      conversationKey: "111.222",
+      channelId: "C-issue-log",
+      userId: "U1",
+      incomingTs: "111.900",
+      placeholderTs: "111.901",
+      threadTs: "111.222",
+      question: "створи тікет з цього треду",
+    };
+    const res = await POST(req(mentionReq));
+    expect(res.status).toBe(200);
+    expect(h.fetchThreadContext).toHaveBeenCalledWith("C-issue-log", "111.222", ["111.900", "111.901"]);
+    expect(h.runSlackTurn).toHaveBeenCalledWith(
+      "Контекст треду (Slack):\n[Oleksandr K]: bug details\n\nствори тікет з цього треду",
+      [],
+    );
+    // memory stores the ORIGINAL question, not the augmented one
+    expect(h.appendTurn).toHaveBeenCalledWith("111.222", "створи тікет з цього треду", "answer");
+  });
+
+  it("DM (no threadTs) → never fetches thread context", async () => {
+    h.runSlackTurn.mockResolvedValue({ kind: "text", text: "answer" });
+    await POST(req(base));
+    expect(h.fetchThreadContext).not.toHaveBeenCalled();
+    expect(h.runSlackTurn).toHaveBeenCalledWith("q", []);
+  });
+
+  it("thread-context fetch failure → turn still runs on the bare question", async () => {
+    h.fetchThreadContext.mockRejectedValue(new Error("slack down"));
+    h.runSlackTurn.mockResolvedValue({ kind: "text", text: "answer" });
+    const res = await POST(req({ ...base, surface: "mention", threadTs: "111.222" }));
+    expect(res.status).toBe(200);
+    expect(h.runSlackTurn).toHaveBeenCalledWith("q", []);
+    expect(h.updateMessage).toHaveBeenCalledWith("C1", "2", "answer", expect.anything());
   });
 });
