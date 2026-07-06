@@ -4,12 +4,13 @@
  *
  *  SWEEP (default): scan each published verdict thread in the window, classify
  *  every approver reply via Claude, and apply the LAST decisive instruction per
- *  day (crew / eligibility / day / dataset / video / airborne). The operator
+ *  day (crew / eligibility / day / dataset / video / airborne / loss). The operator
  *  running --write IS the confirmation, so it applies directly (no two-phase).
  *
  *  MANUAL (--date D + one of --set-crew/--add-crew/--remove-crew/--airborne/
- *  --loss found|lost/--accept/--reject): apply one specific correction the approver decided out of
- *  band. Used to clear a day the thread never stated as a clean instruction. A
+ *  --loss found|lost / --accept / --reject): apply one specific correction the
+ *  approver decided out of band. Used to clear a day the thread never stated as
+ *  a clean instruction. A
  *  date with more than one published report (a multi-Звіт day) REFUSES with a
  *  listing of each report's ts + crew unless `--report <ts>` picks one.
  *

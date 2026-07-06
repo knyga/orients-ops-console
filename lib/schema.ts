@@ -123,7 +123,7 @@ export const proposals = pgTable(
     threadTs: text("thread_ts").notNull(), // verdict thread root
     channel: text("channel").notNull(), // tracked channel NAME
     date: text("date").notNull(), // flight day the proposal targets
-    axis: text("axis").notNull(), // crew|eligibility|day|dataset|video|airborne
+    axis: text("axis").notNull(), // crew|eligibility|day|dataset|video|airborne|loss
     payload: jsonb("payload").notNull(), // the classified change
     summaryUk: text("summary_uk").notNull(), // Ukrainian echo of the change
     proposedBy: text("proposed_by").notNull(), // approver name

@@ -17,7 +17,7 @@ import {
 
 const MODEL = "claude-sonnet-4-6";
 const VALID_INTENT: InstructionIntent[] = ["confirm", "cancel", "instruction", "unclear"];
-const VALID_AXIS: InstructionAxis[] = ["crew", "eligibility", "day", "dataset", "video", "airborne"];
+const VALID_AXIS: InstructionAxis[] = ["crew", "eligibility", "day", "dataset", "video", "airborne", "loss"];
 
 export class InstructionClassifyError extends Error {
   constructor(message: string) {
@@ -72,6 +72,7 @@ export async function classifyInstruction(
   const airborneMinutes = typeof input.airborneMinutes === "number" && Number.isFinite(input.airborneMinutes)
     ? input.airborneMinutes
     : undefined;
+  const lossState = input.lossState === "found" || input.lossState === "lost" ? input.lossState : undefined;
 
   return {
     intent,
@@ -85,6 +86,7 @@ export async function classifyInstruction(
     datasetStatus: input.datasetStatus === "WAIVED" || input.datasetStatus === "DECLINED" ? input.datasetStatus : undefined,
     videoWaive: input.videoWaive === true ? true : undefined,
     airborneMinutes,
+    lossState,
     reason: String(input.reason ?? ""),
   };
 }
