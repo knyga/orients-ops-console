@@ -9,7 +9,7 @@
 import { searchIssues, listSprints, boardIdFromEnv } from "@/lib/jira";
 import { routeIssue, routingConfigFromEnv, describeAssignee } from "@/lib/jiraRouting";
 import { personByQuery } from "@/lib/people";
-import { planNextSprint } from "@/lib/sprintPlan";
+import { planNextSprint, latestNumberedSprint } from "@/lib/sprintPlan";
 import { applyProposal } from "@/lib/proposalExecutor";
 import type { Proposal, Tool } from "./types";
 
@@ -86,31 +86,37 @@ async function jiraTransitionProposal(args: Record<string, unknown>): Promise<Pr
   };
 }
 
-/** Resolve "next sprint" against the live board: active sprint's number + 1,
- *  reusing an existing future sprint or planning a create. The read happens at
- *  propose time so the echo names the real sprint; the executor re-resolves a
- *  planned create at apply time (the sprint may appear between the two). */
+/** Resolve "next sprint" against the live board: anchor sprint's number + 1,
+ *  reusing an existing future sprint or planning a create. The anchor is the
+ *  active sprint, or — between sprints (the old one closed, the new one not
+ *  started) — the highest-numbered closed sprint. The read happens at propose
+ *  time so the echo names the real sprint; the executor re-resolves a planned
+ *  create at apply time (the sprint may appear between the two). */
 export async function jiraNextSprintProposal(args: Record<string, unknown>): Promise<Proposal> {
   const key = str(args, "key");
   const boardId = boardIdFromEnv();
 
   const active = await listSprints(boardId, "active");
-  if (!active.length) throw new Error(`Board ${boardId} has no active sprint — cannot determine the next one.`);
+  const anchor = active.length ? active[0] : latestNumberedSprint(await listSprints(boardId, "closed"));
+  if (!anchor) throw new Error(`Board ${boardId} has no active or closed sprint to determine the next one from.`);
   const future = await listSprints(boardId, "future");
 
-  const plan = planNextSprint(active[0].name, future);
+  const plan = planNextSprint(anchor.name, future);
   if (!plan) {
-    throw new Error(`Active sprint "${active[0].name}" has no number to increment — name the target sprint explicitly.`);
+    throw new Error(`Sprint "${anchor.name}" has no number to increment — name the target sprint explicitly.`);
   }
 
   const params = { key, boardId, sprintId: plan.sprintId, sprintName: plan.sprintName };
   const sprintNote = plan.create
     ? `«${plan.sprintName}» — спринт ще не існує, створю його`
     : `«${plan.sprintName}»`;
+  const anchorNote = active.length
+    ? `активний — «${anchor.name}»`
+    : `активного немає, останній завершений — «${anchor.name}»`;
   return {
     kind: "jira_move_to_sprint",
     params,
-    echoUk: `📝 Додам ${key} до наступного спринту ${sprintNote} (активний — «${active[0].name}»).\nПродовжити? (так/ні)`,
+    echoUk: `📝 Додам ${key} до наступного спринту ${sprintNote} (${anchorNote}).\nПродовжити? (так/ні)`,
     apply: () => applyProposal("jira_move_to_sprint", params),
   };
 }

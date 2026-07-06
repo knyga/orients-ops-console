@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextSprintNumber, planNextSprint } from "./sprintPlan";
+import { nextSprintNumber, planNextSprint, latestNumberedSprint } from "./sprintPlan";
 
 describe("nextSprintNumber", () => {
   it("reads the trailing number of the active sprint name", () => {
@@ -12,6 +12,32 @@ describe("nextSprintNumber", () => {
 
   it("returns null when the name carries no number", () => {
     expect(nextSprintNumber("Backlog grooming")).toBeNull();
+  });
+});
+
+describe("latestNumberedSprint", () => {
+  it("picks the sprint with the highest trailing number (anchor when the board is between sprints)", () => {
+    const closed = [
+      { id: 1124, name: "ATP 38" },
+      { id: 1190, name: "ATP 40" },
+      { id: 1157, name: "ATP 39" },
+    ];
+    expect(latestNumberedSprint(closed)).toEqual({ id: 1190, name: "ATP 40" });
+  });
+
+  it("ignores sprints without a number", () => {
+    expect(latestNumberedSprint([{ id: 1, name: "Kickoff" }, { id: 2, name: "ATP 7" }])).toEqual({
+      id: 2,
+      name: "ATP 7",
+    });
+  });
+
+  it("returns null when no sprint carries a number", () => {
+    expect(latestNumberedSprint([{ id: 1, name: "Kickoff" }])).toBeNull();
+  });
+
+  it("returns null for an empty list", () => {
+    expect(latestNumberedSprint([])).toBeNull();
   });
 });
 

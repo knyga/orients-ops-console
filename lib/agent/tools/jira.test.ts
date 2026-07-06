@@ -153,9 +153,28 @@ describe("jira_add_to_next_sprint tool", () => {
     expect(p.echoUk).toContain("ATP 41");
   });
 
-  it("throws when the board has no active sprint", async () => {
+  it("anchors on the last closed sprint when the board is between sprints (no active)", async () => {
+    listSprints.mockImplementation(async (_board: number, state: string) => {
+      if (state === "active") return [];
+      if (state === "closed")
+        return [
+          { id: 1157, name: "ATP 39", state: "closed" },
+          { id: 1190, name: "ATP 40", state: "closed" },
+        ];
+      return [
+        { id: 1223, name: "ATP 41", state: "future" },
+        { id: 1256, name: "ATP 42", state: "future" },
+      ];
+    });
+    const p = await propose({ key: "ATP-1714" });
+    expect(p.params).toEqual({ key: "ATP-1714", boardId: 1, sprintId: 1223, sprintName: "ATP 41" });
+    expect(p.echoUk).toContain("ATP 41");
+    expect(p.echoUk).toContain("завершений");
+  });
+
+  it("throws when the board has neither an active nor a closed numbered sprint", async () => {
     listSprints.mockResolvedValue([]);
-    await expect(propose({ key: "ATP-1714" })).rejects.toThrow(/active/i);
+    await expect(propose({ key: "ATP-1714" })).rejects.toThrow(/sprint/i);
   });
 
   it("throws when the active sprint name has no number to increment", async () => {

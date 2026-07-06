@@ -30,6 +30,22 @@ export function nextSprintNumber(activeName: string): number | null {
   return m ? Number(m[1]) + 1 : null;
 }
 
+/** The sprint with the highest trailing number — the "next sprint" anchor when
+ *  the board is between sprints (the old one closed, the new one not started),
+ *  so there is no active sprint to increment from. */
+export function latestNumberedSprint(sprints: SprintRef[]): SprintRef | null {
+  let best: SprintRef | null = null;
+  let bestNum = -Infinity;
+  for (const s of sprints) {
+    const m = s.name.match(LAST_NUMBER);
+    if (m && Number(m[1]) > bestNum) {
+      bestNum = Number(m[1]);
+      best = s;
+    }
+  }
+  return best;
+}
+
 export function planNextSprint(activeName: string, future: SprintRef[]): NextSprintPlan | null {
   const next = nextSprintNumber(activeName);
   if (next === null) return null;
