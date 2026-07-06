@@ -52,6 +52,13 @@ export function withDroneRegion(text: string, day: DayVerdict): string {
   return text;
 }
 
+/** Append the drone-loss line to the BODY region (above 👥/🛸, so the region
+ *  splitters and roster/drone edits are untouched). No loss → body unchanged. Pure. */
+export function withLossLine(body: string, day: DayVerdict): string {
+  if (!day.loss?.lost) return body;
+  return `${body}\n${day.loss.found ? "✅ Борт втрачено і знайдено." : "⚠️ Втрата борта (не знайдено)."}`;
+}
+
 /** Peel a trailing "\n🛸 Дрони: …" line off the end. Pure. */
 export function splitDroneLine(text: string): { rest: string; droneLine: string | null } {
   const idx = text.lastIndexOf(`\n${DRONE_MARKER}`);
@@ -209,7 +216,7 @@ export function formatDayMessage(day: DayVerdict): string {
     // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
     body = `${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} ${tail}.`;
   }
-  return withDroneRegion(withRosterSuffix(body, day.roster), day);
+  return withDroneRegion(withRosterSuffix(withLossLine(body, day), day.roster), day);
 }
 
 /**

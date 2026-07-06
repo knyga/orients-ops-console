@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDayMessage, formatOverride, formatTimeTail, formatDuration, publishableDays, ROSTER_MARKER, splitRosterSuffix, withRosterSuffix, parseRosterSuffix, withDroneLine } from "./verdictPublish";
+import { formatDayMessage, formatOverride, formatTimeTail, formatDuration, publishableDays, ROSTER_MARKER, splitRosterSuffix, withRosterSuffix, parseRosterSuffix, withDroneLine, withLossLine } from "./verdictPublish";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
@@ -417,5 +417,41 @@ describe("new curable-gap phrases", () => {
       unknownInitials: [], airborneReported: true,
     };
     expect(formatDayMessage(day)).toContain("відео 1.5 хв — менше 2 хв");
+  });
+});
+
+const lossDay = (loss?: { lost: boolean; found: boolean }): DayVerdict => ({
+  date: "2026-07-04",
+  reportTs: "111.222",
+  reportSeq: 1,
+  reportCount: 1,
+  status: "ACCEPTED",
+  airborneMinutes: 120,
+  videoMinutes: 90,
+  ratio: 0.75,
+  datasetStatus: "POSTED",
+  withinGrace: false,
+  reasons: [],
+  roster: ["Андріан", "Данило"],
+  unknownInitials: [],
+  airborneReported: true,
+  ...(loss ? { loss } : {}),
+});
+
+describe("loss line", () => {
+  it("renders the unrecovered-loss line inside the body (above the crew line)", () => {
+    const text = formatDayMessage(lossDay({ lost: true, found: false }));
+    expect(text).toContain("⚠️ Втрата борта (не знайдено).");
+    expect(text.indexOf("Втрата борта")).toBeLessThan(text.indexOf("👥 У полі:"));
+  });
+  it("renders the recovered line", () => {
+    expect(formatDayMessage(lossDay({ lost: true, found: true }))).toContain("✅ Борт втрачено і знайдено.");
+  });
+  it("is byte-identical to the old render when there is no loss", () => {
+    expect(formatDayMessage(lossDay())).toBe(formatDayMessage(lossDay(undefined)));
+    expect(formatDayMessage(lossDay())).not.toContain("борт");
+  });
+  it("withLossLine is a no-op without a loss", () => {
+    expect(withLossLine("body", lossDay())).toBe("body");
   });
 });

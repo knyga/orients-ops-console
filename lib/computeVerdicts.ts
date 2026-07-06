@@ -25,6 +25,8 @@ import { applyRosterCorrection, correctionForReport } from "./rosterCorrection";
 import { buildReport, mergeFlightDays, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
 import { todayInFieldTz } from "./syncChannels";
 import type { DroneEntry } from "./droneReport";
+import { readLossRecords } from "./lossStore";
+import { lossForVerdict } from "./lossLedger";
 
 export const GRACE_WORKING_DAYS = 3;
 const DATASETS_CHANNEL = "datasets";
@@ -106,6 +108,7 @@ export async function computeVerdicts(
   const fieldQaMessages = (await readChannelMessages("field-qa", period)).filter((m) => !m.deleted);
   const parsedReports = parseMonth(fieldQaMessages, aliases);
   const corrections = await readRosterCorrections();
+  const lossRows = await readLossRecords();
 
   // One row per Звіт (plus a synthetic reportTs-null row for a no-Звіт flight
   // day). Day-shared axes — video, airborne, dataset signal, drone report —
@@ -141,11 +144,13 @@ export async function computeVerdicts(
     // Attach the effective crew (this report's roster + the binding correction).
     const eff = applyRosterCorrection(row.roster, true, correctionForReport(corrections, date, row.reportTs, row.reportCount));
     const drones = fqDay?.droneReport;
+    const loss = lossForVerdict(lossRows, date, row.reportTs);
     return {
       ...resolved,
       roster: eff.roster,
       unknownInitials: row.unknownInitials,
       ...(drones && drones.length ? { droneReport: drones } : {}),
+      ...(loss ? { loss } : {}),
     };
   });
 

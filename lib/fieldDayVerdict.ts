@@ -83,6 +83,8 @@ export interface DayVerdict {
   hasZvit?: boolean;
   /** Per-person / per-category drone counts for the day (display only; not a gate). */
   droneReport?: DroneEntry[];
+  /** Drone-loss state for THIS report (from the loss ledger); absent = no loss. */
+  loss?: { lost: boolean; found: boolean };
 }
 
 export function verdictForDay(input: VerdictInput): DayVerdict {
