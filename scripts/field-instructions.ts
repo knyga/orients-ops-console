@@ -8,7 +8,7 @@
  *  running --write IS the confirmation, so it applies directly (no two-phase).
  *
  *  MANUAL (--date D + one of --set-crew/--add-crew/--remove-crew/--airborne/
- *  --accept/--reject): apply one specific correction the approver decided out of
+ *  --loss found|lost/--accept/--reject): apply one specific correction the approver decided out of
  *  band. Used to clear a day the thread never stated as a clean instruction. A
  *  date with more than one published report (a multi-Звіт day) REFUSES with a
  *  listing of each report's ts + crew unless `--report <ts>` picks one.

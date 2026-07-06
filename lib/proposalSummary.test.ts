@@ -30,4 +30,10 @@ describe("renderProposalSummary", () => {
   it("always names the date", () => {
     expect(renderProposalSummary("2026-06-25", instr({ axis: "crew", add: ["Тарас"] }))).toContain("2026-06-25");
   });
+  it("renders the loss axis", () => {
+    expect(renderProposalSummary("2026-07-04", { intent: "instruction", axis: "loss", lossState: "found", reason: "знайшли" }))
+      .toBe("борт 2026-07-04: знайдено (втрату знято)");
+    expect(renderProposalSummary("2026-07-04", { intent: "instruction", axis: "loss", lossState: "lost", reason: "не знайшли" }))
+      .toBe("борт 2026-07-04: втрачено (не знайдено)");
+  });
 });

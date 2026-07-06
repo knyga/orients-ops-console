@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { postMessage, updateMessage, writePublished, upsertResolution, readResolutions } = vi.hoisted(() => ({
+const { postMessage, updateMessage, writePublished, upsertResolution, readResolutions, upsertLossRecord } = vi.hoisted(() => ({
   postMessage: vi.fn(),
   updateMessage: vi.fn(),
   writePublished: vi.fn(),
   upsertResolution: vi.fn(),
   readResolutions: vi.fn(),
+  upsertLossRecord: vi.fn(),
 }));
 vi.mock("./slack", () => ({ postMessage, updateMessage }));
 vi.mock("./published", async (orig) => {
@@ -16,6 +17,7 @@ vi.mock("./resolutions", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
   return { ...actual, upsertResolution, readResolutions };
 });
+vi.mock("./lossStore", () => ({ upsertLossRecord }));
 
 import { applyInstruction } from "./applyInstruction";
 import type { PublishedEntry } from "./published";
@@ -49,6 +51,7 @@ beforeEach(() => {
   writePublished.mockReset().mockResolvedValue(undefined);
   upsertResolution.mockReset().mockResolvedValue(undefined);
   readResolutions.mockReset().mockResolvedValue([]);
+  upsertLossRecord.mockReset().mockResolvedValue(true);
 });
 
 describe("applyInstruction dataset axis", () => {
@@ -166,5 +169,43 @@ describe("applyInstruction day axis (refactor regression)", () => {
     expect(updateMessage.mock.calls[0][2]).toContain("⛔ Оновлено → відхилено, Oleksandr K: no-go");
     expect(postMessage).toHaveBeenCalledTimes(1); // the generic ⛔ Зафіксовано ack
     expect(writePublished).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("applyInstruction loss axis", () => {
+  it("writes an instruction ledger row for the report and acks in Ukrainian", async () => {
+    const res = await applyInstruction({
+      entry: { ...entry(), date: "2026-07-04", reportTs: "111.222" },
+      period,
+      axis: "loss",
+      instruction: { intent: "instruction", axis: "loss", lossState: "found", reason: "борт знайшли" } as InstructionClassification,
+      by: "Oleksandr K",
+      evidence: "https://slack/permalink",
+    });
+    expect(res.applied).toBe(true);
+    expect(upsertLossRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        date: "2026-07-04",
+        reportTs: "111.222",
+        lost: true,
+        found: true,
+        source: "instruction",
+        updatedBy: "Oleksandr K",
+      }),
+    );
+    const ack = postMessage.mock.calls.at(-1)?.[1] as string;
+    expect(ack).toContain("знайдено");
+  });
+
+  it("with a null reportTs writes a day-wide row (reportTs '')", async () => {
+    await applyInstruction({
+      entry: { ...entry(), date: "2026-07-04", reportTs: null },
+      period,
+      axis: "loss",
+      instruction: { intent: "instruction", axis: "loss", lossState: "lost", reason: "не знайшли" } as InstructionClassification,
+      by: "Oleksandr K",
+      evidence: "",
+    });
+    expect(upsertLossRecord).toHaveBeenCalledWith(expect.objectContaining({ reportTs: "", found: false }));
   });
 });

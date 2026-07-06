@@ -26,6 +26,7 @@ export interface ParsedArgs {
   addCrew?: string[];
   removeCrew?: string[];
   airborne?: number;
+  loss?: "found" | "lost";
   accept?: boolean;
   reject?: boolean;
   by?: string;
@@ -51,6 +52,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (flag === "--add-crew") { a.addCrew = names(value); i += 1; }
     else if (flag === "--remove-crew") { a.removeCrew = names(value); i += 1; }
     else if (flag === "--airborne") { a.airborne = Number(value); i += 1; }
+    else if (flag === "--loss") {
+      if (value !== "found" && value !== "lost") throw new Error(`--loss must be "found" or "lost", got "${value}"`);
+      a.loss = value; i += 1;
+    }
     else if (flag === "--accept") { a.accept = true; }
     else if (flag === "--reject") { a.reject = true; }
     else if (flag === "--by") { a.by = value; i += 1; }
@@ -90,6 +95,7 @@ export interface ManualSpec {
   addCrew?: string[];
   removeCrew?: string[];
   airborne?: number;
+  loss?: "found" | "lost";
   accept?: boolean;
   reject?: boolean;
   reason?: string;
@@ -111,6 +117,9 @@ export function buildManualInstruction(
   }
   if (typeof spec.airborne === "number" && Number.isFinite(spec.airborne)) {
     return { axis: "airborne", instruction: { intent: "instruction", axis: "airborne", airborneMinutes: spec.airborne, reason } };
+  }
+  if (spec.loss) {
+    return { axis: "loss", instruction: { intent: "instruction", axis: "loss", lossState: spec.loss, reason } };
   }
   if (spec.reject) {
     return { axis: "day", instruction: { intent: "instruction", axis: "day", decision: "rejected", reason } };

@@ -5,12 +5,12 @@
  * 3s webhook budget allows exactly one Claude call). Server-only-free so it
  * unit-tests (mirrors lib/rosterCorrectionClassifyPrompt.ts).
  *
- * Axes: crew / eligibility / day (accept-reject) / dataset / video / airborne.
+ * Axes: crew / eligibility / day (accept-reject) / dataset / video / airborne / loss.
  */
 import type Anthropic from "@anthropic-ai/sdk";
 
 export type InstructionIntent = "confirm" | "cancel" | "instruction" | "unclear";
-export type InstructionAxis = "crew" | "eligibility" | "day" | "dataset" | "video" | "airborne";
+export type InstructionAxis = "crew" | "eligibility" | "day" | "dataset" | "video" | "airborne" | "loss";
 
 export interface InstructionClassification {
   intent: InstructionIntent;
@@ -29,6 +29,8 @@ export interface InstructionClassification {
   videoWaive?: boolean;
   // airborne
   airborneMinutes?: number;
+  // loss
+  lossState?: "found" | "lost";
   reason: string;
 }
 
@@ -36,7 +38,7 @@ export const CLASSIFY_INSTRUCTION_TOOL: Anthropic.Tool = {
   name: "classify_instruction",
   description:
     "Classify an authorized approver's reply in a flight-day verdict thread as a single data-overwrite " +
-    "instruction (crew / eligibility / day accept-reject / dataset / video / airborne minutes), or as a " +
+    "instruction (crew / eligibility / day accept-reject / dataset / video / airborne minutes / drone loss), or as a " +
     "confirmation / cancellation of the pending proposal, or unclear.",
   input_schema: {
     type: "object",
@@ -50,7 +52,7 @@ export const CLASSIFY_INSTRUCTION_TOOL: Anthropic.Tool = {
       },
       axis: {
         type: "string",
-        enum: ["crew", "eligibility", "day", "dataset", "video", "airborne"],
+        enum: ["crew", "eligibility", "day", "dataset", "video", "airborne", "loss"],
         description: "instruction only: which datum to overwrite",
       },
       roster: { type: "array", items: { type: "string" }, description: "crew: full authoritative crew (names/initials)" },
@@ -70,6 +72,11 @@ export const CLASSIFY_INSTRUCTION_TOOL: Anthropic.Tool = {
       },
       videoWaive: { type: "boolean", description: "video: true to forgive the < 50% video coverage for the day" },
       airborneMinutes: { type: "number", description: "airborne: the corrected airborne minutes for the day" },
+      lossState: {
+        type: "string",
+        enum: ["found", "lost"],
+        description: "loss: found = the lost drone was recovered (the loss no longer counts); lost = confirm it is permanently lost",
+      },
       reason: { type: "string", description: "Short factual summary of the correction (or why it is a confirm/cancel/unclear)" },
     },
     required: ["intent", "reason"],
@@ -147,6 +154,7 @@ export function buildInstructionPrompt(
     `- dataset: "датасет не потрібен цього дня" → axis="dataset", datasetStatus="WAIVED"; "причина не приймається" → datasetStatus="DECLINED".`,
     `- video: "відео можна не рахувати"/"нормально що менше відео" → axis="video", videoWaive=true.`,
     `- airborne: "в повітрі було 133 хв"/"насправді 90 хвилин у польоті" → axis="airborne", airborneMinutes=133.`,
+    `- loss: "борт знайшли"/"дрон знайдено" → axis="loss", lossState="found"; "борт втрачено остаточно"/"не знайшли, списуємо" → axis="loss", lossState="lost".`,
     `- unclear: a question or comment that does not itself state a change ("тільки ти був?", "де звіт?").`,
     `Return people as written (names or single-initial); the caller resolves initials. Return only the tool call.`,
   );

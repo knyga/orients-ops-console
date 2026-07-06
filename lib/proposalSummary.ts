@@ -31,6 +31,10 @@ export function renderProposalSummary(date: string, c: InstructionClassification
       return `відео ${date}: зарахувати (виняток)`;
     case "airborne":
       return `час у повітрі ${date}: ${(c.airborneMinutes ?? 0).toFixed(0)} хв`;
+    case "loss":
+      return c.lossState === "found"
+        ? `борт ${date}: знайдено (втрату знято)`
+        : `борт ${date}: втрачено (не знайдено)`;
     default:
       return `зміна ${date}`;
   }

@@ -8,8 +8,8 @@
 export type ProposalState = "PROPOSED" | "CONFIRMED" | "CANCELLED" | "SUPERSEDED";
 export type ProposalAction = "confirm" | "cancel" | "supersede";
 
-/** The axis a proposal overwrites (mirrors the resolution/roster/airborne stores). */
-export type ProposalAxis = "crew" | "eligibility" | "day" | "dataset" | "video" | "airborne";
+/** The axis a proposal overwrites (mirrors the resolution/roster/airborne/loss stores). */
+export type ProposalAxis = "crew" | "eligibility" | "day" | "dataset" | "video" | "airborne" | "loss";
 
 const TRANSITIONS: Record<ProposalAction, ProposalState> = {
   confirm: "CONFIRMED",

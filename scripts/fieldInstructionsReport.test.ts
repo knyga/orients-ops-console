@@ -47,6 +47,18 @@ describe("buildManualInstruction", () => {
   });
 });
 
+describe("buildManualInstruction loss axis", () => {
+  it("parses --loss and builds the loss instruction", () => {
+    const a = parseArgs(["--date", "2026-07-04", "--loss", "found"]);
+    expect(a.loss).toBe("found");
+    const built = buildManualInstruction({ loss: "found", reason: "manual" });
+    expect(built).toEqual({ axis: "loss", instruction: { intent: "instruction", axis: "loss", lossState: "found", reason: "manual" } });
+  });
+  it("rejects an invalid --loss value", () => {
+    expect(() => parseArgs(["--loss", "maybe"])).toThrow(/--loss/);
+  });
+});
+
 describe("parseArgs", () => {
   it("parses a manual crew set with comma-split names", () => {
     const a = parseArgs(["--date", "2026-06-25", "--set-crew", "Влад,Тарас", "--by", "Oleksandr K", "--write"]);

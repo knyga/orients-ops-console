@@ -13,6 +13,7 @@
  *                 unless a day/video exception rescues the day
  *  - video      → upsertResolution(video, accepted_exception) + ack
  *  - airborne   → upsertAirborneOverride + ack (body re-renders on next field-verdict)
+ *  - loss       → upsertLossRecord(instruction) + ack (body re-renders on next field-verdict)
  * Idempotent via the primitives' own guards + content-rev outbound keys.
  */
 import "server-only";
@@ -22,6 +23,7 @@ import { TRACKED_CHANNELS } from "./slackChannels";
 import { type PublishedEntry } from "./published";
 import { dayRescuedByException, readResolutions, upsertResolution } from "./resolutions";
 import { upsertAirborneOverride } from "./airborneOverrides";
+import { upsertLossRecord } from "./lossStore";
 import { amendPublishedVerdict, applyApproverDecision } from "./applyApproval";
 import { applyRosterDecision } from "./applyRosterCorrection";
 import { buildRosterOutcome } from "./instructionOutcome";
@@ -111,6 +113,28 @@ export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ ap
   if (axis === "video") {
     await upsertResolution({ date: entry.date, axis: "video", decision: "accepted_exception", note: c.reason, source: evidence || "slack", recordedAt: new Date().toISOString(), by });
     const applied = await ack(entry, `🎥 Зафіксовано: відео зараховано (виняток) — ${by}. Причина: ${c.reason}`, "video", trigger);
+    return { applied };
+  }
+
+  if (axis === "loss") {
+    if (c.lossState !== "found" && c.lossState !== "lost") return { applied: false };
+    await upsertLossRecord({
+      date: entry.date,
+      // A legacy thread (no reportTs) records a day-wide override (reportTs "").
+      reportTs: entry.reportTs ?? "",
+      lost: true,
+      found: c.lossState === "found",
+      note: c.reason,
+      source: "instruction",
+      crashTextHash: null,
+      updatedAt: new Date().toISOString(),
+      updatedBy: by,
+    });
+    const label =
+      c.lossState === "found"
+        ? `🛸 Зафіксовано: борт знайдено — втрату за ${entry.date} знято`
+        : `🛸 Зафіксовано: борт за ${entry.date} втрачено (не знайдено)`;
+    const applied = await ack(entry, `${label} — ${by}. Причина: ${c.reason}`, "loss", trigger);
     return { applied };
   }
 

@@ -62,4 +62,18 @@ describe("instructionClassifyPrompt", () => {
     expect(p).toContain("«відмінити»");
     expect(p).toContain('decision="rejected"');
   });
+
+  it("the tool schema carries the loss axis + lossState", () => {
+    const schema = CLASSIFY_INSTRUCTION_TOOL.input_schema as {
+      properties: { axis: { enum: string[] }; lossState: { enum: string[] } };
+    };
+    expect(schema.properties.axis.enum).toContain("loss");
+    expect(schema.properties.lossState.enum).toEqual(["found", "lost"]);
+  });
+
+  it("the prompt guides the loss axis", () => {
+    const p = buildInstructionPrompt("verdict", "борт знайшли", null);
+    expect(p).toContain('axis="loss"');
+    expect(p).toContain('lossState="found"');
+  });
 });
