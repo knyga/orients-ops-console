@@ -13,6 +13,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Proposal, Tool } from "./tools/types";
 import { toAnthropicTools, findTool } from "./tools/registry";
 import { jiraTools } from "./tools/jira";
+import { fieldLossTools } from "./tools/fieldLoss";
 
 const MODEL = "claude-sonnet-5";
 const MAX_ITERS = 8;
@@ -73,7 +74,7 @@ function toolUsesOf(content: unknown[]): ToolUseBlock[] {
 }
 
 export async function runAgent(userText: string, opts: RunAgentOptions = {}): Promise<AgentResult> {
-  const tools = opts.tools ?? jiraTools;
+  const tools = opts.tools ?? [...jiraTools, ...fieldLossTools];
   const client = (opts.client ?? new Anthropic()) as AnthropicLike;
   const maxIters = opts.maxIters ?? MAX_ITERS;
   const now = opts.now ?? (() => Date.now());
