@@ -72,10 +72,9 @@ export const lossAlerts = pgTable("loss_alerts", {
 Run: `npm run db:generate`
 Expected: a new `drizzle/0012_*.sql` containing `CREATE TABLE "loss_records"` and `CREATE TABLE "loss_alerts"`, and no other table altered.
 
-- [ ] **Step 3: Apply the migration**
+- [ ] **Step 3: Apply the migration — raw SQL, NOT drizzle-kit migrate**
 
-Run: `npm run db:migrate`
-Expected: exits 0 (needs `POSTGRES_URL` in `.env`; `try { process.loadEnvFile() } catch {}` is the house pattern — drizzle-kit reads `.env` itself).
+`drizzle-kit migrate` is unreliable on this DB (pre-existing journal drift — see the 2026-07-04 SDD ledger). The **controller** applies the generated `drizzle/0012_*.sql` statements directly to Neon in one transaction (both are additive `CREATE TABLE`s — safe before the code deploys). Implementer: generate + commit only; report the migration as pending controller application.
 
 - [ ] **Step 4: Typecheck**
 
