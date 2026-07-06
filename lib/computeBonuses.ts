@@ -2,9 +2,11 @@
  * Shared field-bonus computation. SERVER-ONLY (live Vimeo via computeVerdicts +
  * Claude + DB). One gate: the resolved verdict days from computeVerdicts (video/
  * deploy/drone/dataset axes + approver overrides) — ACCEPTED ⇔ the day pays.
- * Beyond the gate, still pulls the #field-qa "Звіт" reports (arrival time for
- * the early bonus, crash text for drone losses) and runs the pure calculator.
- * With write, persists reports/field-bonus/<period>.{json,csv}.
+ * Beyond the gate, still pulls the #field-qa "Звіт" reports for arrival time
+ * (the early bonus); drone-loss crash text is no longer classified here — it
+ * is read from the durable loss ledger (`syncLossLedger` + `effectiveLosses`),
+ * which owns hash-gated classification and instruction-outranks-extracted
+ * precedence. With write, persists reports/field-bonus/<period>.{json,csv}.
  */
 import "server-only";
 import { computeVerdicts } from "./computeVerdicts";
@@ -12,7 +14,8 @@ import { readChannelMessages } from "./slackMirror";
 import { writeReport } from "./reports";
 import { parseMonth } from "./fieldReports";
 import { computeBonuses, roundVideoMin, type BonusReport, type LossRecord, type QualifiedDay } from "./fieldBonus";
-import { extractLoss } from "./lossExtract";
+import { syncLossLedger } from "./lossSync";
+import { effectiveLosses } from "./lossLedger";
 import { readAliases, mergeAliases } from "./rosterAliases";
 import { readRosterCorrections } from "./rosterCorrections";
 import { SEED_ALIASES } from "./fieldRoster";
@@ -33,7 +36,8 @@ export async function computeBonusReport(
   const verdicts = await computeVerdicts(period, { onLog: log });
 
   // The Звіт parse still supplies what the money math needs beyond the gate:
-  // arrival time (early bonus) and crash text (drone losses).
+  // arrival time for the early bonus (crash text/loss classification moved to
+  // the ledger below).
   const aliases = mergeAliases(SEED_ALIASES, await readAliases());
   const messages = (await readChannelMessages("field-qa", period)).filter((m) => !m.deleted);
   const reports = parseMonth(messages, aliases);
@@ -42,14 +46,11 @@ export async function computeBonusReport(
   // (a multi-report day has one Звіт per trip, each with its own start time).
   const parsedByReportTs = new Map(reports.map((r) => [r.reportTs, r]));
 
-  // Losses loop unchanged — one loss record per report/date; two same-date
-  // crashes on different reports still dedup to one loss date downstream.
-  const losses: LossRecord[] = [];
-  for (const r of reports) {
-    if (!r.crashText) continue;
-    const cls = await extractLoss(r.crashText);
-    if (cls.lost) losses.push({ date: r.flightDate, found: cls.found, note: cls.note });
-  }
+  // Losses now come from the durable ledger (hash-gated classification inside
+  // syncLossLedger — a cold CLI run classifies any un-hashed Звіт itself, so no
+  // prior nightly is required). Approver instruction rows override extraction.
+  const lossRows = await syncLossLedger(period, { onLog: log });
+  const losses: LossRecord[] = effectiveLosses(lossRows, { start: period.start, end: period.end });
   log(`field-bonus: ${losses.filter((l) => !l.found).length} unrecovered loss(es)`);
 
   const corrections = await readRosterCorrections();

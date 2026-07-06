@@ -3,14 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mocks = vi.hoisted(() => ({
   computeVerdicts: vi.fn(),
   readChannelMessages: vi.fn(async (): Promise<{ text: string; permalink: string; ts: string }[]> => []),
-  extractLoss: vi.fn(),
+  syncLossLedger: vi.fn(),
   readAliases: vi.fn(),
   readRosterCorrections: vi.fn(),
   writeReport: vi.fn(),
 }));
 vi.mock("./computeVerdicts", () => ({ computeVerdicts: mocks.computeVerdicts, todayInFieldTz: () => "2026-07-03" }));
 vi.mock("./slackMirror", () => ({ readChannelMessages: mocks.readChannelMessages }));
-vi.mock("./lossExtract", () => ({ extractLoss: mocks.extractLoss }));
+vi.mock("./lossSync", () => ({ syncLossLedger: mocks.syncLossLedger }));
 vi.mock("./rosterAliases", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
   return { ...actual, readAliases: mocks.readAliases };
@@ -28,7 +28,7 @@ beforeEach(() => {
   mocks.readChannelMessages.mockResolvedValue([]);
   mocks.readAliases.mockResolvedValue({});
   mocks.readRosterCorrections.mockResolvedValue([]);
-  mocks.extractLoss.mockResolvedValue({ lost: false, found: false, note: "" });
+  mocks.syncLossLedger.mockResolvedValue([]);
   mocks.writeReport.mockResolvedValue({ key: "2026-06" });
 });
 
@@ -81,5 +81,20 @@ describe("computeBonusReport", () => {
     expect(report.people.find((p) => p.name === "Андріан")?.early).toBe(1);
     expect(report.people.find((p) => p.name === "Влад")?.early).toBe(0);
     expect(report.people.find((p) => p.name === "Надія")?.early).toBe(1); // earns early once, on the qualifying report
+  });
+
+  it("an instruction recovery in the ledger clears the loss for the money math", async () => {
+    mocks.syncLossLedger.mockResolvedValue([
+      { date: "2026-07-04", reportTs: "111.222", lost: true, found: false, note: "втрата", source: "extracted", crashTextHash: "h", updatedAt: "t", updatedBy: null },
+      { date: "2026-07-04", reportTs: "111.222", lost: true, found: true, note: "знайшли", source: "instruction", crashTextHash: null, updatedAt: "t2", updatedBy: "Oleksandr K" },
+    ]);
+    mocks.computeVerdicts.mockResolvedValue({ days: [
+      { date: "2026-07-04", reportTs: "111.222", reportCount: 1, status: "ACCEPTED", roster: ["Андріан"], unknownInitials: [], deployMin: 200,
+        videoMinutes: 40, airborneMinutes: 60, airborneReported: true, reasons: [], ratio: 0.9,
+        datasetStatus: "POSTED", withinGrace: false },
+    ]});
+    const report = await computeBonusReport({ start: "2026-07-01", end: "2026-07-31" });
+    expect(report.teamZeroed).toBe(false);
+    expect(report.penalties).toEqual([]);
   });
 });
