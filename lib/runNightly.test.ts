@@ -1,16 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { syncAllChannels, extractFieldQa, computeVerdicts, publishSettledDays, refreshPublishedDays, openDm, postMessage, readReportJson } =
-  vi.hoisted(() => ({
-    syncAllChannels: vi.fn(),
-    extractFieldQa: vi.fn(),
-    computeVerdicts: vi.fn(),
-    publishSettledDays: vi.fn(),
-    refreshPublishedDays: vi.fn(),
-    openDm: vi.fn(),
-    postMessage: vi.fn(),
-    readReportJson: vi.fn(),
-  }));
+const {
+  syncAllChannels,
+  extractFieldQa,
+  computeVerdicts,
+  publishSettledDays,
+  refreshPublishedDays,
+  openDm,
+  postMessage,
+  readReportJson,
+  syncLossLedger,
+  readLossAlertState,
+  writeLossAlertState,
+} = vi.hoisted(() => ({
+  syncAllChannels: vi.fn(),
+  extractFieldQa: vi.fn(),
+  computeVerdicts: vi.fn(),
+  publishSettledDays: vi.fn(),
+  refreshPublishedDays: vi.fn(),
+  openDm: vi.fn(),
+  postMessage: vi.fn(),
+  readReportJson: vi.fn(),
+  syncLossLedger: vi.fn(),
+  readLossAlertState: vi.fn(),
+  writeLossAlertState: vi.fn(),
+}));
 
 vi.mock("./syncChannels", () => ({ syncAllChannels, todayInFieldTz: () => "2026-07-15" }));
 vi.mock("./fieldQaExtract", () => ({ extractFieldQa }));
@@ -18,6 +32,8 @@ vi.mock("./computeVerdicts", () => ({ computeVerdicts }));
 vi.mock("./publishVerdicts", () => ({ publishSettledDays }));
 vi.mock("./refreshPublished", () => ({ refreshPublishedDays }));
 vi.mock("./slack", () => ({ openDm, postMessage }));
+vi.mock("./lossSync", () => ({ syncLossLedger }));
+vi.mock("./lossStore", () => ({ readLossAlertState, writeLossAlertState }));
 vi.mock("./reports", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
   return { ...actual, readReportJson }; // keep the real periodKey
@@ -26,7 +42,19 @@ vi.mock("./reports", async (orig) => {
 import { runNightly } from "./runNightly";
 
 beforeEach(() => {
-  for (const m of [syncAllChannels, extractFieldQa, computeVerdicts, publishSettledDays, refreshPublishedDays, openDm, postMessage, readReportJson])
+  for (const m of [
+    syncAllChannels,
+    extractFieldQa,
+    computeVerdicts,
+    publishSettledDays,
+    refreshPublishedDays,
+    openDm,
+    postMessage,
+    readReportJson,
+    syncLossLedger,
+    readLossAlertState,
+    writeLossAlertState,
+  ])
     m.mockReset();
   readReportJson.mockResolvedValue(null); // default: no committed report → extract
   syncAllChannels.mockResolvedValue({ summaries: [], failures: 0 });
@@ -36,6 +64,9 @@ beforeEach(() => {
   refreshPublishedDays.mockResolvedValue({ refreshed: [], skipped: [] });
   openDm.mockResolvedValue("D0OPERATOR");
   postMessage.mockResolvedValue("1.1");
+  syncLossLedger.mockResolvedValue([]); // no loss rows → no alerts, keeps existing DM assertions intact
+  readLossAlertState.mockResolvedValue(null);
+  writeLossAlertState.mockResolvedValue(undefined);
 });
 
 describe("runNightly", () => {

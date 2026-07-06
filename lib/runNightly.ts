@@ -25,6 +25,10 @@ import { TRACKED_CHANNELS } from "./slackChannels";
 import { APPROVERS } from "./approvers";
 import { openDm, postMessage } from "./slack";
 import { formatNightlyFailureNotice } from "./nightlyNotice";
+import { syncLossLedger } from "./lossSync";
+import { unrecoveredLossDates, type LossRow } from "./lossLedger";
+import { readLossAlertState, writeLossAlertState } from "./lossStore";
+import { planLossAlerts } from "./lossNotice";
 
 const FIELD_QA = "field-qa";
 const DATASETS = "datasets";
@@ -110,6 +114,41 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
       if (isNewest) {
         // The active month: always re-extract + recompute (its verdicts change daily).
         extractedDays = (await extractFieldQa(period, { write: true, onLog: log })).days.length;
+
+        // 2b. Sync the drone-loss ledger + tiered alerts for the active month.
+        // BEST-EFFORT: loss is money/visibility state, not part of the gate.
+        try {
+          const lossRows: LossRow[] = await syncLossLedger(period, { onLog: log });
+          const count = unrecoveredLossDates(lossRows, period).length;
+          const alertState = await readLossAlertState(key);
+          const plan = planLossAlerts(count, alertState, key);
+          if (opts.publish) {
+            if (plan.operatorDm) {
+              const dm = await openDm(APPROVERS[0].userId);
+              await postMessage(dm, plan.operatorDm, {
+                key: `loss-alert:${key}:${count}`,
+                feature: "loss-alert",
+                channel: "dm",
+                trigger: "cron",
+              });
+            }
+            if (plan.fieldQaWarning) {
+              await postMessage(channel.id, plan.fieldQaWarning, {
+                key: `loss-warn:${key}`,
+                feature: "loss-alert",
+                channel: channel.name,
+                trigger: "cron",
+              });
+            }
+            if (plan.operatorDm || plan.fieldQaWarning) await writeLossAlertState(key, plan.next);
+          } else if (plan.operatorDm || plan.fieldQaWarning) {
+            log(`field-nightly (dry-run): loss alerts — ${[plan.operatorDm, plan.fieldQaWarning].filter(Boolean).join(" | ")}`);
+          }
+        } catch (e) {
+          log(`field-nightly: loss stage skipped — ${e instanceof Error ? e.message : String(e)}`);
+          if (opts.publish) await notifyOperator("loss", e instanceof Error ? e.message : String(e), log);
+        }
+
         report = await computeVerdicts(period, { today, write: true, onLog: log });
       } else {
         // Catch-up (prior) month: on every boundary day this used to re-run the
