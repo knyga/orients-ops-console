@@ -60,6 +60,9 @@ describe("effectiveLosses / unrecoveredLossDates", () => {
     const rows = [row({ found: true }), row({ reportTs: "999.0", found: false, note: "друга втрата" })];
     expect(unrecoveredLossDates(rows, JULY)).toEqual(["2026-07-04"]);
     expect(effectiveLosses(rows, JULY)).toEqual([{ date: "2026-07-04", found: false, note: "друга втрата" }]);
+    const reversed = [row({ reportTs: "999.0", found: false, note: "друга втрата" }), row({ found: true })];
+    expect(unrecoveredLossDates(reversed, JULY)).toEqual(["2026-07-04"]);
+    expect(effectiveLosses(reversed, JULY)).toEqual([{ date: "2026-07-04", found: false, note: "друга втрата" }]);
   });
   it("clamps to the period", () => {
     const rows = [row({ date: "2026-06-30" }), row({})];
