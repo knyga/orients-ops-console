@@ -28,7 +28,7 @@ beforeEach(() => {
   mocks.readChannelMessages.mockResolvedValue([]);
   mocks.readAliases.mockResolvedValue({});
   mocks.readRosterCorrections.mockResolvedValue([]);
-  mocks.syncLossLedger.mockResolvedValue([]);
+  mocks.syncLossLedger.mockResolvedValue({ rows: [], classified: 0, failed: 0 });
   mocks.writeReport.mockResolvedValue({ key: "2026-06" });
 });
 
@@ -100,10 +100,11 @@ describe("computeBonusReport", () => {
 
   it("two unrecovered ledger losses in one group's 12-trip window halve the net", async () => {
     mocks.computeVerdicts.mockResolvedValue({ days: twoTripDays });
-    mocks.syncLossLedger.mockResolvedValue([
-      extractedLoss("2026-07-06", "111.222"),
-      extractedLoss("2026-07-08", "333.444"),
-    ]);
+    mocks.syncLossLedger.mockResolvedValue({
+      rows: [extractedLoss("2026-07-06", "111.222"), extractedLoss("2026-07-08", "333.444")],
+      classified: 2,
+      failed: 0,
+    });
     const report = await computeBonusReport({ start: "2026-07-01", end: "2026-07-31" });
     expect(report.penalties).toEqual([expect.objectContaining({ group: ["Андріан"], lossesInWindow: 2, pct: 0.5 })]);
     const p = report.people.find((x) => x.name === "Андріан")!;
@@ -113,13 +114,17 @@ describe("computeBonusReport", () => {
 
   it("an instruction recovery in the ledger clears the loss for the money math", async () => {
     mocks.computeVerdicts.mockResolvedValue({ days: twoTripDays });
-    mocks.syncLossLedger.mockResolvedValue([
-      extractedLoss("2026-07-06", "111.222"),
-      extractedLoss("2026-07-08", "333.444"),
-      // Approver: the 07-08 drone was found — outranks the extracted row for
-      // the same (date, reportTs), dropping the group to 1 loss (no penalty).
-      { date: "2026-07-08", reportTs: "333.444", lost: true, found: true, note: "знайшли", source: "instruction", crashTextHash: null, updatedAt: "t2", updatedBy: "Oleksandr K" },
-    ]);
+    mocks.syncLossLedger.mockResolvedValue({
+      rows: [
+        extractedLoss("2026-07-06", "111.222"),
+        extractedLoss("2026-07-08", "333.444"),
+        // Approver: the 07-08 drone was found — outranks the extracted row for
+        // the same (date, reportTs), dropping the group to 1 loss (no penalty).
+        { date: "2026-07-08", reportTs: "333.444", lost: true, found: true, note: "знайшли", source: "instruction", crashTextHash: null, updatedAt: "t2", updatedBy: "Oleksandr K" },
+      ],
+      classified: 2,
+      failed: 0,
+    });
     const report = await computeBonusReport({ start: "2026-07-01", end: "2026-07-31" });
     expect(report.teamZeroed).toBe(false);
     expect(report.penalties).toEqual([]);

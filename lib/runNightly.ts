@@ -28,7 +28,7 @@ import { formatNightlyFailureNotice } from "./nightlyNotice";
 import { syncLossLedger } from "./lossSync";
 import { unrecoveredLossDates, type LossRow } from "./lossLedger";
 import { readLossAlertState, writeLossAlertState } from "./lossStore";
-import { planLossAlerts } from "./lossNotice";
+import { planLossAlerts, lossAlertDmKey } from "./lossNotice";
 
 const FIELD_QA = "field-qa";
 const DATASETS = "datasets";
@@ -118,7 +118,16 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
         // 2b. Sync the drone-loss ledger + tiered alerts for the active month.
         // BEST-EFFORT: loss is money/visibility state, not part of the gate.
         try {
-          const lossRows: LossRow[] = await syncLossLedger(period, { onLog: log });
+          const { rows: lossRows, failed: lossFailed }: { rows: LossRow[]; failed: number } = await syncLossLedger(period, {
+            onLog: log,
+          });
+          if (opts.publish && lossFailed > 0) {
+            await notifyOperator(
+              "loss",
+              `${lossFailed} #field-qa Звіт(и) failed loss classification for ${key} (previous state kept)`,
+              log,
+            );
+          }
           const count = unrecoveredLossDates(lossRows, period).length;
           const alertState = await readLossAlertState(key);
           const plan = planLossAlerts(count, alertState, key);
@@ -126,7 +135,7 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
             if (plan.operatorDm) {
               const dm = await openDm(APPROVERS[0].userId);
               await postMessage(dm, plan.operatorDm, {
-                key: `loss-alert:${key}:${count}`,
+                key: lossAlertDmKey(key, count, today),
                 feature: "loss-alert",
                 channel: "dm",
                 trigger: "cron",

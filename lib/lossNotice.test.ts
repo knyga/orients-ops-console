@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planLossAlerts } from "./lossNotice";
+import { lossAlertDmKey, planLossAlerts } from "./lossNotice";
 
 describe("planLossAlerts", () => {
   it("no change → no messages, state preserved", () => {
@@ -36,5 +36,27 @@ describe("planLossAlerts", () => {
     const p = planLossAlerts(0, null, "2026-07");
     expect(p.operatorDm).toBeNull();
     expect(p.fieldQaWarning).toBeNull();
+  });
+  it("a jump straight to 4 (first #field-qa warning fires already past cutoff) says the month is wiped, not 'one more'", () => {
+    const p = planLossAlerts(4, { lastAlertedCount: 2, fieldqaWarnedAt3: false }, "2026-07");
+    expect(p.fieldQaWarning).toContain("обнулено");
+    expect(p.fieldQaWarning).not.toContain("Ще одна");
+    expect(p.next).toEqual({ lastAlertedCount: 4, fieldqaWarnedAt3: true });
+  });
+  it("landing exactly on the cutoff keeps the 'one more loss' phrasing", () => {
+    const p = planLossAlerts(3, { lastAlertedCount: 2, fieldqaWarnedAt3: false }, "2026-07");
+    expect(p.fieldQaWarning).toContain("Ще одна");
+    expect(p.fieldQaWarning).not.toContain("обнулено");
+  });
+});
+
+describe("lossAlertDmKey", () => {
+  it("is built from the period, count, and run date", () => {
+    expect(lossAlertDmKey("2026-07", 2, "2026-07-15")).toBe("loss-alert:2026-07:2:2026-07-15");
+  });
+  it("differs across run dates for the same period+count, so a counter flip-flop re-sends", () => {
+    const a = lossAlertDmKey("2026-07", 2, "2026-07-15");
+    const b = lossAlertDmKey("2026-07", 2, "2026-07-16");
+    expect(a).not.toBe(b);
   });
 });

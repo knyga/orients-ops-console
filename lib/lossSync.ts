@@ -3,7 +3,10 @@
  * Parses the period's #field-qa Звіти from the Slack mirror and classifies ONLY
  * crash text that is new or edited since its stored sha256 — a normal run makes
  * zero Claude calls. Approver `instruction` rows are never touched. A classifier
- * failure keeps the previous row (never fabricate a recovery) and continues.
+ * failure keeps the previous row (never fabricate a recovery) and continues —
+ * `syncLossLedger` surfaces that count as `failed` on its return value so a
+ * caller (the nightly) can alert the operator instead of it being silently
+ * swallowed into a log line.
  * Shared by the nightly (counter + alerts), computeVerdicts consumers via the
  * ledger, and computeBonusReport (the money math).
  */
@@ -22,11 +25,21 @@ export function crashHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-/** Sync the ledger for a period; returns ALL ledger rows post-sync. */
+export interface LossSyncResult {
+  /** ALL ledger rows post-sync. */
+  rows: LossRow[];
+  /** Звіти newly classified this run (hash miss/new, not held by an instruction). */
+  classified: number;
+  /** Звіти whose classify call threw — the previous ledger row (if any) was kept
+   *  as-is; a nonzero count here means the ledger may be stale for that Звіт. */
+  failed: number;
+}
+
+/** Sync the ledger for a period; returns all rows post-sync plus classify/fail counts. */
 export async function syncLossLedger(
   period: Period,
   opts: { onLog?: (m: string) => void } = {},
-): Promise<LossRow[]> {
+): Promise<LossSyncResult> {
   const log = opts.onLog ?? (() => {});
   const aliases = mergeAliases(SEED_ALIASES, await readAliases());
   const messages = (await readChannelMessages("field-qa", period)).filter((m) => !m.deleted);
@@ -63,5 +76,5 @@ export async function syncLossLedger(
     }
   }
   log(`loss-sync: ${classified} classified, ${failed} failed, ${byKey.size} ledger row(s)`);
-  return [...byKey.values()];
+  return { rows: [...byKey.values()], classified, failed };
 }

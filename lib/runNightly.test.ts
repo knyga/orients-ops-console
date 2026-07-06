@@ -64,7 +64,7 @@ beforeEach(() => {
   refreshPublishedDays.mockResolvedValue({ refreshed: [], skipped: [] });
   openDm.mockResolvedValue("D0OPERATOR");
   postMessage.mockResolvedValue("1.1");
-  syncLossLedger.mockResolvedValue([]); // no loss rows → no alerts, keeps existing DM assertions intact
+  syncLossLedger.mockResolvedValue({ rows: [], classified: 0, failed: 0 }); // no loss rows/failures → no alerts, keeps existing DM assertions intact
   readLossAlertState.mockResolvedValue(null);
   writeLossAlertState.mockResolvedValue(undefined);
 });
@@ -143,5 +143,42 @@ describe("runNightly", () => {
     await runNightly({ publish: false, today: "2026-07-15" });
     expect(refreshPublishedDays).toHaveBeenCalledOnce();
     expect(refreshPublishedDays.mock.calls[0][2]).toMatchObject({ dryRun: true, runDate: "2026-07-15" });
+  });
+
+  describe("drone-loss stage", () => {
+    it("a nonzero classify-failure count DMs the operator but the stage continues (no throw, still publishes)", async () => {
+      syncLossLedger.mockResolvedValue({ rows: [], classified: 0, failed: 2 });
+      const res = await runNightly({ publish: true, today: "2026-07-15" });
+      expect(openDm).toHaveBeenCalledOnce();
+      expect(postMessage).toHaveBeenCalledOnce();
+      const [, text] = postMessage.mock.calls[0];
+      expect(text).toContain("2");
+      expect(res.months[0].posted).toEqual(["2026-07-14"]); // publish still ran
+    });
+
+    it("does not DM the operator on failed=0", async () => {
+      syncLossLedger.mockResolvedValue({ rows: [], classified: 3, failed: 0 });
+      await runNightly({ publish: true, today: "2026-07-15" });
+      expect(postMessage).not.toHaveBeenCalled();
+    });
+
+    it("the loss-count operator DM key is salted with the run's Kyiv day (so a counter flip-flop re-sends)", async () => {
+      const lossRow = {
+        date: "2026-07-10",
+        reportTs: "1.1",
+        lost: true,
+        found: false,
+        note: "втрата борта",
+        source: "extracted" as const,
+        crashTextHash: "h",
+        updatedAt: "2026-07-10T00:00:00Z",
+        updatedBy: null,
+      };
+      syncLossLedger.mockResolvedValue({ rows: [lossRow], classified: 1, failed: 0 });
+      readLossAlertState.mockResolvedValue(null); // prior count 0 → count 1 triggers an operator DM
+      await runNightly({ publish: true, today: "2026-07-15" });
+      const dmCall = postMessage.mock.calls.find((c) => typeof c[2]?.key === "string" && c[2].key.startsWith("loss-alert:"));
+      expect(dmCall?.[2].key).toBe("loss-alert:2026-07:1:2026-07-15");
+    });
   });
 });

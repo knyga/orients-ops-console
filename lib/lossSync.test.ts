@@ -51,34 +51,41 @@ describe("syncLossLedger", () => {
   it("classifies a Звіт with no ledger row and upserts it (including lost=false)", async () => {
     mocks.readLossRecords.mockResolvedValue([]);
     mocks.extractLoss.mockResolvedValue({ lost: false, found: false, note: "" });
-    await syncLossLedger(JULY);
+    const result = await syncLossLedger(JULY);
     expect(mocks.extractLoss).toHaveBeenCalledOnce();
     expect(mocks.upsertLossRecord).toHaveBeenCalledWith(
       expect.objectContaining({ date: "2026-07-04", reportTs: "111.222", lost: false, source: "extracted" }),
     );
+    expect(result.classified).toBe(1);
+    expect(result.failed).toBe(0);
   });
   it("skips an unchanged crash text (hash gate) — zero Claude calls", async () => {
     mocks.readLossRecords.mockResolvedValue([ledgerRow({})]);
-    await syncLossLedger(JULY);
+    const result = await syncLossLedger(JULY);
     expect(mocks.extractLoss).not.toHaveBeenCalled();
     expect(mocks.upsertLossRecord).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ classified: 0, failed: 0 });
   });
   it("re-classifies when the Звіт crash text was edited", async () => {
     mocks.readLossRecords.mockResolvedValue([ledgerRow({ crashTextHash: "stale-hash" })]);
-    await syncLossLedger(JULY);
+    const result = await syncLossLedger(JULY);
     expect(mocks.extractLoss).toHaveBeenCalledOnce();
+    expect(result.classified).toBe(1);
   });
   it("never touches an instruction row", async () => {
     mocks.readLossRecords.mockResolvedValue([ledgerRow({ source: "instruction", crashTextHash: null })]);
-    await syncLossLedger(JULY);
+    const result = await syncLossLedger(JULY);
     expect(mocks.extractLoss).not.toHaveBeenCalled();
     expect(mocks.upsertLossRecord).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ classified: 0, failed: 0 });
   });
-  it("a classifier failure on one Звіт keeps the old row and continues", async () => {
+  it("a classifier failure on one Звіт keeps the old row, continues, and is counted in `failed`", async () => {
     mocks.readLossRecords.mockResolvedValue([]);
     mocks.extractLoss.mockRejectedValue(new Error("api down"));
-    const rows = await syncLossLedger(JULY);
+    const result = await syncLossLedger(JULY);
     expect(mocks.upsertLossRecord).not.toHaveBeenCalled();
-    expect(rows).toEqual([]);
+    expect(result.rows).toEqual([]);
+    expect(result.classified).toBe(0);
+    expect(result.failed).toBe(1);
   });
 });

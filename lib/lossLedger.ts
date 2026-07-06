@@ -3,8 +3,15 @@
  * row permanently outranks `extracted`), the effective per-date loss view, and
  * the team counter. No DB/Next imports — the DB access lives in lib/lossStore.
  * Row identity is (date, reportTs); reportTs "" marks a day-wide instruction
- * (written from a legacy thread with no reportTs) that overrides every report
- * of its date.
+ * (written from a legacy thread with no reportTs).
+ *
+ * Precedence is per-reportTs, and is the SAME in both view functions below
+ * (`effectiveForDate` and `lossForVerdict`): a report's own per-report
+ * instruction row wins; else a day-wide instruction row governs that report;
+ * else the report's extracted row. A day-wide instruction with no per-report
+ * rows at all for that date governs alone. `effectiveForDate` then aggregates
+ * across a date's reports: the date is unrecovered if ANY resolved report is
+ * unrecovered.
  */
 export interface LossRow {
   date: string;
@@ -31,19 +38,26 @@ export function upsertWins(existing: LossRow | undefined, incoming: { source: Lo
   return existing.source !== "instruction";
 }
 
-/** The effective loss state for one date's rows: a day-wide instruction wins,
- *  else per-report with instruction-beats-extracted per reportTs. */
+/** The effective loss state for one date's rows: resolve per-reportTs (own
+ *  instruction > day-wide instruction > extracted), then aggregate — see the
+ *  module doc comment above for the full precedence rule. */
 function effectiveForDate(dayRows: LossRow[]): { lost: boolean; found: boolean; note: string } | null {
   const dayWide = dayRows.find((r) => r.reportTs === "" && r.source === "instruction");
-  if (dayWide) return dayWide.lost ? dayWide : null;
+  const perReport = dayRows.filter((r) => r.reportTs !== "");
+  // No per-report rows at all: a day-wide instruction governs the date alone.
+  if (perReport.length === 0) return dayWide && dayWide.lost ? dayWide : null;
+
   const byTs = new Map<string, LossRow>();
-  for (const r of dayRows) {
+  for (const r of perReport) {
     const cur = byTs.get(r.reportTs);
     if (!cur || (r.source === "instruction" && cur.source !== "instruction")) byTs.set(r.reportTs, r);
   }
-  const losses = [...byTs.values()].filter((r) => r.lost);
+  // A report with no instruction row of its own falls back to the day-wide
+  // instruction (when one exists); a report with its own instruction ignores it.
+  const resolved = [...byTs.values()].map((r) => (r.source !== "instruction" && dayWide ? dayWide : r));
+  const losses = resolved.filter((r) => r.lost);
   if (losses.length === 0) return null;
-  // The date counts as unrecovered if ANY of its report losses is unrecovered.
+  // The date counts as unrecovered if ANY of its resolved report losses is unrecovered.
   const unrecovered = losses.find((r) => !r.found);
   return unrecovered ?? losses[0];
 }

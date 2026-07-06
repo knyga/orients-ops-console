@@ -56,6 +56,24 @@ describe("effectiveLosses / unrecoveredLossDates", () => {
     const rows = [row({}), row({ reportTs: "999.0" }), row({ reportTs: "", source: "instruction", found: true, note: "знайшли" })];
     expect(unrecoveredLossDates(rows, JULY)).toEqual([]);
   });
+  it("a per-report instruction outranks a day-wide instruction on the same date", () => {
+    // Day-wide says recovered, but one report has its own instruction saying
+    // unrecovered — the per-report instruction wins, so the date stays unrecovered.
+    const rows = [
+      row({ reportTs: "", source: "instruction", found: true, note: "знайшли" }),
+      row({ reportTs: "999.0", source: "instruction", found: false, note: "не знайшли" }),
+    ];
+    expect(unrecoveredLossDates(rows, JULY)).toEqual(["2026-07-04"]);
+    expect(lossForVerdict(rows, "2026-07-04", "999.0")).toEqual({ lost: true, found: false });
+  });
+  it("a day-wide instruction still governs reports that have no instruction of their own", () => {
+    // Day-wide says recovered; the only rows besides it are extracted (unrecovered)
+    // losses with no per-report instruction — unchanged behavior: day-wide wins,
+    // so the date is recovered.
+    const rows = [row({}), row({ reportTs: "999.0" }), row({ reportTs: "", source: "instruction", found: true, note: "знайшли" })];
+    expect(unrecoveredLossDates(rows, JULY)).toEqual([]);
+    expect(effectiveLosses(rows, JULY)).toEqual([{ date: "2026-07-04", found: true, note: "знайшли" }]);
+  });
   it("a date with one recovered and one unrecovered report stays unrecovered", () => {
     const rows = [row({ found: true }), row({ reportTs: "999.0", found: false, note: "друга втрата" })];
     expect(unrecoveredLossDates(rows, JULY)).toEqual(["2026-07-04"]);

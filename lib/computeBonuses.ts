@@ -49,7 +49,7 @@ export async function computeBonusReport(
   // Losses now come from the durable ledger (hash-gated classification inside
   // syncLossLedger — a cold CLI run classifies any un-hashed Звіт itself, so no
   // prior nightly is required). Approver instruction rows override extraction.
-  const lossRows = await syncLossLedger(period, { onLog: log });
+  const { rows: lossRows } = await syncLossLedger(period, { onLog: log });
   const losses: LossRecord[] = effectiveLosses(lossRows, { start: period.start, end: period.end });
   log(`field-bonus: ${losses.filter((l) => !l.found).length} unrecovered loss(es)`);
 
