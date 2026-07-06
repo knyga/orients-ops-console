@@ -86,6 +86,33 @@ export const airborneOverrides = pgTable("airborne_overrides", {
   recordedAt: text("recorded_at").notNull(),
 });
 
+/** Drone-loss ledger — one row per classified Звіт crash text (including
+ *  lost=false rows: the hash gate needs them to skip unchanged text). An
+ *  `instruction` row (approver override) permanently outranks `extracted`
+ *  for its key; reportTs "" = a day-wide instruction (legacy threads). */
+export const lossRecords = pgTable(
+  "loss_records",
+  {
+    date: text("date").notNull(), // flight date YYYY-MM-DD (the Звіт's own date)
+    reportTs: text("report_ts").notNull(), // Звіт message ts; "" = day-wide instruction
+    lost: boolean("lost").notNull(),
+    found: boolean("found").notNull(),
+    note: text("note").notNull(),
+    source: text("source").notNull(), // extracted|instruction
+    crashTextHash: text("crash_text_hash"), // sha256 of the Звіт crash text (extracted rows)
+    updatedAt: text("updated_at").notNull(),
+    updatedBy: text("updated_by"), // approver name on instruction rows
+  },
+  (t) => [primaryKey({ columns: [t.date, t.reportTs] })],
+);
+
+/** Loss-alert state per period — what the bot already told people. */
+export const lossAlerts = pgTable("loss_alerts", {
+  period: text("period").primaryKey(), // periodKey, e.g. "2026-07"
+  lastAlertedCount: integer("last_alerted_count").notNull(),
+  fieldqaWarnedAt3: boolean("fieldqa_warned_at_3").notNull(),
+});
+
 /** Confirm-first data-overwrite proposals from approver verdict-thread instructions.
  *  The bot stores a PROPOSED proposal, echoes it, and applies only on confirmation.
  *  Unique (source_reply_ts) → idempotent under Slack event redelivery. */

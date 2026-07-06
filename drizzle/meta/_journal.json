@@ -85,6 +85,13 @@
       "when": 1783199612627,
       "tag": "0011_new_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783350632225,
+      "tag": "0012_public_hannibal_king",
+      "breakpoints": true
     }
   ]
 }
