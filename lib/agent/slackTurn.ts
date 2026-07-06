@@ -11,9 +11,13 @@ import type { Turn } from "@/lib/agentThread";
 
 const SLACK_MAX_ITERS = 6;
 
-export async function runSlackTurn(text: string, history: Turn[]): Promise<AgentResult> {
+export async function runSlackTurn(
+  text: string,
+  history: Turn[],
+  opts: { sourceUrl?: string } = {},
+): Promise<AgentResult> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set on the server.");
   }
-  return runAgent(text, { tools: jiraTools, maxIters: SLACK_MAX_ITERS, history });
+  return runAgent(text, { tools: jiraTools, maxIters: SLACK_MAX_ITERS, history, sourceUrl: opts.sourceUrl });
 }

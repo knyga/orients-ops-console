@@ -108,6 +108,25 @@ describe("jiraCreateProposal (Mr-Lab routing)", () => {
     expect(p.echoUk).toContain("Nobody McGhost");
   });
 
+  it("appends the source Slack thread link to the description when the turn carries one", async () => {
+    const p = await jiraCreateProposal(
+      { person: "Taras", summary: "S", description: "details" },
+      { sourceUrl: "https://orientsai.slack.com/archives/C1/p1700000000000001" },
+    );
+    expect(p.params.description).toBe(
+      "Виконавець: Taras Panasyuk\n\ndetails\n\nSlack: https://orientsai.slack.com/archives/C1/p1700000000000001",
+    );
+    expect(p.echoUk).toContain("Slack: https://orientsai.slack.com/archives/C1/p1700000000000001");
+  });
+
+  it("appends the source link on the unknown-person path too", async () => {
+    const p = await jiraCreateProposal(
+      { person: "Nobody McGhost", summary: "S", description: "" },
+      { sourceUrl: "https://orientsai.slack.com/archives/C1/p1700000000000001" },
+    );
+    expect(p.params.description).toContain("Slack: https://orientsai.slack.com/archives/C1/p1700000000000001");
+  });
+
   it("still rejects an ambiguous person", async () => {
     // "Андрій" substring-hits Yefimov / Svidnytskyi / Gresyk via their Cyrillic aliases
     await expect(jiraCreateProposal({ person: "Андрій", summary: "S", description: "" })).rejects.toThrow(

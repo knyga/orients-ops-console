@@ -53,6 +53,9 @@ export interface RunAgentOptions {
   now?: () => number;
   /** Prior conversation turns (lightweight text) seeded before the new user message. */
   history?: Array<{ role: "user" | "assistant"; text: string }>;
+  /** Permalink of the Slack thread this turn came from — attached to write
+   *  proposals deterministically (e.g. linked in a created ticket). */
+  sourceUrl?: string;
 }
 
 interface ToolUseBlock { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
@@ -104,7 +107,7 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
     if (write) {
       const tool = findTool(tools, write.name)!;
       try {
-        const proposal = await tool.propose!(write.input);
+        const proposal = await tool.propose!(write.input, { sourceUrl: opts.sourceUrl });
         return { kind: "proposal", text: proposal.echoUk, proposal };
       } catch (err) {
         // A propose failure (e.g. an unresolvable person) must not kill the

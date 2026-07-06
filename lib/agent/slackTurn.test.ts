@@ -17,6 +17,12 @@ describe("runSlackTurn", () => {
     expect(opts.history).toEqual([{ role: "user", text: "prev" }]);
     expect(opts.tools).toBe(jiraTools); // full set, not filtered to read
   });
+  it("forwards sourceUrl so proposals can link back to the thread", async () => {
+    runAgent.mockResolvedValue({ kind: "text", text: "a" });
+    await runSlackTurn("q", [], { sourceUrl: "https://x.slack.com/archives/C1/p1" });
+    expect(runAgent.mock.calls[0][1].sourceUrl).toBe("https://x.slack.com/archives/C1/p1");
+  });
+
   it("fails loud when ANTHROPIC_API_KEY is missing", async () => {
     delete process.env.ANTHROPIC_API_KEY;
     await expect(runSlackTurn("q", [])).rejects.toThrow(/ANTHROPIC_API_KEY/);

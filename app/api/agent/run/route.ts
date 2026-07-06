@@ -11,7 +11,7 @@ import { runSlackTurn } from "@/lib/agent/slackTurn";
 import { markdownToMrkdwn } from "@/lib/mrkdwn";
 import { loadTranscript, appendTurn } from "@/lib/agentThread";
 import { insertPending } from "@/lib/agentProposals";
-import { updateMessage } from "@/lib/slack";
+import { updateMessage, permalinkFor } from "@/lib/slack";
 import { agentReplyKey } from "@/lib/outboundKeys";
 import type { ProposalKind } from "@/lib/proposalExecutor";
 import { fetchThreadContext } from "@/lib/agent/threadContext";
@@ -65,7 +65,11 @@ export async function POST(req: Request): Promise<Response> {
         console.error("agent run: thread-context fetch failed:", err);
       }
     }
-    const result = await runSlackTurn(question, history);
+    // A thread turn carries the thread's permalink so a created ticket links
+    // back to its source (attached to the proposal deterministically, not by
+    // the model). Pure string build — works even when the context fetch failed.
+    const sourceUrl = body.threadTs ? permalinkFor(body.channelId, body.threadTs) : undefined;
+    const result = await runSlackTurn(question, history, { sourceUrl });
     if (result.kind === "proposal" && result.proposal) {
       await updateMessage(body.channelId, body.placeholderTs, result.proposal.echoUk, meta);
       await insertPending({

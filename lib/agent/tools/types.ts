@@ -21,6 +21,13 @@ export interface Proposal {
   apply(): Promise<string>;
 }
 
+/** Conversation-level facts the loop knows but the model should not have to
+ *  relay — attached deterministically to proposals (e.g. the Slack thread the
+ *  request came from, linked into a created ticket's description). */
+export interface ProposeContext {
+  sourceUrl?: string;
+}
+
 export interface Tool {
   name: string;
   description: string;
@@ -30,5 +37,5 @@ export interface Tool {
   /** Read tools only: execute now, return a result to feed back to the model. */
   run?(args: Record<string, unknown>): Promise<ToolResult>;
   /** Write tools only: resolve args into a confirm-first Proposal (no write yet). */
-  propose?(args: Record<string, unknown>): Promise<Proposal>;
+  propose?(args: Record<string, unknown>, ctx?: ProposeContext): Promise<Proposal>;
 }

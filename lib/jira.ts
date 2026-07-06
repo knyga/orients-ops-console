@@ -172,13 +172,26 @@ export async function fetchResolvedIssues(
 
 const CONTENT_TYPE = "application/json";
 
-/** Minimal plain-text → Atlassian Document Format. Blank lines split paragraphs.
- *  Jira Cloud v3 requires ADF for description/comment bodies (plain strings 400). */
+/** Minimal plain-text → Atlassian Document Format. Blank lines split paragraphs;
+ *  URLs get a link mark (ADF renders bare URLs as dead text). Jira Cloud v3
+ *  requires ADF for description/comment bodies (plain strings 400). */
 export function textToAdf(text: string): object {
+  const URL_RE = /https?:\/\/\S+/g;
+  const inline = (p: string): object[] => {
+    const nodes: object[] = [];
+    let last = 0;
+    for (const m of p.matchAll(URL_RE)) {
+      if (m.index > last) nodes.push({ type: "text", text: p.slice(last, m.index) });
+      nodes.push({ type: "text", text: m[0], marks: [{ type: "link", attrs: { href: m[0] } }] });
+      last = m.index + m[0].length;
+    }
+    if (last < p.length) nodes.push({ type: "text", text: p.slice(last) });
+    return nodes;
+  };
   const paras = text.split(/\n\s*\n/).map((p) => p.replace(/\n/g, " ").trim());
   const content = (paras.length ? paras : [""]).map((p) => ({
     type: "paragraph",
-    content: p ? [{ type: "text", text: p }] : [],
+    content: p ? inline(p) : [],
   }));
   return { type: "doc", version: 1, content };
 }

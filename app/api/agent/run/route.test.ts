@@ -15,7 +15,10 @@ vi.mock("@/lib/agentThread", () => ({
   appendTurn: h.appendTurn,
 }));
 vi.mock("@/lib/agentProposals", () => ({ insertPending: h.insertPending }));
-vi.mock("@/lib/slack", () => ({ updateMessage: h.updateMessage }));
+vi.mock("@/lib/slack", () => ({
+  updateMessage: h.updateMessage,
+  permalinkFor: (c: string, ts: string) => `https://orientsai.slack.com/archives/${c}/p${ts.replace(".", "")}`,
+}));
 vi.mock("@/lib/agent/threadContext", () => ({ fetchThreadContext: h.fetchThreadContext }));
 
 import { POST } from "./route";
@@ -172,6 +175,7 @@ describe("POST /api/agent/run", () => {
     expect(h.runSlackTurn).toHaveBeenCalledWith(
       "Контекст треду (Slack):\n[Oleksandr K]: bug details\n\nствори тікет з цього треду",
       [],
+      { sourceUrl: "https://orientsai.slack.com/archives/C-issue-log/p111222" },
     );
     // memory stores the ORIGINAL question, not the augmented one
     expect(h.appendTurn).toHaveBeenCalledWith("111.222", "створи тікет з цього треду", "answer");
@@ -181,7 +185,7 @@ describe("POST /api/agent/run", () => {
     h.runSlackTurn.mockResolvedValue({ kind: "text", text: "answer" });
     await POST(req(base));
     expect(h.fetchThreadContext).not.toHaveBeenCalled();
-    expect(h.runSlackTurn).toHaveBeenCalledWith("q", []);
+    expect(h.runSlackTurn).toHaveBeenCalledWith("q", [], { sourceUrl: undefined });
   });
 
   it("thread-context fetch failure → turn still runs on the bare question", async () => {
@@ -189,7 +193,10 @@ describe("POST /api/agent/run", () => {
     h.runSlackTurn.mockResolvedValue({ kind: "text", text: "answer" });
     const res = await POST(req({ ...base, surface: "mention", threadTs: "111.222" }));
     expect(res.status).toBe(200);
-    expect(h.runSlackTurn).toHaveBeenCalledWith("q", []);
+    // context degraded, but the source link still rides along
+    expect(h.runSlackTurn).toHaveBeenCalledWith("q", [], {
+      sourceUrl: "https://orientsai.slack.com/archives/C1/p111222",
+    });
     expect(h.updateMessage).toHaveBeenCalledWith("C1", "2", "answer", expect.anything());
   });
 });

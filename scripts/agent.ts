@@ -17,6 +17,7 @@
  */
 import { runAgent } from "../lib/agent/loop";
 import { parseThreadRef, fetchThreadContext } from "../lib/agent/threadContext";
+import { permalinkFor } from "../lib/slack";
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -35,6 +36,7 @@ async function main(): Promise<void> {
   }
 
   let message = prompt;
+  let sourceUrl: string | undefined;
   if (threadRef) {
     const ref = parseThreadRef(threadRef);
     if (!ref) {
@@ -43,12 +45,15 @@ async function main(): Promise<void> {
       );
       process.exit(1);
     }
+    // Same deterministic source-link attach as the Slack surface: a ticket
+    // created from a thread links back to it.
+    sourceUrl = permalinkFor(ref.channelId, ref.threadTs);
     const ctx = await fetchThreadContext(ref.channelId, ref.threadTs);
     if (ctx) message = `${ctx}\n\n${prompt}`;
     else console.error("(thread has no messages — running without context)");
   }
 
-  const res = await runAgent(message);
+  const res = await runAgent(message, { sourceUrl });
   if (res.kind === "text" || res.kind === "error") {
     console.log(res.text);
     if (res.kind === "error") process.exit(1);

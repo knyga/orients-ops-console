@@ -11,7 +11,7 @@ import { routeIssue, routingConfigFromEnv, describeAssignee } from "@/lib/jiraRo
 import { personByQuery } from "@/lib/people";
 import { planNextSprint, latestNumberedSprint } from "@/lib/sprintPlan";
 import { applyProposal } from "@/lib/proposalExecutor";
-import type { Proposal, Tool } from "./types";
+import type { Proposal, ProposeContext, Tool } from "./types";
 
 function str(args: Record<string, unknown>, key: string): string {
   const v = args[key];
@@ -23,10 +23,16 @@ function optStr(args: Record<string, unknown>, key: string): string {
   return typeof v === "string" ? v : "";
 }
 
-/** Resolve {person, summary, description} → a create Proposal with Mr-Lab routing. */
-export async function jiraCreateProposal(args: Record<string, unknown>): Promise<Proposal> {
+/** Resolve {person, summary, description} → a create Proposal with Mr-Lab routing.
+ *  A ctx.sourceUrl (the Slack thread the request came from) is appended to the
+ *  description here, deterministically — the model never has to relay it. */
+export async function jiraCreateProposal(
+  args: Record<string, unknown>,
+  ctx?: ProposeContext,
+): Promise<Proposal> {
   const personQuery = str(args, "person");
   const summary = str(args, "summary");
+  const sourceLine = ctx?.sourceUrl ? `\n\nSlack: ${ctx.sourceUrl}` : "";
   const desc = optStr(args, "description");
 
   const resolved = personByQuery(personQuery);
@@ -39,7 +45,7 @@ export async function jiraCreateProposal(args: Record<string, unknown>): Promise
   // matches silently would misroute.)
   if ("unknown" in resolved) {
     const cfg = routingConfigFromEnv();
-    const description = `Виконавець: ${personQuery} (не знайдено в реєстрі)\n\n${desc}`.trim();
+    const description = `Виконавець: ${personQuery} (не знайдено в реєстрі)\n\n${desc}`.trim() + sourceLine;
     const params = { projectKey: cfg.defaultProject, summary, description, assigneeAccountId: null };
     return {
       kind: "jira_create",
@@ -50,7 +56,8 @@ export async function jiraCreateProposal(args: Record<string, unknown>): Promise
   }
   const person = resolved.person;
   const routing = routeIssue(person, routingConfigFromEnv());
-  const description = routing.assignInDescription ? `Виконавець: ${person.name}\n\n${desc}`.trim() : desc;
+  const description =
+    (routing.assignInDescription ? `Виконавець: ${person.name}\n\n${desc}`.trim() : desc) + sourceLine;
   const assignee = describeAssignee(person, routing);
 
   const params = { projectKey: routing.projectKey, summary, description, assigneeAccountId: routing.jiraAccountId };

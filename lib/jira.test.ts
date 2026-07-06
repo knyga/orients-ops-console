@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { listSprints, createSprint, moveIssueToSprint, boardIdFromEnv } from "./jira";
+import { listSprints, createSprint, moveIssueToSprint, boardIdFromEnv, textToAdf } from "./jira";
 
 const ENV = {
   JIRA_BASE_URL: "https://ex.atlassian.net",
@@ -17,6 +17,46 @@ afterEach(() => vi.restoreAllMocks());
 function mockFetch(status: number, json: unknown) {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(json), { status }));
 }
+
+describe("textToAdf", () => {
+  it("keeps plain paragraphs as plain text nodes", () => {
+    expect(textToAdf("hello\n\nworld")).toEqual({
+      type: "doc",
+      version: 1,
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "hello" }] },
+        { type: "paragraph", content: [{ type: "text", text: "world" }] },
+      ],
+    });
+  });
+
+  it("marks a URL as a clickable link (ADF renders bare URLs as dead text)", () => {
+    const url = "https://orientsai.slack.com/archives/C1/p1700000000000001";
+    expect(textToAdf(`Slack: ${url}`)).toEqual({
+      type: "doc",
+      version: 1,
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Slack: " },
+            { type: "text", text: url, marks: [{ type: "link", attrs: { href: url } }] },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("links a URL in the middle of a sentence", () => {
+    const adf = textToAdf("див. https://ex.com/a і далі") as {
+      content: { content: { text: string; marks?: unknown[] }[] }[];
+    };
+    const nodes = adf.content[0].content;
+    expect(nodes.map((n) => n.text)).toEqual(["див. ", "https://ex.com/a", " і далі"]);
+    expect(nodes[1].marks).toEqual([{ type: "link", attrs: { href: "https://ex.com/a" } }]);
+    expect(nodes[0].marks).toBeUndefined();
+  });
+});
 
 describe("boardIdFromEnv", () => {
   it("defaults to board 1 (the ATP board)", () => {

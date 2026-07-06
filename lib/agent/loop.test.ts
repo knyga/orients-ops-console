@@ -58,6 +58,21 @@ describe("runAgent", () => {
     expect(client.messages.create).toHaveBeenCalledTimes(1);
   });
 
+  it("hands opts.sourceUrl to propose() as context", async () => {
+    const propose = vi.fn(async () => ({
+      kind: "demo_write",
+      params: {},
+      echoUk: "ЕХО",
+      apply: async () => "APPLIED",
+    }));
+    const tool: Tool = { ...writeTool, propose };
+    const client = fakeClient([
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "w1", name: "demo_write", input: { a: 1 } }] },
+    ]);
+    await runAgent("create", { client, tools: [tool], sourceUrl: "https://x.slack.com/archives/C1/p1" });
+    expect(propose).toHaveBeenCalledWith({ a: 1 }, { sourceUrl: "https://x.slack.com/archives/C1/p1" });
+  });
+
   it("feeds a propose error back to the model instead of throwing", async () => {
     const failingWrite: Tool = {
       ...writeTool,
