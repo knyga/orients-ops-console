@@ -127,6 +127,44 @@ describe("jiraCreateProposal (Mr-Lab routing)", () => {
     expect(p.params.description).toContain("Slack: https://orientsai.slack.com/archives/C1/p1700000000000001");
   });
 
+  it("addToNextSprint resolves the sprint into the SAME proposal (single confirmation)", async () => {
+    listSprints.mockImplementation(async (_board: number, state: string) =>
+      state === "active"
+        ? [{ id: 1223, name: "ATP 41", state: "active" }]
+        : [{ id: 1256, name: "ATP 42", state: "future" }],
+    );
+    const p = await jiraCreateProposal({ person: "Taras", summary: "S", description: "d", addToNextSprint: true });
+    expect(p.kind).toBe("jira_create");
+    expect(p.params.nextSprint).toEqual({ boardId: 1, sprintId: 1256, sprintName: "ATP 42" });
+    expect(p.echoUk).toContain("ATP 42");
+    expect(p.echoUk).toContain("спринт");
+  });
+
+  it("addToNextSprint plans a sprint create when the next sprint is missing", async () => {
+    listSprints.mockImplementation(async (_board: number, state: string) =>
+      state === "active" ? [{ id: 1223, name: "ATP 41", state: "active" }] : [],
+    );
+    const p = await jiraCreateProposal({ person: "Taras", summary: "S", addToNextSprint: true });
+    expect(p.params.nextSprint).toEqual({ boardId: 1, sprintId: null, sprintName: "ATP 42" });
+    expect(p.echoUk).toContain("створю");
+  });
+
+  it("no addToNextSprint → no nextSprint in params and no sprint fetches", async () => {
+    listSprints.mockClear();
+    const p = await jiraCreateProposal({ person: "Taras", summary: "S", description: "" });
+    expect(p.params.nextSprint).toBeUndefined();
+    expect(listSprints).not.toHaveBeenCalled();
+  });
+
+  it("strips the model's own leading «Виконавець:» line so it is not doubled", async () => {
+    const p = await jiraCreateProposal({
+      person: "Taras",
+      summary: "S",
+      description: "Виконавець: Taras Panasyuk\n\nreal details",
+    });
+    expect(p.params.description).toBe("Виконавець: Taras Panasyuk\n\nreal details");
+  });
+
   it("still rejects an ambiguous person", async () => {
     // "Андрій" substring-hits Yefimov / Svidnytskyi / Gresyk via their Cyrillic aliases
     await expect(jiraCreateProposal({ person: "Андрій", summary: "S", description: "" })).rejects.toThrow(

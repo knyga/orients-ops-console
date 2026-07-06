@@ -23,9 +23,46 @@ function optStr(args: Record<string, unknown>, key: string): string {
   return typeof v === "string" ? v : "";
 }
 
+interface NextSprintParams {
+  boardId: number;
+  sprintId: number | null;
+  sprintName: string;
+}
+
+/** Resolve "next sprint" against the live board (active sprint's number + 1;
+ *  between sprints, the highest-numbered closed sprint anchors). Shared by the
+ *  standalone move tool and jira_create's addToNextSprint. */
+async function resolveNextSprint(): Promise<{
+  params: NextSprintParams;
+  create: boolean;
+  anchorNoteUk: string;
+}> {
+  const boardId = boardIdFromEnv();
+  const active = await listSprints(boardId, "active");
+  const anchor = active.length ? active[0] : latestNumberedSprint(await listSprints(boardId, "closed"));
+  if (!anchor) throw new Error(`Board ${boardId} has no active or closed sprint to determine the next one from.`);
+  const future = await listSprints(boardId, "future");
+
+  const plan = planNextSprint(anchor.name, future);
+  if (!plan) {
+    throw new Error(`Sprint "${anchor.name}" has no number to increment — name the target sprint explicitly.`);
+  }
+  const anchorNoteUk = active.length
+    ? `активний — «${anchor.name}»`
+    : `активного немає, останній завершений — «${anchor.name}»`;
+  return {
+    params: { boardId, sprintId: plan.sprintId, sprintName: plan.sprintName },
+    create: plan.create,
+    anchorNoteUk,
+  };
+}
+
 /** Resolve {person, summary, description} → a create Proposal with Mr-Lab routing.
  *  A ctx.sourceUrl (the Slack thread the request came from) is appended to the
- *  description here, deterministically — the model never has to relay it. */
+ *  description here, deterministically — the model never has to relay it. With
+ *  addToNextSprint, the sprint is resolved into the SAME proposal so one «так»
+ *  covers create + sprint (the loop stops at the first write, so a second
+ *  action would otherwise cost the user an extra round-trip). */
 export async function jiraCreateProposal(
   args: Record<string, unknown>,
   ctx?: ProposeContext,
@@ -33,7 +70,13 @@ export async function jiraCreateProposal(
   const personQuery = str(args, "person");
   const summary = str(args, "summary");
   const sourceLine = ctx?.sourceUrl ? `\n\nSlack: ${ctx.sourceUrl}` : "";
-  const desc = optStr(args, "description");
+  // The tool prepends its own «Виконавець:» line; drop the model's copy so the
+  // ticket does not start with the line twice.
+  const desc = optStr(args, "description").replace(/^Виконавець:[^\n]*\n+/u, "");
+  const sprint = args.addToNextSprint === true ? await resolveNextSprint() : null;
+  const sprintEcho = sprint
+    ? `\nПісля створення додам до наступного спринту «${sprint.params.sprintName}»${sprint.create ? " (спринт ще не існує, створю його)" : ""}.`
+    : "";
 
   const resolved = personByQuery(personQuery);
   if ("ambiguous" in resolved) {
@@ -46,11 +89,17 @@ export async function jiraCreateProposal(
   if ("unknown" in resolved) {
     const cfg = routingConfigFromEnv();
     const description = `Виконавець: ${personQuery} (не знайдено в реєстрі)\n\n${desc}`.trim() + sourceLine;
-    const params = { projectKey: cfg.defaultProject, summary, description, assigneeAccountId: null };
+    const params = {
+      projectKey: cfg.defaultProject,
+      summary,
+      description,
+      assigneeAccountId: null,
+      ...(sprint ? { nextSprint: sprint.params } : {}),
+    };
     return {
       kind: "jira_create",
       params,
-      echoUk: `📝 Створю задачу в проєкті ${cfg.defaultProject}, виконавець: (не призначено — «${personQuery}» не знайдено в реєстрі)\nЗаголовок: ${summary}\nОпис: ${description}\nСтворити? (так/ні)`,
+      echoUk: `📝 Створю задачу в проєкті ${cfg.defaultProject}, виконавець: (не призначено — «${personQuery}» не знайдено в реєстрі)\nЗаголовок: ${summary}\nОпис: ${description}${sprintEcho}\nСтворити? (так/ні)`,
       apply: () => applyProposal("jira_create", params),
     };
   }
@@ -60,11 +109,17 @@ export async function jiraCreateProposal(
     (routing.assignInDescription ? `Виконавець: ${person.name}\n\n${desc}`.trim() : desc) + sourceLine;
   const assignee = describeAssignee(person, routing);
 
-  const params = { projectKey: routing.projectKey, summary, description, assigneeAccountId: routing.jiraAccountId };
+  const params = {
+    projectKey: routing.projectKey,
+    summary,
+    description,
+    assigneeAccountId: routing.jiraAccountId,
+    ...(sprint ? { nextSprint: sprint.params } : {}),
+  };
   return {
     kind: "jira_create",
     params,
-    echoUk: `📝 Створю задачу в проєкті ${routing.projectKey}, виконавець: ${assignee}\nЗаголовок: ${summary}\nОпис: ${description || "(порожній)"}\nСтворити? (так/ні)`,
+    echoUk: `📝 Створю задачу в проєкті ${routing.projectKey}, виконавець: ${assignee}\nЗаголовок: ${summary}\nОпис: ${description || "(порожній)"}${sprintEcho}\nСтворити? (так/ні)`,
     apply: () => applyProposal("jira_create", params),
   };
 }
@@ -93,37 +148,22 @@ async function jiraTransitionProposal(args: Record<string, unknown>): Promise<Pr
   };
 }
 
-/** Resolve "next sprint" against the live board: anchor sprint's number + 1,
- *  reusing an existing future sprint or planning a create. The anchor is the
- *  active sprint, or — between sprints (the old one closed, the new one not
- *  started) — the highest-numbered closed sprint. The read happens at propose
- *  time so the echo names the real sprint; the executor re-resolves a planned
- *  create at apply time (the sprint may appear between the two). */
+/** Move an existing issue into the next sprint (see resolveNextSprint). The
+ *  read happens at propose time so the echo names the real sprint; the executor
+ *  re-resolves a planned create at apply time (the sprint may appear between
+ *  the two). */
 export async function jiraNextSprintProposal(args: Record<string, unknown>): Promise<Proposal> {
   const key = str(args, "key");
-  const boardId = boardIdFromEnv();
+  const sprint = await resolveNextSprint();
 
-  const active = await listSprints(boardId, "active");
-  const anchor = active.length ? active[0] : latestNumberedSprint(await listSprints(boardId, "closed"));
-  if (!anchor) throw new Error(`Board ${boardId} has no active or closed sprint to determine the next one from.`);
-  const future = await listSprints(boardId, "future");
-
-  const plan = planNextSprint(anchor.name, future);
-  if (!plan) {
-    throw new Error(`Sprint "${anchor.name}" has no number to increment — name the target sprint explicitly.`);
-  }
-
-  const params = { key, boardId, sprintId: plan.sprintId, sprintName: plan.sprintName };
-  const sprintNote = plan.create
-    ? `«${plan.sprintName}» — спринт ще не існує, створю його`
-    : `«${plan.sprintName}»`;
-  const anchorNote = active.length
-    ? `активний — «${anchor.name}»`
-    : `активного немає, останній завершений — «${anchor.name}»`;
+  const params = { key, ...sprint.params };
+  const sprintNote = sprint.create
+    ? `«${sprint.params.sprintName}» — спринт ще не існує, створю його`
+    : `«${sprint.params.sprintName}»`;
   return {
     kind: "jira_move_to_sprint",
     params,
-    echoUk: `📝 Додам ${key} до наступного спринту ${sprintNote} (${anchorNote}).\nПродовжити? (так/ні)`,
+    echoUk: `📝 Додам ${key} до наступного спринту ${sprintNote} (${sprint.anchorNoteUk}).\nПродовжити? (так/ні)`,
     apply: () => applyProposal("jira_move_to_sprint", params),
   };
 }
@@ -165,13 +205,17 @@ export const jiraTools: Tool[] = [
   {
     name: "jira_create",
     description:
-      "Create a Jira ticket for a named person. Routing is automatic (Mr-Lab people go to the Mr Lab project); a person not in the registry still gets a ticket — unassigned, with their name in the description. Provide the person's name, a summary, and an optional description.",
+      "Create a Jira ticket for a named person. Routing is automatic (Mr-Lab people go to the Mr Lab project); a person not in the registry still gets a ticket — unassigned, with their name in the description. Provide the person's name, a summary, and an optional description. If the request ALSO asks to put the ticket into the next sprint («на наступний спринт»), set addToNextSprint: true — one confirmation covers both; do NOT plan a separate follow-up step.",
     inputSchema: {
       type: "object",
       properties: {
         person: { type: "string", description: "Who the ticket is for (name)." },
         summary: { type: "string", description: "Ticket summary." },
         description: { type: "string", description: "Ticket description (optional)." },
+        addToNextSprint: {
+          type: "boolean",
+          description: "true when the ticket should also be placed into the next sprint (resolved automatically).",
+        },
       },
       required: ["person", "summary"],
     },

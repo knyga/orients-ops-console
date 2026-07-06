@@ -30,6 +30,30 @@ function str(params: Record<string, unknown>, key: string): string {
   return v;
 }
 
+/** Resolve a (possibly to-be-created) sprint to an id and move the issue in.
+ *  A null sprintId re-checks by name first — the sprint may have appeared
+ *  between propose and confirm. Returns whether it had to create the sprint. */
+async function resolveAndMove(
+  boardId: number,
+  sprintId: number | null,
+  sprintName: string,
+  key: string,
+): Promise<boolean> {
+  let created = false;
+  if (sprintId === null) {
+    const future = await listSprints(boardId, "future");
+    const existing = future.find((s) => s.name.trim().toLowerCase() === sprintName.trim().toLowerCase());
+    if (existing) {
+      sprintId = existing.id;
+    } else {
+      sprintId = (await createSprint(boardId, sprintName)).id;
+      created = true;
+    }
+  }
+  await moveIssueToSprint(sprintId, key);
+  return created;
+}
+
 export async function applyProposal(kind: ProposalKind, params: Record<string, unknown>): Promise<string> {
   switch (kind) {
     case "jira_create": {
@@ -40,7 +64,19 @@ export async function applyProposal(kind: ProposalKind, params: Record<string, u
         description: typeof params.description === "string" ? params.description : "",
         assigneeAccountId: typeof accountId === "string" ? accountId : null,
       });
-      return `✅ Створено ${created.key}: ${created.url}`;
+      const createdLine = `✅ Створено ${created.key}: ${created.url}`;
+      const sprint = params.nextSprint as
+        | { boardId: number; sprintId: number | null; sprintName: string }
+        | undefined;
+      if (!sprint) return createdLine;
+      // The ticket exists — a sprint failure must not hide that.
+      try {
+        await resolveAndMove(sprint.boardId, sprint.sprintId, sprint.sprintName, created.key);
+        return `${createdLine}\nДодано до спринту «${sprint.sprintName}»`;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return `${createdLine}\n⚠️ Але не вдалося додати до спринту «${sprint.sprintName}»: ${message}`;
+      }
     }
     case "jira_comment":
       await addComment(str(params, "key"), str(params, "body"));
@@ -57,21 +93,8 @@ export async function applyProposal(kind: ProposalKind, params: Record<string, u
       const key = str(params, "key");
       const sprintName = str(params, "sprintName");
       const boardId = typeof params.boardId === "number" ? params.boardId : Number(params.boardId);
-      let sprintId = typeof params.sprintId === "number" ? params.sprintId : null;
-      let created = false;
-      // A propose-time "create it" plan re-checks at apply time: the sprint may
-      // have appeared between the proposal and the confirmation.
-      if (sprintId === null) {
-        const future = await listSprints(boardId, "future");
-        const existing = future.find((s) => s.name.trim().toLowerCase() === sprintName.trim().toLowerCase());
-        if (existing) {
-          sprintId = existing.id;
-        } else {
-          sprintId = (await createSprint(boardId, sprintName)).id;
-          created = true;
-        }
-      }
-      await moveIssueToSprint(sprintId, key);
+      const sprintId = typeof params.sprintId === "number" ? params.sprintId : null;
+      const created = await resolveAndMove(boardId, sprintId, sprintName, key);
       return created
         ? `✅ ${key} додано до спринту «${sprintName}» (спринт створено)`
         : `✅ ${key} додано до спринту «${sprintName}»`;

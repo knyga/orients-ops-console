@@ -29,6 +29,42 @@ describe("applyProposal", () => {
     expect("assignee" in body.fields).toBe(false);
   });
 
+  it("jira_create with nextSprint creates the issue THEN moves it into the sprint", async () => {
+    const f = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/rest/api/3/issue")) return new Response(JSON.stringify({ key: "ATP-9" }), { status: 201 });
+      return new Response(null, { status: 204 });
+    });
+    const out = await applyProposal("jira_create", {
+      projectKey: "ATP",
+      summary: "S",
+      description: "",
+      assigneeAccountId: null,
+      nextSprint: { boardId: 1, sprintId: 1256, sprintName: "ATP 42" },
+    });
+    expect(out).toContain("ATP-9");
+    expect(out).toContain("ATP 42");
+    const urls = f.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("/rest/agile/1.0/sprint/1256/issue"))).toBe(true);
+  });
+
+  it("jira_create still reports the created key when the sprint move fails afterwards", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/rest/api/3/issue")) return new Response(JSON.stringify({ key: "ATP-9" }), { status: 201 });
+      return new Response("boom", { status: 500 });
+    });
+    const out = await applyProposal("jira_create", {
+      projectKey: "ATP",
+      summary: "S",
+      description: "",
+      assigneeAccountId: null,
+      nextSprint: { boardId: 1, sprintId: 1256, sprintName: "ATP 42" },
+    });
+    expect(out).toContain("ATP-9");
+    expect(out).toContain("не вдалося");
+  });
+
   it("jira_comment calls the comment endpoint", async () => {
     const f = mockFetch(201, {});
     const out = await applyProposal("jira_comment", { key: "ATP-7", body: "hi" });
