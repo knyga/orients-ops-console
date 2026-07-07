@@ -16,6 +16,8 @@ import { TRACKED_CHANNELS, type SlackChannel } from "./slackChannels";
 import type { SlackFile, SlackMessage } from "./policySchedule";
 import { toSlackFiles, type RawFile } from "./slackFiles";
 import { sendTracked, type SendMeta } from "./sendTracked";
+import { appendBotTurn } from "./agentThread";
+import { shouldRecordDmBotTurn } from "./agentThreadCap";
 
 export type { SendMeta };
 
@@ -428,7 +430,21 @@ export async function postMessage(
       ts: null,
       meta,
     },
-    () => rawPost(channelId, text, threadTs),
+    () =>
+      rawPost(channelId, text, threadTs).then(async (ts) => {
+        // Bot-initiated DMs become agent memory, so a human reply in the DM has
+        // context. Runs only on an ACTUAL send (inside the sendTracked closure —
+        // a dedup-skipped redelivery never re-appends). Best-effort: an append
+        // failure must never fail the send.
+        if (shouldRecordDmBotTurn(channelId, threadTs ?? null, meta.feature)) {
+          try {
+            await appendBotTurn(channelId, text);
+          } catch (err) {
+            console.error("postMessage: DM agent-memory append failed:", err);
+          }
+        }
+        return ts;
+      }),
   );
 }
 

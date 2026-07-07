@@ -10,3 +10,10 @@ export function capTranscript(turns: Turn[], nowMs: number, updatedAtMs: number)
   if (nowMs - updatedAtMs > WINDOW_MS) return [];
   return turns.slice(-MAX_TURNS);
 }
+
+/** Should a bot-sent Slack message be recorded into the DM agent memory?
+ *  Only genuinely top-level DM sends, and never the agent's own sends —
+ *  the run route records those as full user/assistant turns already. */
+export function shouldRecordDmBotTurn(channelId: string, threadTs: string | null, feature: string): boolean {
+  return channelId.startsWith("D") && threadTs === null && feature !== "agent";
+}

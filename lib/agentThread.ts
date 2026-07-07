@@ -32,6 +32,19 @@ export async function appendTurn(channelId: string, userText: string, assistantT
     .onConflictDoUpdate({ target: schema.agentThreads.channelId, set: { updatedAt: nowIso, transcript: next } });
 }
 
+/** Append a single bot (assistant) turn — used for bot-initiated DMs (alerts,
+ *  notices) so a later human reply arrives with that context. Same cap+upsert
+ *  discipline as appendTurn. */
+export async function appendBotTurn(channelId: string, text: string): Promise<void> {
+  const prior = await loadTranscript(channelId);
+  const next = capTranscript([...prior, { role: "assistant", text }], Date.now(), Date.now());
+  const nowIso = new Date().toISOString();
+  await db
+    .insert(schema.agentThreads)
+    .values({ channelId, updatedAt: nowIso, transcript: next })
+    .onConflictDoUpdate({ target: schema.agentThreads.channelId, set: { updatedAt: nowIso, transcript: next } });
+}
+
 /** True iff an agent conversation row exists for this key (ignores the 24h cap —
  *  used only for ingress routing, not for seeding history). */
 export async function agentThreadExists(conversationKey: string): Promise<boolean> {
