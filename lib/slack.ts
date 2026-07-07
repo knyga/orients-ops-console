@@ -100,6 +100,23 @@ export async function listUsers(): Promise<{ id: string; name: string }[]> {
   return [...map.entries()].map(([id, name]) => ({ id, name }));
 }
 
+interface UsersInfoResponse extends SlackOk {
+  user?: { profile?: { email?: string } };
+}
+
+/** Best-effort profile email for a user id (needs the users:read.email scope).
+ *  Null — never a throw — when the scope is missing, the profile hides the
+ *  email, or the call fails: the caller (lib/attendeesLive.ts) degrades to its
+ *  own loud both-sources error, so this stays silent by design. */
+export async function fetchUserEmail(userId: string): Promise<string | null> {
+  try {
+    const body = await call<UsersInfoResponse>("users.info", new URLSearchParams({ user: userId }));
+    return body.user?.profile?.email ?? null;
+  } catch {
+    return null;
+  }
+}
+
 interface HistoryResponse extends SlackOk {
   messages: { user?: string; bot_id?: string; ts: string; text?: string; files?: RawFile[] }[];
 }
