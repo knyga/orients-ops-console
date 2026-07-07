@@ -21,6 +21,10 @@ export interface Person {
    *  jiraAccount, which is only a display name/username. Unset for now. */
   jiraAccountId?: string;
   githubLogin?: string;
+  /** Workspace email for Google Calendar invites (filled by a human, like every
+   *  other field here — never scraped). A person without one cannot be invited
+   *  by name; resolveAttendees (lib/attendees.ts) fails their query loudly. */
+  email?: string;
   rosterInitial?: string;
   /** Alternate query spellings (the Ukrainian Cyrillic name, nicknames) matched
    *  by personByQuery only — never used to join identities across sources.
