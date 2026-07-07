@@ -14,6 +14,14 @@ function mockFetch(status: number, json: unknown) {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(json), { status }));
 }
 
+vi.mock("@/lib/googleCalendar", () => ({
+  createCalendarEvent: vi.fn(async () => ({
+    eventId: "ev1",
+    htmlLink: "https://calendar.google.com/event?eid=ev1",
+    meetLink: "https://meet.google.com/abc-defg-hij",
+  })),
+}));
+
 describe("applyProposal", () => {
   it("jira_create POSTs project + no assignee when accountId null, returns UA line with key+url", async () => {
     const f = mockFetch(201, { key: "MRLAB-3" });
@@ -70,6 +78,31 @@ describe("applyProposal", () => {
     const out = await applyProposal("jira_comment", { key: "ATP-7", body: "hi" });
     expect(out).toContain("ATP-7");
     expect(String(f.mock.calls[0][0])).toContain("/rest/api/3/issue/ATP-7/comment");
+  });
+
+  it("calendar_create_event passes the serialized params to createCalendarEvent and returns the UA confirmation", async () => {
+    const { createCalendarEvent } = await import("@/lib/googleCalendar");
+    const out = await applyProposal("calendar_create_event", {
+      title: "Синк",
+      description: "",
+      startIso: "2026-07-08T15:00",
+      endIso: "2026-07-08T15:30",
+      attendeeEmails: ["a@x.com"],
+      requestId: "r-1",
+    });
+    expect(out).toContain("✅");
+    expect(out).toContain("https://meet.google.com/abc-defg-hij");
+    expect(vi.mocked(createCalendarEvent).mock.calls[0][0]).toMatchObject({
+      title: "Синк",
+      attendeeEmails: ["a@x.com"],
+      requestId: "r-1",
+    });
+  });
+
+  it("calendar_create_event rejects params missing a required field", async () => {
+    await expect(
+      applyProposal("calendar_create_event", { title: "X", endIso: "2026-07-08T15:30" }),
+    ).rejects.toThrow(/startIso/);
   });
 
   it("rejects an unknown kind", async () => {

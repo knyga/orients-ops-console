@@ -1,6 +1,6 @@
 /**
  * Deterministic confirm-first executor: given a resolved proposal (kind + params)
- * perform the Jira write and return a Ukrainian result line. This is the ONE apply
+ * perform the Jira/Calendar write and return a Ukrainian result line. This is the ONE apply
  * path — shared by the CLI (`npm run agent --yes`) and the Slack confirm (`так`),
  * so a proposal that survives a DB round-trip (lib/agentProposals) applies exactly
  * like the in-memory CLI path. No LLM here; the model already resolved the params.
@@ -16,13 +16,16 @@ import {
   createSprint,
   moveIssueToSprint,
 } from "@/lib/jira";
+import { createCalendarEvent } from "@/lib/googleCalendar";
+import { renderAppliedUk } from "@/lib/calendarEvent";
 
 export type ProposalKind =
   | "jira_create"
   | "jira_comment"
   | "jira_transition"
   | "jira_update"
-  | "jira_move_to_sprint";
+  | "jira_move_to_sprint"
+  | "calendar_create_event";
 
 function str(params: Record<string, unknown>, key: string): string {
   const v = params[key];
@@ -98,6 +101,17 @@ export async function applyProposal(kind: ProposalKind, params: Record<string, u
       return created
         ? `✅ ${key} додано до спринту «${sprintName}» (спринт створено)`
         : `✅ ${key} додано до спринту «${sprintName}»`;
+    }
+    case "calendar_create_event": {
+      const created = await createCalendarEvent({
+        title: str(params, "title"),
+        description: typeof params.description === "string" ? params.description : "",
+        startIso: str(params, "startIso"),
+        endIso: str(params, "endIso"),
+        attendeeEmails: Array.isArray(params.attendeeEmails) ? (params.attendeeEmails as string[]) : [],
+        requestId: str(params, "requestId"),
+      });
+      return renderAppliedUk(created);
     }
     default:
       throw new Error(`Unknown proposal kind: ${kind}`);
