@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
   selfOrigin: vi.fn(),
   claimSlackEvent: vi.fn(),
   agentThreadExists: vi.fn(),
+  appendTurn: vi.fn(),
 }));
 
 vi.mock("@/lib/slackSignature", () => ({ verifySlackSignature: h.verifySlackSignature }));
@@ -54,7 +55,7 @@ vi.mock("@/lib/agentProposals", () => ({
 vi.mock("@/lib/proposalExecutor", () => ({ applyProposal: h.applyProposal }));
 vi.mock("@/lib/selfOrigin", () => ({ selfOrigin: h.selfOrigin }));
 vi.mock("@/lib/slackEventClaim", () => ({ claimSlackEvent: h.claimSlackEvent }));
-vi.mock("@/lib/agentThread", () => ({ agentThreadExists: h.agentThreadExists }));
+vi.mock("@/lib/agentThread", () => ({ agentThreadExists: h.agentThreadExists, appendTurn: h.appendTurn }));
 
 import { POST } from "./route";
 
@@ -496,6 +497,50 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
       undefined,
     );
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('"так" confirm outcome is recorded into agent memory (appendTurn) so a follow-up question sees it', async () => {
+    h.readPendingProposal.mockResolvedValue(pending);
+    h.classifyDmReply.mockReturnValue("confirm");
+    h.claimApply.mockResolvedValue(true);
+    h.applyProposal.mockResolvedValue("✅ Створено ATP-123");
+
+    await POST(req(dmEvent("так", { ts: "100.001" })));
+    expect(h.appendTurn).toHaveBeenCalledWith("D1", "так", "✅ Створено ATP-123");
+  });
+
+  it('"ні" cancel outcome is recorded into agent memory (appendTurn)', async () => {
+    h.readPendingProposal.mockResolvedValue(pending);
+    h.classifyDmReply.mockReturnValue("cancel");
+
+    await POST(req(dmEvent("ні", { ts: "100.001" })));
+    expect(h.appendTurn).toHaveBeenCalledWith("D1", "ні", "Скасовано.");
+  });
+
+  it("an approver-gate refusal on a money-affecting proposal is CANCELLED, never applied, and recorded into agent memory", async () => {
+    // Finding 4 regression: a non-approver confirming a field_loss_set proposal
+    // must hit gateProposalApply's refusal branch (CANCELLED, no applyProposal
+    // call, refusal text posted) rather than silently applying.
+    const lossPending = { ...pending, id: "loss-1", kind: "field_loss_set" as const };
+    h.readPendingProposal.mockResolvedValue(lossPending);
+    h.classifyDmReply.mockReturnValue("confirm");
+    h.approverFor.mockReturnValue(undefined); // U1 is not an authorized approver
+
+    const res = await POST(req(dmEvent("так", { ts: "100.001" })));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.refused).toBe("approver-gate");
+
+    expect(h.setState).toHaveBeenCalledWith("loss-1", "CANCELLED");
+    expect(h.claimApply).not.toHaveBeenCalled();
+    expect(h.applyProposal).not.toHaveBeenCalled();
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "D1",
+      expect.stringContaining("затверджувач"),
+      expect.objectContaining({ key: "agent:U1:100.001:gate" }),
+      undefined,
+    );
+    expect(h.appendTurn).toHaveBeenCalledWith("D1", "так", expect.stringContaining("затверджувач"));
   });
 });
 

@@ -52,7 +52,7 @@ import { selfOrigin } from "@/lib/selfOrigin";
 import { contentRev, dmHelpKey, agentReplyKey, webhookFailureKey } from "@/lib/outboundKeys";
 import { parseSlackEvent, stripBotMention, hasLeadingMention, type SlackEventBody } from "@/lib/slackEventParse";
 import { claimSlackEvent } from "@/lib/slackEventClaim";
-import { agentThreadExists } from "@/lib/agentThread";
+import { agentThreadExists, appendTurn } from "@/lib/agentThread";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -261,6 +261,7 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
           { key: agentReplyKey(inp.userId, `${inp.incomingTs}:gate`), feature: "agent", channel: inp.surface, trigger: "webhook" },
           inp.threadTs,
         );
+        await appendTurn(inp.conversationKey, q, gate.refusalUk);
         return ack({ handled: "agent", refused: "approver-gate" });
       }
       const won = await claimApply(pending.id);
@@ -286,6 +287,7 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
         { key: agentReplyKey(inp.userId, `${inp.incomingTs}:apply`), feature: "agent", channel: inp.surface, trigger: "webhook" },
         inp.threadTs,
       );
+      await appendTurn(inp.conversationKey, q, result);
       return ack({ handled: "agent", applied: won && !applyFailed });
     }
     if (decision === "cancel") {
@@ -296,6 +298,7 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
         { key: agentReplyKey(inp.userId, `${inp.incomingTs}:cancel`), feature: "agent", channel: inp.surface, trigger: "webhook" },
         inp.threadTs,
       );
+      await appendTurn(inp.conversationKey, q, "Скасовано.");
       return ack({ handled: "agent", cancelled: true });
     }
     // "other" → supersede the pending proposal, then fall through to a new turn.
@@ -432,11 +435,19 @@ export async function POST(req: Request): Promise<Response> {
   // double-processing. Runs BEFORE the tracked-channel filter because an agent
   // thread can live in any channel (e.g. #issue-log needn't be tracked).
   //
-  // INVARIANT: agent-thread keys and verdict/ask (S6/S7) thread ts never overlap
-  // — `agent_threads` rows are created ONLY by `appendTurn` in /api/agent/run, so
-  // a published-verdict/ask thread is never an agent thread and still reaches the
-  // S7/S6 handlers below. If anything ever seeds agent_threads from a verdict
-  // thread, this branch would shadow the approver path — keep that from happening.
+  // INVARIANT: agent-thread keys and verdict/ask (S6/S7) thread ts never overlap.
+  // `agent_threads` rows are written by two paths: `appendTurn` (new DM/@mention
+  // turns in /api/agent/run, and this route's own confirm/cancel/gate-refusal
+  // outcomes below) and `appendBotTurn` via `lib/slack.ts` postMessage for
+  // bot-initiated DMs (alerts/notices). Neither can key a row on an EXISTING
+  // verdict/ask thread's ts: `appendBotTurn` only fires for a genuine DM channel
+  // id (`shouldRecordDmBotTurn` requires `channelId.startsWith("D")`, never a
+  // numeric ts), and `appendTurn`'s mention path keys on `thread_ts`, but the
+  // mention branch above explicitly defers (never calls handleAgentConversation)
+  // whenever that `thread_ts` already belongs to a published verdict/ask — a
+  // mention-started agent thread can only mint a BRAND-NEW top-level ts. If
+  // anything ever seeds agent_threads from an existing verdict thread's ts, this
+  // branch would shadow the approver path — keep that from happening.
   if (parsed.kind === "actionable" && !hasLeadingMention(parsed.replyText)) {
     let isAgent = false;
     try {
