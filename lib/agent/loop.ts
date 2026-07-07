@@ -14,6 +14,7 @@ import type { Proposal, Tool } from "./tools/types";
 import { toAnthropicTools, findTool } from "./tools/registry";
 import { jiraTools } from "./tools/jira";
 import { fieldLossTools } from "./tools/fieldLoss";
+import { calendarTools } from "./tools/calendar";
 
 const MODEL = "claude-sonnet-5";
 const MAX_ITERS = 8;
@@ -30,7 +31,7 @@ const MAX_TOKENS = 4096;
 const kyivDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" });
 const systemPrompt = (nowMs: number) => [
   `Сьогодні ${kyivDay.format(nowMs)} (Europe/Kyiv). Відлічуй «сьогодні», «цього місяця» тощо від цієї дати.`,
-  "Ти — асистент інженерної команди Orients у Slack. Ти вмієш шукати і змінювати задачі в Jira через інструменти. Ти також можеш відповідати про втрати дронів за період через інструмент field_loss_status.",
+  "Ти — асистент інженерної команди Orients у Slack. Ти вмієш шукати і змінювати задачі в Jira через інструменти. Ти також можеш відповідати про втрати дронів за період через інструмент field_loss_status і створювати зустрічі в Google Calendar через calendar_create_event.",
   "Правило мови: у вільній розмові й відповідях відповідай мовою користувача; підтвердження та echo для записів — українською.",
   "Маршрутизація виконавців у Jira автоматична — просто передай імʼя людини в jira_create.",
   "Будь-яка зміна (створення/коментар/перехід/оновлення) НЕ виконується одразу: інструмент повертає пропозицію, яку користувач підтверджує окремо.",
@@ -38,6 +39,7 @@ const systemPrompt = (nowMs: number) => [
   "«Додай задачу в наступний спринт» — це jira_add_to_next_sprint (спринт визначається автоматично); jira_update для спринтів не підходить.",
   "«Створи задачу … на наступний спринт» — це ОДНА дія: jira_create з addToNextSprint=true (одне підтвердження покриває і створення, і спринт). Не розбивай на два кроки і не обіцяй «після створення додам».",
   "Ніколи не пиши «Підтвердити? (так/ні)» звичайним текстом: підтвердження існує лише коли інструмент запису повернув пропозицію. Якщо інструмент повернув помилку — поясни її і не імітуй підтвердження.",
+  "«Постав/створи зустріч» — це calendar_create_event: перетвори відносну дату в конкретний Europe/Kyiv ISO (напр. 2026-07-08T15:00); без явної тривалості бери 30 хв; учасники — імена з реєстру або email. Це теж запис із підтвердженням.",
 ].join("\n");
 
 export type AnthropicLike = {
@@ -75,7 +77,7 @@ function toolUsesOf(content: unknown[]): ToolUseBlock[] {
 }
 
 export async function runAgent(userText: string, opts: RunAgentOptions = {}): Promise<AgentResult> {
-  const tools = opts.tools ?? [...jiraTools, ...fieldLossTools];
+  const tools = opts.tools ?? [...jiraTools, ...fieldLossTools, ...calendarTools];
   const client = (opts.client ?? new Anthropic()) as AnthropicLike;
   const maxIters = opts.maxIters ?? MAX_ITERS;
   const now = opts.now ?? (() => Date.now());
