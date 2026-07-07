@@ -1,0 +1,17 @@
+import { describe, expect, it } from "vitest";
+import { gateProposalApply } from "./proposalGate";
+
+describe("gateProposalApply", () => {
+  it("passes non-gated kinds for anyone", () => {
+    expect(gateProposalApply("jira_create", "U_RANDOM")).toEqual({ ok: true, extraParams: {} });
+  });
+  it("passes field_loss_set for an approver and injects their name", () => {
+    const r = gateProposalApply("field_loss_set", "U08G4EC244X");
+    expect(r).toEqual({ ok: true, extraParams: { by: "Oleksandr K" } });
+  });
+  it("refuses field_loss_set for a non-approver, in Ukrainian", () => {
+    const r = gateProposalApply("field_loss_set", "U_RANDOM");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.refusalUk).toContain("затверджувач");
+  });
+});

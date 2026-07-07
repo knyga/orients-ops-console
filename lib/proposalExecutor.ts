@@ -18,6 +18,14 @@ import {
 } from "@/lib/jira";
 import { createCalendarEvent } from "@/lib/googleCalendar";
 import { renderAppliedUk } from "@/lib/calendarEvent";
+import { upsertLossRecord } from "@/lib/lossStore";
+import { readPublished } from "@/lib/published";
+import { parsePeriodKey } from "@/lib/period";
+import { TRACKED_CHANNELS } from "@/lib/slackChannels";
+import { postMessage } from "@/lib/slack";
+import { contentRev, instructionAckKey } from "@/lib/outboundKeys";
+import { reportKey } from "@/lib/fieldDayVerdict";
+import { APPROVERS } from "@/lib/approvers";
 
 export type ProposalKind =
   | "jira_create"
@@ -25,7 +33,8 @@ export type ProposalKind =
   | "jira_transition"
   | "jira_update"
   | "jira_move_to_sprint"
-  | "calendar_create_event";
+  | "calendar_create_event"
+  | "field_loss_set";
 
 function str(params: Record<string, unknown>, key: string): string {
   const v = params[key];
@@ -63,6 +72,32 @@ async function resolveAndMove(
   }
   await moveIssueToSprint(sprintId, key);
   return created;
+}
+
+/** Best-effort Ukrainian ack in the day's earliest published verdict thread —
+ *  the visible activity log for an agent-applied loss change. Never throws:
+ *  the ledger row is the substance; a missing/unpublished day just skips. */
+async function ackLossInVerdictThread(date: string, text: string): Promise<void> {
+  try {
+    const period = parsePeriodKey(date.slice(0, 7));
+    if (!period) return;
+    const log = await readPublished(period);
+    const entries = Object.values(log)
+      .filter((e) => e.date === date)
+      .sort((a, b) => (a.reportTs ?? "").localeCompare(b.reportTs ?? ""));
+    const entry = entries[0];
+    if (!entry) return;
+    const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
+    if (!channel) return;
+    await postMessage(
+      channel.id,
+      text,
+      { key: instructionAckKey(reportKey(date, entry.reportTs), "loss", contentRev(text)), feature: "instruction", channel: channel.name, trigger: "unknown" },
+      entry.ts,
+    );
+  } catch (err) {
+    console.error("field_loss_set: verdict-thread ack failed:", err);
+  }
 }
 
 export async function applyProposal(kind: ProposalKind, params: Record<string, unknown>): Promise<string> {
@@ -120,6 +155,38 @@ export async function applyProposal(kind: ProposalKind, params: Record<string, u
         requestId: str(params, "requestId"),
       });
       return renderAppliedUk(created);
+    }
+    case "field_loss_set": {
+      const date = str(params, "date");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`field_loss_set: date must be YYYY-MM-DD, got "${date}"`);
+      const state = params.state === "found" || params.state === "lost" ? params.state : null;
+      if (!state) throw new Error(`field_loss_set: state must be "found" or "lost"`);
+      const by = typeof params.by === "string" && params.by ? params.by : APPROVERS[0].name;
+      const note =
+        typeof params.note === "string" && params.note.trim()
+          ? params.note.trim()
+          : state === "found"
+            ? "борт знайшли (через агента)"
+            : "борт втрачено (через агента)";
+      await upsertLossRecord({
+        date,
+        reportTs: "", // day-wide — same shape as `field-instructions --loss`
+        lost: true,
+        found: state === "found",
+        note,
+        source: "instruction",
+        crashTextHash: null,
+        updatedAt: new Date().toISOString(),
+        updatedBy: by,
+      });
+      const ack =
+        state === "found"
+          ? `🛸 Зафіксовано: борт знайдено — втрату за ${date} знято — ${by}. Причина: ${note}`
+          : `🛸 Зафіксовано: борт за ${date} втрачено (не знайдено) — ${by}. Причина: ${note}`;
+      await ackLossInVerdictThread(date, ack);
+      return state === "found"
+        ? `🛸 Зафіксовано: борт знайдено — втрату за ${date} знято.`
+        : `🛸 Зафіксовано: борт за ${date} втрачено (не знайдено).`;
     }
     default:
       throw new Error(`Unknown proposal kind: ${kind}`);

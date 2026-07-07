@@ -22,6 +22,24 @@ vi.mock("@/lib/googleCalendar", () => ({
   })),
 }));
 
+const mocks = vi.hoisted(() => ({
+  upsertLossRecord: vi.fn(),
+  readPublished: vi.fn(),
+  postMessage: vi.fn(),
+}));
+vi.mock("@/lib/lossStore", () => ({ upsertLossRecord: mocks.upsertLossRecord }));
+vi.mock("@/lib/published", async (orig) => {
+  const actual = await (orig as () => Promise<Record<string, unknown>>)();
+  return { ...actual, readPublished: mocks.readPublished };
+});
+vi.mock("@/lib/slack", () => ({ postMessage: mocks.postMessage }));
+
+beforeEach(() => {
+  mocks.upsertLossRecord.mockReset().mockResolvedValue(true);
+  mocks.readPublished.mockReset().mockResolvedValue({});
+  mocks.postMessage.mockReset().mockResolvedValue("1782900000.000200");
+});
+
 describe("applyProposal", () => {
   it("jira_create POSTs project + no assignee when accountId null, returns UA line with key+url", async () => {
     const f = mockFetch(201, { key: "MRLAB-3" });
@@ -178,5 +196,31 @@ describe("applyProposal jira_move_to_sprint", () => {
     expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({ name: "ATP 41", originBoardId: 1 });
     const urls = f.mock.calls.map((c) => String(c[0]));
     expect(urls.some((u) => u.includes("/rest/agile/1.0/sprint/88/issue"))).toBe(true);
+  });
+});
+
+describe("applyProposal field_loss_set", () => {
+  it("field_loss_set found: writes the day-wide instruction row and acks in the published thread", async () => {
+    mocks.readPublished.mockResolvedValue({
+      "2026-07-06#111.222": { date: "2026-07-06", reportTs: "111.222", channel: "field-qa", text: "…", postedAt: "t", ts: "111.222" },
+    });
+    const result = await applyProposal("field_loss_set", { date: "2026-07-06", state: "found", note: "знайшли на полі", by: "Oleksandr K" });
+    expect(mocks.upsertLossRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ date: "2026-07-06", reportTs: "", lost: true, found: true, source: "instruction", updatedBy: "Oleksandr K" }),
+    );
+    expect(mocks.postMessage).toHaveBeenCalled(); // ack in the verdict thread
+    expect(result).toContain("знято");
+  });
+
+  it("field_loss_set lost with no published entry: writes the row, skips the ack cleanly", async () => {
+    mocks.readPublished.mockResolvedValue({});
+    const result = await applyProposal("field_loss_set", { date: "2026-07-06", state: "lost", by: "Oleksandr K" });
+    expect(mocks.upsertLossRecord).toHaveBeenCalledWith(expect.objectContaining({ found: false }));
+    expect(mocks.postMessage).not.toHaveBeenCalled();
+    expect(result).toContain("втрачено");
+  });
+
+  it("field_loss_set rejects an invalid state", async () => {
+    await expect(applyProposal("field_loss_set", { date: "2026-07-06", state: "maybe" })).rejects.toThrow(/state/);
   });
 });
