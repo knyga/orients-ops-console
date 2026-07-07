@@ -16,16 +16,17 @@
  * re-classify or flip an already-decided day. The decision-keyed outbound dedup
  * (lib/outboundKeys) is a second layer on the resulting edit/ack.
  *
- * The conversational agent (DM / @mention / a plain thread follow-up in a known
- * agent thread), Phase C.2, does NOT run inline: the loop can take well over
- * Slack's 3s ack budget, so the webhook only claims the event, posts a
- * `🤔 думаю…` placeholder, and fires a non-awaited self-invoke to
+ * The conversational agent (DM / @mention), Phase C.2, does NOT run inline: the
+ * loop can take well over Slack's 3s ack budget, so the webhook only claims the
+ * event, posts a `🤔 думаю…` placeholder, and fires a non-awaited self-invoke to
  * `/api/agent/run` (see `deferAgentTurn`) which does the real work and edits the
  * placeholder. A reply to a pending write proposal ("так"/"ні") is the
  * exception — that decision is a fast DB flip + Slack post, so it's handled
- * inline in `handleAgentConversation` without deferring. Outside a DM, only the
- * original proposer's reply can drive that decision (requester-gating); anyone
- * else's reply is silently ignored.
+ * inline in `handleAgentConversation` without deferring. Outside a DM the agent
+ * is MENTION-ONLY (since 2026-07-07): a plain thread reply in a known agent
+ * thread can only confirm/cancel a pending proposal, and only when it comes from
+ * the original proposer (requester-gating) — any other plain reply is silently
+ * ignored, and a new request needs an @mention.
  *
  * The 200 response carries a small diagnostic body (handled / applied / error).
  * Slack only checks the 2xx status and ignores the body; it lets an operator
@@ -110,8 +111,10 @@ async function failVisibly(
  * `ts` is used only for the placeholder-post outbound key's uniqueness suffix;
  * `conversationKey` is the actual agent-memory/proposal key (DM → channelId,
  * @mention/thread → thread_ts) forwarded to `/api/agent/run`. `surface` "thread"
- * (a plain follow-up with no bot mention) is normalized to "mention" for the run
- * route, which only distinguishes DM vs. everything-else memory-keying.
+ * is normalized to "mention" for the run route defensively — since the 2026-07-07
+ * mention-only gate a plain thread reply never defers a turn, so this path only
+ * matters if that gate ever loosens; the run route only distinguishes DM vs.
+ * everything-else memory-keying.
  */
 async function deferAgentTurn(
   req: Request,
@@ -177,7 +180,11 @@ interface AgentTurnInput {
 
 /**
  * Surface-agnostic agent ingress — DM, @mention, or a plain thread follow-up all
- * funnel through here. Claims the event (dedup), gates on the allowlist, then
+ * funnel through here. Surface `"thread"` (a plain reply with no @mention) is
+ * CONFIRM-ONLY: it can confirm/cancel a pending proposal by its requester and
+ * nothing else — no pending proposal, a non-requester, or any other text is
+ * silently ignored (new requests outside a DM always need an @mention). For
+ * `"dm"`/`"mention"`, claims the event (dedup), gates on the allowlist, then
  * checks for a PENDING write proposal keyed on `conversationKey`:
  *   - a pending proposal exists AND we're outside a DM AND the replier isn't the
  *     original proposer → ignore (requester-gated: only the proposer drives a
@@ -192,6 +199,24 @@ interface AgentTurnInput {
  * that comfortably fit inside Slack's 3s ack budget.
  */
 async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promise<Response> {
+  // Mention-only outside DMs (2026-07-07): a plain, unmentioned reply in an agent
+  // thread can only CONFIRM or CANCEL a pending proposal by its requester — it can
+  // never start a new agent turn (new requests need an @mention; DMs are exempt).
+  // Gated BEFORE the event claim and the allowlist refusal so an ignored bystander
+  // message leaves no trace — no slack_events_seen row, no refusal post. The
+  // confirm/cancel path re-reads the proposal below; that duplicate read keeps the
+  // dm/mention flow (and its allowlist-before-state-machine order) untouched.
+  if (inp.surface === "thread") {
+    const pending = await readPendingProposal(inp.conversationKey);
+    if (!pending) return ack({ handled: "agent", ignored: "mention-required" });
+    if (pending.proposedBy !== inp.userId) {
+      return ack({ handled: "agent", ignored: "not-requester", user: inp.userId });
+    }
+    if (classifyDmReply(inp.text.trim()) === "other") {
+      return ack({ handled: "agent", ignored: "mention-required" });
+    }
+  }
+
   if (inp.eventId) {
     const fresh = await claimSlackEvent(inp.eventId, new Date().toISOString(), { eventType: "message" });
     if (!fresh) return ack({ skipped: "duplicate-event", event_id: inp.eventId });
@@ -385,11 +410,13 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
-  // A plain thread reply (no bot mention) — e.g. "так" / a follow-up — inside a
-  // known agent conversation. The mention-sibling of an @mention leads with a
-  // mention token and is handled by the mention branch, so skip those here to
-  // avoid double-processing. Runs BEFORE the tracked-channel filter because an
-  // agent thread can live in any channel (e.g. #issue-log needn't be tracked).
+  // A plain thread reply (no bot mention) inside a known agent conversation —
+  // CONFIRM-ONLY: it can carry a "так"/"ні" for a pending proposal and nothing
+  // else (handleAgentConversation ignores everything else; a new request needs an
+  // @mention). The mention-sibling of an @mention leads with a mention token and
+  // is handled by the mention branch, so skip those here to avoid
+  // double-processing. Runs BEFORE the tracked-channel filter because an agent
+  // thread can live in any channel (e.g. #issue-log needn't be tracked).
   //
   // INVARIANT: agent-thread keys and verdict/ask (S6/S7) thread ts never overlap
   // — `agent_threads` rows are created ONLY by `appendTurn` in /api/agent/run, so

@@ -538,30 +538,68 @@ describe("POST /api/slack/events — plain thread-reply agent branch + requester
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("a SECOND thread reply (distinct ts, no pending proposal) defers a new turn with a distinct placeholder key", async () => {
+  it("plain thread reply with NO pending proposal is ignored — no placeholder, no defer, no event claim (mention-only)", async () => {
     h.agentThreadExists.mockResolvedValue(true);
     h.readPendingProposal.mockResolvedValue(null);
 
-    await POST(
-      req(actionableEvent({ threadTs: "T1", user: "U1", text: "перше питання", channel: "C1", replyTs: "300.001" })),
+    const res = await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U1", text: "додай задачу в наступний спринт", channel: "C1", replyTs: "300.001" })),
     );
-    expect(h.postMessage).toHaveBeenCalledWith(
-      "C1",
-      "🤔 думаю…",
-      expect.objectContaining({ key: "agent:U1:300.001:ph" }),
-      "T1",
-    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ignored).toBe("mention-required");
 
-    h.postMessage.mockClear();
-    await POST(
-      req(actionableEvent({ threadTs: "T1", user: "U1", text: "друге питання", channel: "C1", replyTs: "300.002", eventId: "EvThread2" })),
+    expect(h.postMessage).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(h.claimSlackEvent).not.toHaveBeenCalled();
+  });
+
+  it("plain thread reply that is not так/ні while a proposal is pending → ignored; proposal stays PENDING (no supersede)", async () => {
+    h.agentThreadExists.mockResolvedValue(true);
+    h.readPendingProposal.mockResolvedValue(pending);
+    h.classifyDmReply.mockReturnValue("other");
+
+    const res = await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U1", text: "а ще додай опис", channel: "C1", replyTs: "300.003" })),
     );
+    const json = await res.json();
+    expect(json.ignored).toBe("mention-required");
+
+    expect(h.setState).not.toHaveBeenCalled(); // no SUPERSEDED
+    expect(h.postMessage).not.toHaveBeenCalled(); // no «Скасував попередню…», no placeholder
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(h.claimSlackEvent).not.toHaveBeenCalled();
+  });
+
+  it("a non-allowlisted user's plain thread reply is ignored WITHOUT a refusal post", async () => {
+    h.agentThreadExists.mockResolvedValue(true);
+    h.readPendingProposal.mockResolvedValue(null);
+    h.isAllowedSlackUser.mockReturnValue(false);
+
+    const res = await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U9", text: "привіт боте", channel: "C1", replyTs: "300.004" })),
+    );
+    const json = await res.json();
+    expect(json.ignored).toBe("mention-required");
+    expect(h.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("an @mention with a pending proposal still supersedes it and defers a new turn (mention path unchanged)", async () => {
+    h.readPendingProposal.mockResolvedValue(pending);
+    h.classifyDmReply.mockReturnValue("other");
+
+    const res = await POST(
+      req(mentionEvent({ ts: "T1", threadTs: "T1", user: "U1", channel: "C1", text: "<@U0BOT> зроби інакше" })),
+    );
+    expect(res.status).toBe(200);
+    expect(h.setState).toHaveBeenCalledWith("p1", "SUPERSEDED");
     expect(h.postMessage).toHaveBeenCalledWith(
       "C1",
-      "🤔 думаю…",
-      expect.objectContaining({ key: "agent:U1:300.002:ph" }),
+      "Скасував попередню пропозицію, обробляю новий запит.",
+      expect.objectContaining({ key: "agent:U1:T1:supersede" }),
       "T1",
     );
+    expect(global.fetch).toHaveBeenCalledTimes(1); // the deferred new turn
   });
 
   it("thread reply by a non-requester is ignored while a proposal is pending", async () => {
