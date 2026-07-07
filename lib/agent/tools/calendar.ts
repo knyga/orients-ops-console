@@ -1,7 +1,7 @@
 /**
  * Calendar tool for the agent loop: calendar_create_event resolves into a
  * confirm-first Proposal (the loop never writes). Attendees resolve through
- * the lib/people.ts roster (email field) or raw emails — ANY unresolved
+ * the lib/people.ts roster (email field), a Slack-profile email fallback (lib/attendeesLive.ts), or raw emails — ANY unresolved
  * attendee blocks the proposal (a meeting missing the right people is
  * useless), unlike jira_create's propose-unassigned fallback. Times the model
  * supplies are validated here, so the echo always shows the resolved absolute
@@ -12,7 +12,7 @@
  * lib/googleCalendar). Needs GOOGLE_SERVICE_ACCOUNT_KEY + GOOGLE_CALENDAR_ORGANIZER
  * at apply time; propose renders without them.
  */
-import { resolveAttendees } from "@/lib/attendees";
+import { resolveAttendeesLive } from "@/lib/attendeesLive";
 import { validateEventTimes, renderProposalUk } from "@/lib/calendarEvent";
 import { applyProposal } from "@/lib/proposalExecutor";
 import type { Proposal, ProposeContext, Tool } from "./types";
@@ -34,7 +34,7 @@ export async function calendarCreateProposal(
 
   const times = validateEventTimes(startIso, endIso);
   if (!times.ok) throw new Error(times.problem);
-  const resolved = resolveAttendees(queries);
+  const resolved = await resolveAttendeesLive(queries);
   if (!resolved.ok) throw new Error(resolved.problems.join(" "));
 
   const desc = typeof args.description === "string" ? args.description.trim() : "";

@@ -149,7 +149,10 @@ export function renderProposalUk(r: {
   description?: string;
 }): string {
   const who = r.attendees
-    .map((a) => (a.name === a.email ? a.email : `${a.name} (${a.email})`))
+    .map((a) => {
+      if (a.name === a.email) return a.email;
+      return `${a.name} (${a.email}${a.source === "slack" ? ", зі Slack" : ""})`;
+    })
     .join(", ");
   const lines = [
     `📅 Створю зустріч «${r.title}»`,

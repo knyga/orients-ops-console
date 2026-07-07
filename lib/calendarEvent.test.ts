@@ -115,6 +115,21 @@ describe("renderProposalUk", () => {
     expect(out).toContain("Google Meet: так");
     expect(out).toContain("(так/ні)");
   });
+  it("marks slack-sourced emails and leaves roster ones unmarked", () => {
+    const out = renderProposalUk({
+      title: "Синк",
+      startMs: Date.parse("2026-07-08T12:00:00Z"),
+      endMs: Date.parse("2026-07-08T12:30:00Z"),
+      attendees: [
+        { name: "Taras Panasiuk", email: "taras@getshaman.com" },
+        { name: "Bohdan F", email: "bohdan@orients.ai", source: "slack" },
+      ],
+      organizer: "team@orients.ai",
+    });
+    expect(out).toContain("Bohdan F (bohdan@orients.ai, зі Slack)");
+    expect(out).toContain("Taras Panasiuk (taras@getshaman.com)");
+    expect(out).not.toContain("taras@getshaman.com, зі Slack");
+  });
 });
 
 describe("renderAppliedUk", () => {
