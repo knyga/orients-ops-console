@@ -56,4 +56,22 @@ describe("resolveAttendeesLive", () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.attendees).toHaveLength(1);
   });
+
+  it("rejects a garbage Slack profile email — fails loudly naming both sources", async () => {
+    fetchUserEmail.mockResolvedValue("  garbage  ");
+    const r = await resolveAttendeesLive(["Богдан"], PEOPLE_FIXTURE);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.problems[0]).toBe("У «Bohdan F» немає email ні в реєстрі (lib/people.ts), ні в профілі Slack.");
+    }
+  });
+
+  it("trims a padded-but-valid Slack profile email before using it", async () => {
+    fetchUserEmail.mockResolvedValue("  bohdan@orients.ai  ");
+    const r = await resolveAttendeesLive(["Богдан"], PEOPLE_FIXTURE);
+    expect(r).toEqual({
+      ok: true,
+      attendees: [{ name: "Bohdan F", email: "bohdan@orients.ai", source: "slack" }],
+    });
+  });
 });

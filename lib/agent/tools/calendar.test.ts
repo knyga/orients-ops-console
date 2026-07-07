@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { calendarCreateProposal, calendarTools } from "./calendar";
+
+// Guard: fixtures here never reach a needs-email roster person, so this mock
+// currently doesn't matter — but without it, a future roster-name test would
+// become env/network-dependent on lib/slack's fetchUserEmail.
+vi.mock("@/lib/slack", () => ({ fetchUserEmail: vi.fn(async () => null) }));
 
 const ARGS = {
   title: "Синк по польотах",

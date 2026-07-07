@@ -9,6 +9,7 @@
 import {
   resolveAttendeeQuery,
   collectAttendees,
+  EMAIL_RE,
   type AttendeeQueryResult,
   type AttendeeResolution,
 } from "./attendees";
@@ -26,8 +27,11 @@ export async function resolveAttendeesLive(
   const results: AttendeeQueryResult[] = await Promise.all(
     pure.map(async (r): Promise<AttendeeQueryResult> => {
       if (r.kind !== "needs-email") return r;
-      const email = await fetchUserEmail(r.slackId);
-      if (email) return { kind: "resolved", attendee: { name: r.name, email, source: "slack" } };
+      const raw = await fetchUserEmail(r.slackId);
+      const email = raw?.trim();
+      if (email && EMAIL_RE.test(email)) {
+        return { kind: "resolved", attendee: { name: r.name, email, source: "slack" } };
+      }
       return {
         kind: "problem",
         problem: `У «${r.name}» немає email ні в реєстрі (lib/people.ts), ні в профілі Slack.`,

@@ -107,10 +107,23 @@ interface UsersInfoResponse extends SlackOk {
 /** Best-effort profile email for a user id (needs the users:read.email scope).
  *  Null — never a throw — when the scope is missing, the profile hides the
  *  email, or the call fails: the caller (lib/attendeesLive.ts) degrades to its
- *  own loud both-sources error, so this stays silent by design. */
+ *  own loud both-sources error, so this stays silent by design.
+ *
+ *  Uses a direct bounded fetch instead of `call()`: an 8s timeout and NO
+ *  429-retry loop. `call()`'s retry-after sleep (up to 5x) can run well past an
+ *  agent turn's ~50s budget and Vercel's 60s function cap — a degraded Slack
+ *  must not hang the turn (the frozen «думаю…» placeholder failure mode). */
 export async function fetchUserEmail(userId: string): Promise<string | null> {
   try {
-    const body = await call<UsersInfoResponse>("users.info", new URLSearchParams({ user: userId }));
+    const params = new URLSearchParams({ user: userId });
+    const res = await fetch(`${API}/users.info?${params}`, {
+      headers: { Authorization: `Bearer ${token()}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as UsersInfoResponse;
+    if (body.ok === false) return null;
     return body.user?.profile?.email ?? null;
   } catch {
     return null;

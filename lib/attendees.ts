@@ -29,7 +29,7 @@ export type AttendeeQueryResult =
   | { kind: "needs-email"; name: string; slackId: string }
   | { kind: "problem"; problem: string };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function noEmailProblem(name: string): string {
   return `У «${name}» немає email у реєстрі (lib/people.ts) — додай поле email.`;
