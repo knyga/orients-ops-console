@@ -105,6 +105,19 @@ describe("applyProposal", () => {
     ).rejects.toThrow(/startIso/);
   });
 
+  it("calendar_create_event rejects missing/empty attendeeEmails instead of defaulting to []", async () => {
+    const base = {
+      title: "Синк",
+      startIso: "2026-07-08T15:00",
+      endIso: "2026-07-08T15:30",
+      requestId: "r-1",
+    };
+    await expect(applyProposal("calendar_create_event", base)).rejects.toThrow(/attendeeEmails/);
+    await expect(
+      applyProposal("calendar_create_event", { ...base, attendeeEmails: [] }),
+    ).rejects.toThrow(/attendeeEmails/);
+  });
+
   it("rejects an unknown kind", async () => {
     await expect(applyProposal("nope" as never, {})).rejects.toThrow(/Unknown proposal kind/);
   });

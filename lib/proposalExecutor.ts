@@ -33,6 +33,14 @@ function str(params: Record<string, unknown>, key: string): string {
   return v;
 }
 
+function nonEmptyStringArray(params: Record<string, unknown>, key: string): string[] {
+  const v = params[key];
+  if (!Array.isArray(v) || v.length === 0 || !v.every((e) => typeof e === "string" && e.trim())) {
+    throw new Error(`Missing required "${key}".`);
+  }
+  return v as string[];
+}
+
 /** Resolve a (possibly to-be-created) sprint to an id and move the issue in.
  *  A null sprintId re-checks by name first — the sprint may have appeared
  *  between propose and confirm. Returns whether it had to create the sprint. */
@@ -108,7 +116,7 @@ export async function applyProposal(kind: ProposalKind, params: Record<string, u
         description: typeof params.description === "string" ? params.description : "",
         startIso: str(params, "startIso"),
         endIso: str(params, "endIso"),
-        attendeeEmails: Array.isArray(params.attendeeEmails) ? (params.attendeeEmails as string[]) : [],
+        attendeeEmails: nonEmptyStringArray(params, "attendeeEmails"),
         requestId: str(params, "requestId"),
       });
       return renderAppliedUk(created);

@@ -225,14 +225,29 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
     const decision = classifyDmReply(q);
     if (decision === "confirm") {
       const won = await claimApply(pending.id);
-      const result = won ? await applyProposal(pending.kind, pending.params) : "Вже застосовано.";
+      let result: string;
+      let applyFailed = false;
+      if (!won) {
+        result = "Вже застосовано.";
+      } else {
+        try {
+          result = await applyProposal(pending.kind, pending.params);
+        } catch (err) {
+          // Deliberately do NOT un-claim: at-most-once semantics — a partial
+          // success (e.g. event created but response parsing failed) must not
+          // be retried into a duplicate write. The user re-requests instead.
+          const message = err instanceof Error ? err.message : String(err);
+          result = `❌ Не вдалося застосувати: ${message}`;
+          applyFailed = true;
+        }
+      }
       await postMessage(
         inp.channelId,
         result,
         { key: agentReplyKey(inp.userId, `${inp.incomingTs}:apply`), feature: "agent", channel: inp.surface, trigger: "webhook" },
         inp.threadTs,
       );
-      return ack({ handled: "agent", applied: won });
+      return ack({ handled: "agent", applied: won && !applyFailed });
     }
     if (decision === "cancel") {
       await setState(pending.id, "CANCELLED");

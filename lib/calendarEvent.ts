@@ -22,8 +22,11 @@ export interface CalendarEventInput {
   startIso: string;
   endIso: string;
   attendeeEmails: string[];
-  /** Meet conferenceData requestId — generated once at propose time and
-   *  persisted in the proposal params, so a retried apply reuses it. */
+  /** Meet conferenceData.createRequest requestId — generated once at propose
+   *  time and persisted in the proposal params for determinism across the
+   *  confirm round-trip. This dedups only the Meet conference creation; it
+   *  does NOT make a retried events.insert idempotent — a retried apply can
+   *  still create a duplicate calendar event. */
   requestId: string;
 }
 

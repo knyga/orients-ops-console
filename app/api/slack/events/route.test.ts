@@ -420,6 +420,24 @@ describe("POST /api/slack/events — DM confirm-first proposal state machine (C.
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('"так" where applyProposal rejects → posts a ❌ failure message (no 5xx), does not un-claim', async () => {
+    h.readPendingProposal.mockResolvedValue(pending);
+    h.classifyDmReply.mockReturnValue("confirm");
+    h.claimApply.mockResolvedValue(true);
+    h.applyProposal.mockRejectedValue(new Error("Calendar API error: insufficient permissions"));
+
+    const res = await POST(req(dmEvent("так")));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.applied).toBe(false);
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "D1",
+      expect.stringContaining("❌ Не вдалося застосувати: Calendar API error: insufficient permissions"),
+      expect.objectContaining({ feature: "agent", channel: "dm" }),
+      undefined,
+    );
+  });
+
   it('"ні" with a pending proposal → CANCELLED + "Скасовано.", keyed per-message-ts, no self-invoke', async () => {
     h.readPendingProposal.mockResolvedValue(pending);
     h.classifyDmReply.mockReturnValue("cancel");

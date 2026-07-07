@@ -123,6 +123,16 @@ describe("runAgent", () => {
     expect(body.system).toContain("2026-07-06");
   });
 
+  it("defaults to the FULL tool set (jira + field-loss + calendar) when opts.tools is omitted", async () => {
+    const client = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] }]);
+    await runAgent("hi", { client });
+    const body = client.messages.create.mock.calls[0][0] as { tools: { name: string }[] };
+    const names = body.tools.map((t) => t.name);
+    expect(names).toContain("jira_search");
+    expect(names).toContain("field_loss_status");
+    expect(names).toContain("calendar_create_event");
+  });
+
   it("seeds prior history before the new user message", async () => {
     const client = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] }]);
     await runAgent("new question", {
