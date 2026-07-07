@@ -150,4 +150,56 @@ describe("runAgent", () => {
       { role: "user", content: "new question" },
     ]);
   });
+
+  it("folds a leading assistant turn (bot-initiated DM alert) into a synthetic user turn so the first message is role user", async () => {
+    const client = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] }]);
+    await runAgent("дякую", {
+      client,
+      tools: [readTool],
+      history: [{ role: "assistant", text: "⚠️ Виявлено втрату борта 2026-07-06" }],
+    });
+    const body = client.messages.create.mock.calls[0][0] as { messages: { role: string; content: unknown }[] };
+    expect(body.messages[0].role).toBe("user");
+    expect(body.messages[0].content).toContain("Виявлено втрату борта 2026-07-06");
+    expect(body.messages[1]).toEqual({ role: "user", content: "дякую" });
+  });
+
+  it("folds MULTIPLE leading assistant turns (a stranded pair after capTranscript's slice) into a single user turn", async () => {
+    const client = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] }]);
+    await runAgent("новий запит", {
+      client,
+      tools: [readTool],
+      history: [
+        { role: "assistant", text: "alert one" },
+        { role: "assistant", text: "alert two" },
+        { role: "user", text: "earlier q" },
+        { role: "assistant", text: "earlier a" },
+      ],
+    });
+    const body = client.messages.create.mock.calls[0][0] as { messages: { role: string; content: unknown }[] };
+    expect(body.messages[0].role).toBe("user");
+    expect(body.messages[0].content).toContain("alert one");
+    expect(body.messages[0].content).toContain("alert two");
+    expect(body.messages[1]).toEqual({ role: "user", content: "earlier q" });
+    expect(body.messages[2]).toEqual({ role: "assistant", content: "earlier a" });
+    expect(body.messages[3]).toEqual({ role: "user", content: "новий запит" });
+  });
+
+  it("leaves a normal user-first history unchanged (no-op fold)", async () => {
+    const client = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] }]);
+    await runAgent("new question", {
+      client,
+      tools: [readTool],
+      history: [
+        { role: "user", text: "earlier q" },
+        { role: "assistant", text: "earlier a" },
+      ],
+    });
+    const body = client.messages.create.mock.calls[0][0] as { messages: { role: string; content: unknown }[] };
+    expect(body.messages).toEqual([
+      { role: "user", content: "earlier q" },
+      { role: "assistant", content: "earlier a" },
+      { role: "user", content: "new question" },
+    ]);
+  });
 });

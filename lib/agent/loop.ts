@@ -65,6 +65,22 @@ export interface RunAgentOptions {
 interface ToolUseBlock { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
 interface TextBlock { type: "text"; text: string }
 
+type HistoryTurn = { role: "user" | "assistant"; text: string };
+
+/** The Messages API requires the first message to be role "user". Bot-initiated
+ *  DM notifications (appendBotTurn — lib/agentThread.ts) can leave a stored
+ *  transcript assistant-first (an alert into an empty/stale thread, or
+ *  capTranscript's slice(-10) stranding a leading assistant turn), which the API
+ *  would reject with a 400. Fold any leading assistant turns into one synthetic
+ *  quoted user turn so replay is always valid. */
+function normalizeHistory(history: HistoryTurn[]): HistoryTurn[] {
+  let i = 0;
+  while (i < history.length && history[i].role === "assistant") i++;
+  if (i === 0) return history;
+  const quoted = history.slice(0, i).map((t) => t.text).join("\n\n");
+  return [{ role: "user", text: `(Повідомлення від бота раніше:)\n${quoted}` }, ...history.slice(i)];
+}
+
 function textOf(content: unknown[]): string {
   return content
     .filter((b): b is TextBlock => (b as { type?: string }).type === "text")
@@ -85,7 +101,7 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
 
   const anthropicTools = toAnthropicTools(tools);
   const messages: { role: "user" | "assistant"; content: unknown }[] = [
-    ...(opts.history ?? []).map((h) => ({ role: h.role, content: h.text as unknown })),
+    ...normalizeHistory(opts.history ?? []).map((h) => ({ role: h.role, content: h.text as unknown })),
     { role: "user", content: userText },
   ];
 
