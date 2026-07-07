@@ -47,6 +47,7 @@ import { isAllowedSlackUser, AGENT_REFUSAL_UK } from "@/lib/agent/access";
 import { classifyDmReply } from "@/lib/agentDm";
 import { readPendingProposal, claimApply, setState } from "@/lib/agentProposals";
 import { applyProposal } from "@/lib/proposalExecutor";
+import { gateProposalApply } from "@/lib/proposalGate";
 import { selfOrigin } from "@/lib/selfOrigin";
 import { contentRev, dmHelpKey, agentReplyKey, webhookFailureKey } from "@/lib/outboundKeys";
 import { parseSlackEvent, stripBotMention, hasLeadingMention, type SlackEventBody } from "@/lib/slackEventParse";
@@ -249,6 +250,19 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
     }
     const decision = classifyDmReply(q);
     if (decision === "confirm") {
+      // Money-affecting kinds apply only for authorized approvers; the gate also
+      // resolves the approver's display name as the write's `by`.
+      const gate = gateProposalApply(pending.kind, pending.proposedBy);
+      if (!gate.ok) {
+        await setState(pending.id, "CANCELLED");
+        await postMessage(
+          inp.channelId,
+          gate.refusalUk,
+          { key: agentReplyKey(inp.userId, `${inp.incomingTs}:gate`), feature: "agent", channel: inp.surface, trigger: "webhook" },
+          inp.threadTs,
+        );
+        return ack({ handled: "agent", refused: "approver-gate" });
+      }
       const won = await claimApply(pending.id);
       let result: string;
       let applyFailed = false;
@@ -256,7 +270,7 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
         result = "Вже застосовано.";
       } else {
         try {
-          result = await applyProposal(pending.kind, pending.params);
+          result = await applyProposal(pending.kind, { ...pending.params, ...gate.extraParams });
         } catch (err) {
           // Deliberately do NOT un-claim: at-most-once semantics — a partial
           // success (e.g. event created but response parsing failed) must not

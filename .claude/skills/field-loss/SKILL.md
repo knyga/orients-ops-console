@@ -30,6 +30,8 @@ Needs `POSTGRES_URL`. The web mirror is the **Losses** tab (`GET
 ## Correcting the ledger
 
 Never edit rows by hand. A recovery is an approver reply «борт знайшли» in the
-day's verdict thread (confirm-first) or the manual CLI above; the Звіт-edit
-path still works for initial declarations (the next sync re-classifies edited
-text).
+day's verdict thread (confirm-first), the manual CLI above, or asking the
+agent in a DM (e.g. «зафіксуй, що борт за 06.07 знайшли») — the agent proposes
+a `field_loss_set` write and applies it confirm-first, only for an authorized
+approver (`lib/proposalGate.ts`); the Звіт-edit path still works for initial
+declarations (the next sync re-classifies edited text).
