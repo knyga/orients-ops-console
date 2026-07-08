@@ -1,13 +1,14 @@
 /**
- * Who may talk to the Slack agent. Pure — reuses the hardcoded people registry
- * (lib/people.ts): anyone with a Slack id in the roster is allowed (broader than
- * the 2 verdict approvers). An unknown user gets a fixed Ukrainian refusal.
+ * Who may talk to the Slack agent. Pure — restricted to the hardcoded verdict
+ * approvers (lib/approvers.ts) for now, to prevent misuse while the agent's
+ * write surface matures; the wider lib/people.ts roster is deliberately NOT
+ * enough. An unknown user gets a fixed Ukrainian refusal.
  */
-import { personForSlackId } from "../people";
+import { isApprover } from "../approvers";
 
 export function isAllowedSlackUser(userId: string): boolean {
   if (!userId) return false;
-  return personForSlackId(userId) !== undefined;
+  return isApprover(userId);
 }
 
 export const AGENT_REFUSAL_UK =
