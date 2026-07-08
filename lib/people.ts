@@ -18,7 +18,11 @@ export interface Person {
   slackId?: string;
   jiraAccount?: string;
   /** Jira Cloud accountId (required to set a real assignee). Distinct from
-   *  jiraAccount, which is only a display name/username. Unset for now. */
+   *  jiraAccount, which is only a display name/username. Filled 2026-07-08 from
+   *  the live Jira user list, exact-displayName-matched against the confirmed
+   *  jiraAccount join — and only for ACTIVE Jira accounts (assigning to a
+   *  deactivated account is a Jira 400, so inactive people keep the safe
+   *  named-in-description fallback in lib/jiraRouting.ts). */
   jiraAccountId?: string;
   githubLogin?: string;
   /** Workspace email for Google Calendar invites (filled by a human, like every
@@ -46,26 +50,26 @@ export const PEOPLE: Person[] = [
   // Leadership / engineering
   // Confirmed 2026-06-30: rosterInitial "О" (Олександр field crew) is this person;
   // the bare jira "Oleksandr" (2025) is a DIFFERENT person, Oleksandr Soroka (below).
-  { name: "Oleksandr K", role: "CEO/CTO", slackId: "U08G4EC244X", jiraAccount: "Oleksandr Knyga", rosterInitial: "О", aliases: ["Олександр Книга"] },
-  { name: "Bohdan Forostianyi", role: "Head of Engineering", slackId: "U08G4HZQTTR", jiraAccount: "Bohdan Forostianyi", githubLogin: "forobohd-orients", aliases: ["Богдан Форостяний"] },
+  { name: "Oleksandr K", role: "CEO/CTO", slackId: "U08G4EC244X", jiraAccount: "Oleksandr Knyga", jiraAccountId: "712020:2c0a41b9-bdfe-4fd5-a57b-b8047af80d38", rosterInitial: "О", aliases: ["Олександр Книга"] },
+  { name: "Bohdan Forostianyi", role: "Head of Engineering", slackId: "U08G4HZQTTR", jiraAccount: "Bohdan Forostianyi", jiraAccountId: "712020:a9e29b5c-76ce-4b70-a8d4-0e3810bb3f85", githubLogin: "forobohd-orients", aliases: ["Богдан Форостяний"] },
 
   // Developers (Slack + Jira + GitHub where present)
-  { name: "Volodymyr Pavliukevych", role: "developer", slackId: "U09526J29AL", jiraAccount: "Volodymyr Pavliukevych", githubLogin: "VolodymyrPavliukevych", aliases: ["Володимир Павлюкевич"] },
+  { name: "Volodymyr Pavliukevych", role: "developer", slackId: "U09526J29AL", jiraAccount: "Volodymyr Pavliukevych", jiraAccountId: "712020:2c9fa200-866c-4d8b-b00a-bd7d434220b0", githubLogin: "VolodymyrPavliukevych", aliases: ["Володимир Павлюкевич"] },
   // also flies (field crew) → rosterInitial joins the field-bonus summary
-  { name: "Nadia Khasyshyn", role: "developer / field", slackId: "U099CA0UTFS", jiraAccount: "Nadia Khasyshyn", githubLogin: "nadiia-khasyshyn", rosterInitial: "Н", aliases: ["Надія Хасишин"] },
+  { name: "Nadia Khasyshyn", role: "developer / field", slackId: "U099CA0UTFS", jiraAccount: "Nadia Khasyshyn", jiraAccountId: "712020:db500adf-04e5-4d47-bc2e-8fa57a7ec640", githubLogin: "nadiia-khasyshyn", rosterInitial: "Н", aliases: ["Надія Хасишин"] },
   // alt slack U09176GKTMW ("daniltomashi"); 2nd github login "daniltomashi"
-  { name: "Danylo Tomashy", role: "developer / field", slackId: "U090AL585N2", jiraAccount: "Danylo Tomashy", githubLogin: "danylo-tomashy", rosterInitial: "Д", aliases: ["Данило Томаший"] },
+  { name: "Danylo Tomashy", role: "developer / field", slackId: "U090AL585N2", jiraAccount: "Danylo Tomashy", jiraAccountId: "712020:e7ec9331-d84e-47cb-8711-d022220a1133", githubLogin: "danylo-tomashy", rosterInitial: "Д", aliases: ["Данило Томаший"] },
   // alt slack U09P9EBJRA7 ("Ljubomyr")
   { name: "Liubomyr Zaiats", role: "developer / field", slackId: "U091JDPH9L5", jiraAccount: "Liubomyr Zaiats", githubLogin: "lzaiatsoai", rosterInitial: "Л", aliases: ["Любомир Заяць"] },
   // jira bare "Andrii" confirmed as Yefimov (distinct from Svidnytskyi / Gresyk)
-  { name: "Andrii Yefimov", role: "developer", slackId: "U08G4J1U5EK", jiraAccount: "Andrii", githubLogin: "andrii-yefimov", aliases: ["Андрій Єфімов"] },
+  { name: "Andrii Yefimov", role: "developer", slackId: "U08G4J1U5EK", jiraAccount: "Andrii", jiraAccountId: "712020:30d29f09-31cc-4fba-a801-15fe0e3dfe6c", githubLogin: "andrii-yefimov", aliases: ["Андрій Єфімов"] },
   { name: "Andrii Svidnytskyi", role: "developer", slackId: "U08GHQUEDPZ", jiraAccount: "Andrii Svidnytskyi", aliases: ["Андрій Свідницький"] },
   { name: "Andrii Gresyk", role: "developer", slackId: "U09MQPBA9AN", jiraAccount: "Andrii Gresyk", aliases: ["Андрій Гресик"] },
-  { name: "Maksym Horpynchenko", role: "developer", slackId: "U08G4HVH8B1", jiraAccount: "Horpynchenko Maksym", aliases: ["Максим Горпинченко"] },
+  { name: "Maksym Horpynchenko", role: "developer", slackId: "U08G4HVH8B1", jiraAccount: "Horpynchenko Maksym", jiraAccountId: "712020:8a82cbd1-892a-4e84-ba63-335a65830402", aliases: ["Максим Горпинченко"] },
   { name: "Dmytro Antoniuk", role: "developer", slackId: "U08G4HWUYKZ", jiraAccount: "dmytro.antoniuk", aliases: ["Дмитро Антонюк"] },
   { name: "Denys Borysov", role: "developer", slackId: "U08G4HYEGUX", jiraAccount: "denys.borysov", aliases: ["Денис Борисов"] },
   // alt slack U0ANQ8FB6DT, U08NWFTAZFE ("Dmytro R")
-  { name: "Dmytro Rozdobudko", role: "developer", slackId: "U08PXFRLGAX", jiraAccount: "dmytro.rozdobudko", aliases: ["Дмитро Роздобудько"] },
+  { name: "Dmytro Rozdobudko", role: "developer", slackId: "U08PXFRLGAX", jiraAccount: "dmytro.rozdobudko", jiraAccountId: "712020:5ea27f6e-e295-45cc-8bae-9232424d050f", aliases: ["Дмитро Роздобудько"] },
   { name: "Ruslan B", role: "developer", slackId: "U08G4HTFG6B", jiraAccount: "Ruslan", aliases: ["Руслан"] },
   // the bare jira "Oleksandr" (1 issue, 2025-05) is this person, not the CEO (confirmed 2026-06-30)
   { name: "Oleksandr Soroka", role: "developer", slackId: "U08G4HURRCP", jiraAccount: "Oleksandr", aliases: ["Олександр Сорока"] },
