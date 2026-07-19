@@ -28,7 +28,7 @@ export interface DroneMessage {
 
 export type DroneClassifier = (text: string, postedOn?: string) => Promise<{ reports: DroneDayReport[] }>;
 
-const kyivPostDate = (ts: string) => videoUploadDate(new Date(Number(ts) * 1000).toISOString());
+export const kyivPostDate = (ts: string) => videoUploadDate(new Date(Number(ts) * 1000).toISOString());
 
 /** A report candidate carries at least one per-unit tally ("1шт", "0 шт", …). */
 const CANDIDATE = /шт/;

@@ -106,6 +106,23 @@ export const lossRecords = pgTable(
   (t) => [primaryKey({ columns: [t.date, t.reportTs] })],
 );
 
+/**
+ * Content-addressed cache of the expensive per-message Claude extractions in the
+ * #field-qa pass (vision airborne reads + drone-count classification). Lets the
+ * nightly re-extract only new/edited messages instead of the whole active month,
+ * keeping it under Vercel Hobby's 60s cap. See lib/extractCache.ts.
+ */
+export const extractCache = pgTable(
+  "extract_cache",
+  {
+    kind: text("kind").notNull(), // "airborne" | "drone"
+    hash: text("hash").notNull(), // sha256 of the content key
+    result: text("result").notNull(), // JSON payload of the extraction result
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.hash] })],
+);
+
 /** Loss-alert state per period — what the bot already told people. */
 export const lossAlerts = pgTable("loss_alerts", {
   period: text("period").primaryKey(), // periodKey, e.g. "2026-07"

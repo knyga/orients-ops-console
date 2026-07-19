@@ -7,7 +7,17 @@ const { fetchMessages, writeReport, extractDroneReports } = vi.hoisted(() => ({
 }));
 vi.mock("./slack", () => ({ fetchMessages, downloadFileBase64: vi.fn() }));
 vi.mock("./flightExtract", () => ({ extractAirborne: vi.fn() }));
-vi.mock("./extractDroneReports", () => ({ extractDroneReports }));
+vi.mock("./extractDroneReports", () => ({
+  extractDroneReports,
+  kyivPostDate: (ts: string) => ts,
+}));
+vi.mock("./droneCountReport", () => ({ classifyDroneCount: vi.fn() }));
+// Keep the real (pure) cache helpers; only stub the DB-backed store to a cold
+// no-op so the extract runs without a database in unit tests.
+vi.mock("./extractCache", async (orig) => {
+  const actual = await (orig as () => Promise<Record<string, unknown>>)();
+  return { ...actual, dbExtractCacheStore: () => ({ readMany: async () => new Map(), write: async () => {} }) };
+});
 vi.mock("./reports", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
   return { ...actual, writeReport };
@@ -64,10 +74,13 @@ describe("extractFieldQa", () => {
 
     const { report } = await extractFieldQa({ start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" });
 
-    expect(extractDroneReports).toHaveBeenCalledWith([
-      { ts: "1000", text: expect.stringContaining("Статистика") },
-      { ts: "1001", text: "Андріан R&D - 1шт" },
-    ]);
+    expect(extractDroneReports).toHaveBeenCalledWith(
+      [
+        { ts: "1000", text: expect.stringContaining("Статистика") },
+        { ts: "1001", text: "Андріан R&D - 1шт" },
+      ],
+      expect.any(Function), // the cache-wrapped classifier
+    );
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([
       { name: "Андріан", isPerson: true, count: 1 },
     ]);
