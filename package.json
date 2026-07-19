@@ -12,6 +12,7 @@
     "vimeo": "node --conditions=react-server --import tsx scripts/vimeo.ts",
     "github": "node --conditions=react-server --import tsx scripts/github.ts",
     "jira": "node --conditions=react-server --import tsx scripts/jira.ts",
+    "sprint": "node --conditions=react-server --import tsx scripts/sprint.ts",
     "jira-write": "node --conditions=react-server --import tsx scripts/jira-write.ts",
     "calendar-write": "node --conditions=react-server --import tsx scripts/calendar-write.ts",
     "agent": "node --conditions=react-server --import tsx scripts/agent.ts",

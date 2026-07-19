@@ -69,6 +69,11 @@ export const backfillEditKey = (date: string, rev: string): string =>
 export const instructionAckKey = (date: string, axis: string, rev: string): string =>
   `instruction-ack:${date}:${axis}:${rev}`;
 
+/** Sprint completion posts to #general, keyed by sprint slug so the weekly cron's
+ *  ±59-min re-fire dedups to one post while a new sprint (new slug) reposts. */
+export const sprintCommittedKey = (slug: string): string => `sprint-committed:${slug}`;
+export const sprintCompletedKey = (slug: string): string => `sprint-completed:${slug}`;
+
 /** Roster correction (S-roster): edit the verdict's crew suffix + threaded ack. */
 export const rosterEditKey = (date: string, rev: string): string =>
   `roster-edit:${date}:${rev}`;

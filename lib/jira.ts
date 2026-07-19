@@ -11,6 +11,7 @@
  */
 import "server-only";
 import type { JiraIssue } from "./jiraStats";
+import type { SprintIssue } from "./sprintReport";
 
 const API_VERSION = "application/json";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -320,6 +321,108 @@ export interface SearchRow {
   key: string;
   summary: string;
   status: string;
+}
+
+/** Distinct sprints an issue has ever belonged to, from its Sprint-field
+ *  changelog. Each Sprint change records the full sprint set in from/toString
+ *  (comma-separated names); the union across all changes is every sprint the
+ *  issue lived in. No Sprint history → it sits in exactly its current sprint → 1. */
+function deriveSprintCount(histories: JiraIssue["histories"]): number {
+  const names = new Set<string>();
+  for (const h of histories) {
+    for (const it of h.items) {
+      if (it.field !== "Sprint") continue;
+      for (const raw of [it.fromString, it.toString]) {
+        for (const name of (raw ?? "").split(",")) {
+          const trimmed = name.trim();
+          if (trimmed) names.add(trimmed);
+        }
+      }
+    }
+  }
+  return names.size > 0 ? names.size : 1;
+}
+
+interface RawSprintIssue {
+  key: string;
+  fields: {
+    summary?: string;
+    assignee?: { accountId: string; displayName: string } | null;
+    status?: { name?: string; statusCategory?: { name?: string } };
+  };
+  changelog?: {
+    histories?: {
+      items: { field: string; fromString: string | null; toString: string | null }[];
+    }[];
+  };
+}
+
+function mapSprintIssue(raw: RawSprintIssue): SprintIssue {
+  const histories = (raw.changelog?.histories ?? []).map((h) => ({
+    created: "",
+    items: (h.items ?? []).map((it) => ({
+      field: it.field,
+      fromString: it.fromString,
+      toString: it.toString,
+    })),
+  }));
+  return {
+    key: raw.key,
+    summary: raw.fields.summary ?? "",
+    assignee: raw.fields.assignee
+      ? { accountId: raw.fields.assignee.accountId, displayName: raw.fields.assignee.displayName }
+      : null,
+    statusName: raw.fields.status?.name ?? "",
+    statusCategory: raw.fields.status?.statusCategory?.name ?? "",
+    sprintCount: deriveSprintCount(histories),
+  };
+}
+
+/** Page a JQL search returning the rich SprintIssue shape (status category +
+ *  Sprint-changelog-derived sprint count). Shared by fetchSprintIssues and
+ *  fetchIssuesByKeys. */
+async function fetchSprintScoped(jql: string): Promise<SprintIssue[]> {
+  const cfg = config();
+  const collected: SprintIssue[] = [];
+  let nextPageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({
+      jql,
+      maxResults: "100",
+      fields: ["summary", "assignee", "status"].join(","),
+      expand: "changelog",
+    });
+    if (nextPageToken) params.set("nextPageToken", nextPageToken);
+    const url = `${cfg.baseUrl}/rest/api/3/search/jql?${params.toString()}`;
+    const res = await fetch(url, {
+      headers: { Accept: API_VERSION, Authorization: authHeader(cfg) },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new JiraError(
+        `Jira API returned ${res.status} ${res.statusText}${body ? `: ${body.slice(0, 300)}` : ""}`,
+        res.status,
+      );
+    }
+    const page = (await res.json()) as { issues?: RawSprintIssue[]; isLast?: boolean; nextPageToken?: string };
+    for (const raw of page.issues ?? []) collected.push(mapSprintIssue(raw));
+    nextPageToken = page.isLast ? undefined : page.nextPageToken;
+  } while (nextPageToken);
+  return collected;
+}
+
+/** All issues currently in the given sprint, with status category + sprint count. */
+export async function fetchSprintIssues(sprintId: number): Promise<SprintIssue[]> {
+  return fetchSprintScoped(`sprint = ${sprintId} ORDER BY status ASC`);
+}
+
+/** Live status + sprint count for an explicit set of issue keys (the frozen
+ *  baseline re-fetched at report time). Empty input → no query. */
+export async function fetchIssuesByKeys(keys: string[]): Promise<SprintIssue[]> {
+  if (keys.length === 0) return [];
+  const list = keys.map((k) => `"${k}"`).join(",");
+  return fetchSprintScoped(`key in (${list})`);
 }
 
 export async function searchIssues(jql: string, max = 20): Promise<SearchRow[]> {
