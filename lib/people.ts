@@ -113,3 +113,6 @@ export function personForJiraAccount(acct: string, people: Person[] = PEOPLE): P
 export function personForInitial(initial: string, people: Person[] = PEOPLE): Person | undefined {
   return people.find((p) => p.rosterInitial === initial);
 }
+export function personForJiraAccountId(id: string, people: Person[] = PEOPLE): Person | undefined {
+  return people.find((p) => p.jiraAccountId === id);
+}
