@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatDayMessage, formatOverride, formatTimeTail, formatDuration, publishableDays, ROSTER_MARKER, splitRosterSuffix, withRosterSuffix, parseRosterSuffix, withDroneLine, withLossLine } from "./verdictPublish";
+import { mentionize, dementionText } from "./mention";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
@@ -74,7 +75,7 @@ describe("formatDayMessage", () => {
     expect(msg).toContain("за телеметрією польотів не було (0 хв у повітрі), хоча у звіті — виїзд 17:00–20:00");
     expect(msg).toContain("немає повідомлення про датасет");
     expect(msg).toContain("(виїзд 17:00–20:00; у повітрі 0 хв;"); // uniform tail
-    expect(msg).toContain("👥 У полі: Андріан, Сергій.");
+    expect(msg).toContain(`👥 У полі: ${mentionize("Андріан")}, ${mentionize("Сергій")}.`);
   });
 
   it("NEEDS_REVIEW airborne-unknown day: honest wording + deploy window, no '0 хв у повітрі'", () => {
@@ -91,7 +92,7 @@ describe("formatDayMessage", () => {
     expect(msg).toContain("політ відбувся (17:00–20:00), але час у повітрі не вказано");
     expect(msg).toContain("у повітрі — не вказано"); // uniform tail, honest about the unknown
     expect(msg).not.toContain("у повітрі 0 хв");
-    expect(msg).toContain("👥 У полі: Андріан, Сергій.");
+    expect(msg).toContain(`👥 У полі: ${mentionize("Андріан")}, ${mentionize("Сергій")}.`);
   });
 
   it("NEEDS_REVIEW with a real airborne figure still shows the airborne clause", () => {
@@ -164,15 +165,20 @@ describe("formatDayMessage", () => {
 describe("formatOverride", () => {
   it("strikes the original and amends for an approve", () => {
     const o = formatOverride("⚠️ 2026-06-04 — потрібна перевірка: …", "accepted_exception", "Oleksandr K", "ми тестували");
-    expect(o.updatedText).toBe("~⚠️ 2026-06-04 — потрібна перевірка: …~\n🟡 Оновлено → прийнято (виняток), Oleksandr K: ми тестували");
-    expect(o.replyText).toMatch(/^🟡 Зафіксовано: прийнято \(виняток\), Oleksandr K\. Причина: ми тестували/);
+    expect(o.updatedText).toBe(`~⚠️ 2026-06-04 — потрібна перевірка: …~\n🟡 Оновлено → прийнято (виняток), ${mentionize("Oleksandr K")}: ми тестували`);
+    expect(o.replyText).toMatch(new RegExp(`^🟡 Зафіксовано: прийнято \\(виняток\\), ${mentionize("Oleksandr K")}\\. Причина: ми тестували`));
   });
 
   it("uses the rejected icon/label for a disapprove", () => {
     const o = formatOverride("✅ 2026-06-05 — прийнято …", "rejected", "Bohdan Forostianyi", "не приймається");
     expect(o.updatedText).toContain("~✅ 2026-06-05 — прийнято …~");
-    expect(o.updatedText).toContain("⛔ Оновлено → відхилено, Bohdan Forostianyi: не приймається");
+    expect(o.updatedText).toContain(`⛔ Оновлено → відхилено, ${mentionize("Bohdan Forostianyi")}: не приймається`);
     expect(o.replyText).toMatch(/^⛔ Зафіксовано: відхилено/);
+  });
+
+  it("mentions the approver in an override", () => {
+    const { replyText } = formatOverride("✅ 2026-06-13 — прийнято (…).", "rejected", "Oleksandr K", "no dataset");
+    expect(replyText).toContain(mentionize("Oleksandr K"));
   });
 });
 
@@ -180,10 +186,10 @@ describe("crew suffix", () => {
   it("round-trips body + roster", () => {
     const body = "✅ 2026-06-13 — прийнято.";
     const text = withRosterSuffix(body, ["Андріан", "Любомир"]);
-    expect(text).toBe(`${body}\n${ROSTER_MARKER}Андріан, Любомир.`);
+    expect(text).toBe(`${body}\n${ROSTER_MARKER}${mentionize("Андріан")}, ${mentionize("Любомир")}.`);
     const split = splitRosterSuffix(text);
     expect(split.body).toBe(body);
-    expect(split.rosterLine).toBe(`${ROSTER_MARKER}Андріан, Любомир.`);
+    expect(split.rosterLine).toBe(`${ROSTER_MARKER}${mentionize("Андріан")}, ${mentionize("Любомир")}.`);
   });
 
   it("omits the suffix for an empty roster and splits cleanly when absent", () => {
@@ -191,9 +197,13 @@ describe("crew suffix", () => {
     expect(splitRosterSuffix("body")).toEqual({ body: "body", rosterLine: null, droneLine: null });
   });
 
+  it("round-trips the roster namespace: first-names out as mentions, back as first-names", () => {
+    expect(parseRosterSuffix(withRosterSuffix("body", ["Влад", "Тарас"]))).toEqual(["Влад", "Тарас"]);
+  });
+
   it("formatDayMessage appends the crew line for an ACCEPTED day", () => {
     const msg = formatDayMessage(day({ roster: ["Андріан", "Любомир"] }));
-    expect(msg).toContain(`\n${ROSTER_MARKER}Андріан, Любомир.`);
+    expect(msg).toContain(`\n${ROSTER_MARKER}${mentionize("Андріан")}, ${mentionize("Любомир")}.`);
   });
 
   it("formatDayMessage omits the crew line when roster is empty", () => {
@@ -206,7 +216,7 @@ describe("crew suffix", () => {
     const o = formatOverride(body, "accepted_exception", "Oleksandr K", "ми тестували");
     const result = rosterLine ? `${o.updatedText}\n${rosterLine}` : o.updatedText;
     expect(result).toContain("~⚠️ 2026-06-04 — потрібна перевірка: …~");
-    expect(result).toContain(`${ROSTER_MARKER}Тарас.`);
+    expect(result).toContain(`${ROSTER_MARKER}${mentionize("Тарас")}.`);
     expect(result).not.toContain("~👥");
   });
 });
@@ -236,8 +246,8 @@ const droneBase: DayVerdict = {
 describe("formatDayMessage drone line", () => {
   it("appends the drone line after the crew suffix", () => {
     const msg = formatDayMessage(droneBase);
-    expect(msg).toContain("\n👥 У полі: Влад, Тарас.");
-    expect(msg).toContain("\n🛸 Дрони: Андріан 2, інші 8 (усього 10)");
+    expect(msg).toContain(`\n👥 У полі: ${mentionize("Влад")}, ${mentionize("Тарас")}.`);
+    expect(msg).toContain(`\n🛸 Дрони: ${mentionize("Андріан")} 2, інші 8 (усього 10)`);
     expect(msg.indexOf("👥")).toBeLessThan(msg.indexOf("🛸")); // crew before drones
   });
   it("omits the drone line when drone presence is unknown (legacy verdict)", () => {
@@ -257,7 +267,7 @@ describe("formatDayMessage drone line", () => {
   });
   it("counts win over the absence marker when both could apply", () => {
     const msg = formatDayMessage({ ...droneBase, droneReportPresent: true });
-    expect(msg).toContain("🛸 Дрони: Андріан 2, інші 8 (усього 10)");
+    expect(msg).toContain(`🛸 Дрони: ${mentionize("Андріан")} 2, інші 8 (усього 10)`);
     expect(msg).not.toContain("звіт не подано");
   });
 });
@@ -266,13 +276,15 @@ describe("region discipline", () => {
   const withDrones = formatDayMessage(droneBase);
   it("splitRosterSuffix peels the crew line drone-free and returns the drone line", () => {
     const { body, rosterLine, droneLine } = splitRosterSuffix(withDrones);
-    expect(rosterLine).toBe("👥 У полі: Влад, Тарас.");
-    expect(droneLine).toBe("🛸 Дрони: Андріан 2, інші 8 (усього 10)");
+    expect(rosterLine).toBe(`👥 У полі: ${mentionize("Влад")}, ${mentionize("Тарас")}.`);
+    expect(droneLine).toBe(`🛸 Дрони: ${mentionize("Андріан")} 2, інші 8 (усього 10)`);
     expect(body).not.toContain("👥");
     expect(body).not.toContain("🛸");
   });
   it("parseRosterSuffix ignores the drone line", () => {
-    expect(parseRosterSuffix(withDrones)).toEqual(["Влад", "Тарас"]);
+    // Roundtrips through mentionize/dementionText, so it comes back as the
+    // registry's canonical name (not necessarily the alias that was stored).
+    expect(parseRosterSuffix(withDrones)).toEqual([dementionText(mentionize("Влад")), dementionText(mentionize("Тарас"))]);
   });
   it("withDroneLine round-trips a re-composed message", () => {
     const { body, rosterLine, droneLine } = splitRosterSuffix(withDrones);
@@ -284,7 +296,7 @@ describe("region discipline", () => {
     const plain = formatDayMessage({ ...droneBase, droneReport: undefined });
     const { rosterLine, droneLine } = splitRosterSuffix(plain);
     expect(droneLine).toBeNull();
-    expect(rosterLine).toBe("👥 У полі: Влад, Тарас.");
+    expect(rosterLine).toBe(`👥 У полі: ${mentionize("Влад")}, ${mentionize("Тарас")}.`);
   });
 });
 
@@ -300,7 +312,7 @@ describe("REJECTED rendering", () => {
     const msg = formatDayMessage(rejected);
     expect(msg).toContain("⛔ 2026-06-30");
     expect(msg).toContain("відхилено: виїзд 120 хв — менше 3 год");
-    expect(msg).toContain("👥 У полі: Влад, Любомир.");
+    expect(msg).toContain(`👥 У полі: ${mentionize("Влад")}, ${mentionize("Любомир")}.`);
     expect(msg).not.toMatch(/прийнято/);
   });
 

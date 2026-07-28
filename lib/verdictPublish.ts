@@ -13,6 +13,7 @@ import { MIN_DEPLOY_MIN, MIN_VIDEO_MIN } from "./fieldDayVerdict";
 import { dateWithWeekday } from "./workdays";
 import type { DayVerdict } from "./fieldDayVerdict";
 import { formatDroneLine, type DroneEntry } from "./droneReport";
+import { mentionize, dementionText } from "./mention";
 
 const ICON: Record<string, string> = {
   ACCEPTED: "✅",
@@ -27,14 +28,14 @@ export const ROSTER_MARKER = "👥 У полі: ";
 /** Append the crew suffix line. Empty roster → body unchanged. Pure. */
 export function withRosterSuffix(body: string, roster: string[]): string {
   if (roster.length === 0) return body;
-  return `${body}\n${ROSTER_MARKER}${roster.join(", ")}.`;
+  return `${body}\n${ROSTER_MARKER}${roster.map(mentionize).join(", ")}.`;
 }
 
 export const DRONE_MARKER = "🛸 Дрони: ";
 
 /** Append the drone-count line. Null/empty entries → text unchanged. Pure. */
 export function withDroneLine(text: string, entries: DroneEntry[] | undefined): string {
-  const line = entries ? formatDroneLine(entries) : null;
+  const line = entries ? formatDroneLine(entries, { mention: true }) : null;
   return line ? `${text}\n${line}` : text;
 }
 
@@ -46,7 +47,7 @@ export function withDroneLine(text: string, entries: DroneEntry[] | undefined): 
  * data can't back). Pure.
  */
 export function withDroneRegion(text: string, day: DayVerdict): string {
-  const counts = formatDroneLine(day.droneReport ?? []);
+  const counts = formatDroneLine(day.droneReport ?? [], { mention: true });
   if (counts) return `${text}\n${counts}`;
   if (day.droneReportPresent === false) return `${text}\n${DRONE_MARKER}звіт не подано.`;
   return text;
@@ -82,7 +83,7 @@ export function splitRosterSuffix(text: string): { body: string; rosterLine: str
 export function parseRosterSuffix(text: string): string[] {
   const { rosterLine } = splitRosterSuffix(text);
   if (!rosterLine) return [];
-  return rosterLine
+  return dementionText(rosterLine)
     .slice(ROSTER_MARKER.length)
     .replace(/\.\s*$/, "")
     .split(",")
@@ -127,9 +128,10 @@ export function formatOverride(
 ): OverrideMessages {
   const icon = decision === "accepted_exception" ? "🟡" : "⛔";
   const label = decision === "accepted_exception" ? "прийнято (виняток)" : "відхилено";
+  const who = mentionize(by);
   return {
-    updatedText: `~${originalText}~\n${icon} Оновлено → ${label}, ${by}: ${reason}`,
-    replyText: `${icon} Зафіксовано: ${label}, ${by}. Причина: ${reason}`,
+    updatedText: `~${originalText}~\n${icon} Оновлено → ${label}, ${who}: ${reason}`,
+    replyText: `${icon} Зафіксовано: ${label}, ${who}. Причина: ${reason}`,
   };
 }
 

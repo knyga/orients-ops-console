@@ -22,6 +22,7 @@ vi.mock("./lossStore", () => ({ upsertLossRecord }));
 import { applyInstruction } from "./applyInstruction";
 import type { PublishedEntry } from "./published";
 import type { InstructionClassification } from "./instructionClassifyPrompt";
+import { mentionize } from "./mention";
 
 const period = { start: "2026-06-01", end: "2026-06-30" };
 
@@ -77,7 +78,7 @@ describe("applyInstruction dataset axis", () => {
     expect(channelId).toBe("C08GY2NKF9D");
     expect(ts).toBe(e.ts);
     expect(newText).toContain("~⚠️ 2026-06-09");
-    expect(newText).toContain("⛔ Оновлено → відхилено, Oleksandr K:");
+    expect(newText).toContain(`⛔ Оновлено → відхилено, ${mentionize("Oleksandr K")}:`);
     expect(newText).toContain("👥 У полі: Любомир, Надія.");
     expect(newText).toContain("🛸 Дрони: Андріан 2, Любомир 3, інші 8 (усього 13)");
     // The override stamp is persisted so redeliveries / later day-axis replies dedupe.
@@ -135,6 +136,20 @@ describe("applyInstruction dataset axis", () => {
     expect(updateMessage).not.toHaveBeenCalled();
   });
 
+  it("mentionizes the approver in the dataset ack", async () => {
+    await applyInstruction({
+      entry: entry(),
+      period,
+      axis: "dataset",
+      instruction: { ...datasetDecline, datasetStatus: "WAIVED" } as InstructionClassification,
+      by: "Oleksandr K",
+      evidence: "",
+      trigger: "webhook",
+    });
+    const ackTexts = postMessage.mock.calls.map((c) => c[1] as string);
+    expect(ackTexts.some((t) => t.includes(mentionize("Oleksandr K")))).toBe(true);
+  });
+
   it("is idempotent: an already-rejected override skips the edit on redelivery", async () => {
     await applyInstruction({
       entry: entry({ decision: "rejected", by: "Oleksandr K", ackedAt: "2026-07-03T19:23:00.000Z" }),
@@ -166,7 +181,7 @@ describe("applyInstruction day axis (refactor regression)", () => {
       expect.objectContaining({ axis: "day", decision: "rejected" }),
     );
     expect(updateMessage).toHaveBeenCalledTimes(1);
-    expect(updateMessage.mock.calls[0][2]).toContain("⛔ Оновлено → відхилено, Oleksandr K: no-go");
+    expect(updateMessage.mock.calls[0][2]).toContain(`⛔ Оновлено → відхилено, ${mentionize("Oleksandr K")}: no-go`);
     expect(postMessage).toHaveBeenCalledTimes(1); // the generic ⛔ Зафіксовано ack
     expect(writePublished).toHaveBeenCalledTimes(1);
   });

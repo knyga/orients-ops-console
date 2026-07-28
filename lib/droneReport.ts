@@ -1,5 +1,6 @@
 /** Pure domain helpers for per-person/per-category drone counts parsed from a
  *  #field-qa drone-count report. No server/Next imports; unit-tested. */
+import { mentionize } from "./mention";
 
 export interface DroneEntry {
   /** Name as written in the report (person or category), e.g. "Андріан", "15ка". */
@@ -43,10 +44,13 @@ export function droneTotals(entries: DroneEntry[]): DroneTotals {
   return { peopleTotal, otherTotal, grandTotal: peopleTotal + otherTotal };
 }
 
-/** Ordered "<name> <count>" people terms + an optional folded "інші <n>" term. */
-function droneTerms(merged: DroneEntry[]): string[] {
+/** Ordered "<name> <count>" people terms + an optional folded "інші <n>" term.
+ *  When `mention` is true, person names render as Slack `<@id>` mentions. */
+function droneTerms(merged: DroneEntry[], mention = false): string[] {
   const { otherTotal } = droneTotals(merged);
-  const terms = merged.filter((e) => e.isPerson).map((e) => `${e.name} ${e.count}`);
+  const terms = merged
+    .filter((e) => e.isPerson)
+    .map((e) => `${mention ? mentionize(e.name) : e.name} ${e.count}`);
   if (otherTotal > 0) terms.push(`інші ${otherTotal}`);
   return terms;
 }
@@ -56,11 +60,16 @@ function droneTerms(merged: DroneEntry[]): string[] {
  * no positive entries. People listed as-written, non-person categories folded
  * into a single "інші <n>" term, grand total in parens:
  *   🛸 Дрони: Андріан 2, Любомир 3, інші 9 (усього 14)
+ * Pass `{ mention: true }` on the Slack-post render path to @mention person
+ * entries; `formatDroneCsv` and the web page keep the default (plain names).
  */
-export function formatDroneLine(entries: DroneEntry[]): string | null {
+export function formatDroneLine(
+  entries: DroneEntry[],
+  opts: { mention?: boolean } = {},
+): string | null {
   const merged = mergeDroneEntries(entries).filter((e) => e.count > 0);
   if (merged.length === 0) return null;
-  return `🛸 Дрони: ${droneTerms(merged).join(", ")} (усього ${droneTotals(merged).grandTotal})`;
+  return `🛸 Дрони: ${droneTerms(merged, opts.mention).join(", ")} (усього ${droneTotals(merged).grandTotal})`;
 }
 
 /** Same content as formatDroneLine, CSV-friendly: no emoji, "; " separators,

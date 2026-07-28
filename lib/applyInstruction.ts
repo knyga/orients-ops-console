@@ -17,6 +17,7 @@
  * Idempotent via the primitives' own guards + content-rev outbound keys.
  */
 import "server-only";
+import { mentionize } from "./mention";
 import { postMessage } from "./slack";
 import { contentRev, instructionAckKey, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
@@ -73,6 +74,7 @@ async function ack(entry: PublishedEntry, text: string, axis: string, trigger: S
 /** Apply one confirmed instruction. Returns whether an effect landed. */
 export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ applied: boolean }> {
   const { entry, period, axis, instruction: c, by, evidence, trigger = "unknown" } = args;
+  const who = mentionize(by);
 
   if (axis === "day") {
     if (c.decision !== "accepted_exception" && c.decision !== "rejected") return { applied: false };
@@ -98,7 +100,7 @@ export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ ap
     const decision = c.datasetStatus === "DECLINED" ? "rejected" : "accepted_exception";
     await upsertResolution({ date: entry.date, axis: "dataset", decision, note: c.reason, source: evidence || "slack", recordedAt: new Date().toISOString(), by });
     const label = decision === "rejected" ? "датасет ⛔ причину відхилено" : "датасет 📝 виняток (не потрібен)";
-    const applied = await ack(entry, `📝 Зафіксовано: ${label} — ${by}. Причина: ${c.reason}`, "dataset", trigger);
+    const applied = await ack(entry, `📝 Зафіксовано: ${label} — ${who}. Причина: ${c.reason}`, "dataset", trigger);
     if (decision === "rejected" && !dayRescuedByException(entry.date, await readResolutions(), entry.reportTs ?? null)) {
       // A dataset decline machine-rejects ALL of the day's reports (the dataset
       // axis is day-wide by design); only THIS thread's message is amended here —
@@ -112,7 +114,7 @@ export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ ap
 
   if (axis === "video") {
     await upsertResolution({ date: entry.date, axis: "video", decision: "accepted_exception", note: c.reason, source: evidence || "slack", recordedAt: new Date().toISOString(), by });
-    const applied = await ack(entry, `🎥 Зафіксовано: відео зараховано (виняток) — ${by}. Причина: ${c.reason}`, "video", trigger);
+    const applied = await ack(entry, `🎥 Зафіксовано: відео зараховано (виняток) — ${who}. Причина: ${c.reason}`, "video", trigger);
     return { applied };
   }
 
@@ -134,13 +136,13 @@ export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ ap
       c.lossState === "found"
         ? `🛸 Зафіксовано: борт знайдено — втрату за ${entry.date} знято`
         : `🛸 Зафіксовано: борт за ${entry.date} втрачено (не знайдено)`;
-    const applied = await ack(entry, `${label} — ${by}. Причина: ${c.reason}`, "loss", trigger);
+    const applied = await ack(entry, `${label} — ${who}. Причина: ${c.reason}`, "loss", trigger);
     return { applied };
   }
 
   // airborne
   if (typeof c.airborneMinutes !== "number") return { applied: false };
   await upsertAirborneOverride({ date: entry.date, minutes: c.airborneMinutes, note: c.reason, by, source: evidence || "slack", recordedAt: new Date().toISOString() });
-  const applied = await ack(entry, `✈️ Зафіксовано час у повітрі: ${c.airborneMinutes.toFixed(0)} хв — ${by}. Причина: ${c.reason}`, "airborne", trigger);
+  const applied = await ack(entry, `✈️ Зафіксовано час у повітрі: ${c.airborneMinutes.toFixed(0)} хв — ${who}. Причина: ${c.reason}`, "airborne", trigger);
   return { applied };
 }

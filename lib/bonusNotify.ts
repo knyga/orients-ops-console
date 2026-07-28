@@ -7,6 +7,7 @@
  * No fs/network. See docs/superpowers/specs/2026-06-28-rolling-field-bonus-design.md.
  */
 import { TRIP, EARLY, WEEKEND, type DayBonus } from "./fieldBonus";
+import { mentionize } from "./mention";
 
 export interface PersonAmount {
   name: string;
@@ -45,7 +46,7 @@ function parts(p: PersonAmount): string {
 
 export function formatThreadBreakdown(date: string, people: PersonAmount[]): string {
   const lines = [`💰 Бонуси за ${date} (попередньо): разом ${dayTotal(people)} грн`];
-  for (const p of people) lines.push(`• ${p.name} — ${p.total} грн (${parts(p)})`);
+  for (const p of people) lines.push(`• ${mentionize(p.name)} — ${p.total} грн (${parts(p)})`);
   lines.push(PROVISIONAL);
   return lines.join("\n");
 }

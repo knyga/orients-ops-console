@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { dayPersonBonuses, dayTotal, formatThreadBreakdown, formatDm, formatNoBonusNote, type PersonAmount } from "./bonusNotify";
 import type { DayBonus } from "./fieldBonus";
+import { mentionize } from "./mention";
 
 const counted = (over: Partial<DayBonus> = {}): DayBonus => ({
   date: "2026-06-19", reportTs: null, reportCount: 1, roster: ["Андріан", "Тарас"], deployMin: 240, videoMin: 10,
@@ -49,10 +50,15 @@ describe("messages", () => {
   ];
   it("thread breakdown lists people, the total, and the provisional caveat", () => {
     const t = formatThreadBreakdown("2026-06-19", people);
-    expect(t).toContain("Андріан");
+    expect(t).toContain(`• ${mentionize("Андріан")}`);
     expect(t).toContain("900");
     expect(t).toContain(String(dayTotal(people))); // 1600
     expect(t).toContain("попередн"); // provisional
+  });
+  it("mentions people in the thread breakdown", () => {
+    const p: PersonAmount[] = [{ name: "Андріан", base: 700, early: 0, weekend: 0, total: 700 }];
+    const msg = formatThreadBreakdown("2026-06-19", p);
+    expect(msg).toContain(`• ${mentionize("Андріан")} — 700 грн`);
   });
   it("DM shows only the recipient + finance pointer, not other names", () => {
     const dm = formatDm("2026-06-19", people[0]);

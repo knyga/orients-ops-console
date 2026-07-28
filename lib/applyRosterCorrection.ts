@@ -16,6 +16,7 @@ import { splitRosterSuffix, withRosterSuffix } from "./verdictPublish";
 import { reportKey } from "./fieldDayVerdict";
 import type { RosterOutcome } from "../scripts/fieldRosterReport";
 import type { Period } from "./period";
+import { mentionize } from "./mention";
 
 export async function applyRosterDecision(args: {
   entry: PublishedEntry;
@@ -54,9 +55,11 @@ export async function applyRosterDecision(args: {
     trigger,
   });
 
-  const notCounted = Object.entries(outcome.eligibility).filter(([, v]) => v === "not_counted").map(([n]) => n);
+  const notCounted = Object.entries(outcome.eligibility)
+    .filter(([, v]) => v === "not_counted")
+    .map(([n]) => mentionize(n));
   const tail = notCounted.length ? ` (не рахується: ${notCounted.join(", ")})` : "";
-  const replyText = `👥 Зафіксовано склад: ${outcome.roster.join(", ")}${tail} — ${outcome.by}.`;
+  const replyText = `👥 Зафіксовано склад: ${outcome.roster.map(mentionize).join(", ")}${tail} — ${mentionize(outcome.by)}.`;
   await postMessage(
     channel.id,
     replyText,
