@@ -9,6 +9,8 @@ import {
   type SprintIssue,
   type SprintSnapshot,
 } from "./sprintReport";
+import { mention } from "./mention";
+import { personForJiraAccountId } from "./people";
 
 function issue(partial: Partial<SprintIssue> & { key: string }): SprintIssue {
   return {
@@ -156,6 +158,27 @@ describe("formatCommittedMessage", () => {
     expect(text).toContain("Не призначено");
     // Assignee header appears once, statuses nested under it.
     expect(text.match(/Taras/g)?.length).toBe(1);
+  });
+
+  it("mentions a known assignee in the committed message", () => {
+    const acc = "712020:2c9fa200-866c-4d8b-b00a-bd7d434220b0";
+    const snapshot: SprintSnapshot = {
+      sprintId: 11,
+      sprintName: "ATP 43",
+      slug: "ATP-43",
+      capturedAt: "2026-07-27T18:00:00.000Z",
+      issues: [
+        issue({
+          key: "ATP-1",
+          summary: "x",
+          assignee: { accountId: acc, displayName: "Volodymyr Pavliukevych" },
+          statusName: "Done",
+          statusCategory: "Done",
+        }),
+      ],
+    };
+    const msg = formatCommittedMessage(snapshot);
+    expect(msg).toContain(`*${mention(personForJiraAccountId(acc)!)}*`);
   });
 });
 

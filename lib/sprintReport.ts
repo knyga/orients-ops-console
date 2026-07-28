@@ -16,6 +16,9 @@
  * only on that shape.
  */
 
+import { mention } from "./mention";
+import { personForJiraAccountId } from "./people";
+
 export interface SprintIssue {
   key: string;
   summary: string;
@@ -92,6 +95,13 @@ function assigneeName(issue: SprintIssue): string {
   return issue.assignee?.displayName ?? UNASSIGNED_LABEL;
 }
 
+/** Bold Slack label for an assignee group: a mention when the Jira accountId
+ *  maps to a person with a slackId, else the plain display name. */
+function assigneeLabel(group: { accountId: string | null; displayName: string }): string {
+  const p = group.accountId ? personForJiraAccountId(group.accountId) : undefined;
+  return p ? mention(p) : group.displayName;
+}
+
 /**
  * Group issues by assignee. Assignees are sorted by name; the unassigned bucket
  * is always ordered last. Deterministic for stable message/render output.
@@ -160,7 +170,7 @@ export function formatCommittedMessage(snapshot: SprintSnapshot): string {
 
   for (const group of groupByAssignee(snapshot.issues)) {
     lines.push("");
-    lines.push(`*${group.displayName}*`);
+    lines.push(`*${assigneeLabel(group)}*`);
     // Within an assignee, order by status name for a stable, readable grouping.
     const byStatus = new Map<string, SprintIssue[]>();
     for (const issue of group.issues) {
@@ -194,7 +204,7 @@ export function formatCompletedMessage(sprintName: string, result: CompletionRes
   }
   for (const group of result.byAssignee) {
     lines.push("");
-    lines.push(`*${group.displayName}*`);
+    lines.push(`*${assigneeLabel(group)}*`);
     for (const issue of group.issues) {
       lines.push(`  • ${issue.key} — ${issue.summary}`);
     }
