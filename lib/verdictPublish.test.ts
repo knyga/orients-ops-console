@@ -270,6 +270,28 @@ describe("formatDayMessage drone line", () => {
     expect(msg).toContain(`🛸 Дрони: ${mentionize("Андріан")} 2, інші 8 (усього 10)`);
     expect(msg).not.toContain("звіт не подано");
   });
+  // Per-person axis (2026-07-28): owners on the crew who still owe their OWN
+  // submission render inside the single 🛸 line, so region splitters hold.
+  it("appends «без звіту: …» to the counts line for owners who did not submit", () => {
+    const msg = formatDayMessage({ ...droneBase, droneMissingSubmitters: ["Влад"] });
+    expect(msg).toContain(
+      `\n🛸 Дрони: ${mentionize("Андріан")} 2, інші 8 (усього 10); без звіту: ${mentionize("Влад")}`,
+    );
+  });
+  it("renders «звіт не подано — очікуємо: …» when nobody reported at all", () => {
+    const msg = formatDayMessage({
+      ...droneBase, droneReport: undefined, droneMissingSubmitters: ["Влад", "Любомир"],
+    });
+    expect(msg).toContain(
+      `\n🛸 Дрони: звіт не подано — очікуємо: ${mentionize("Влад")}, ${mentionize("Любомир")}.`,
+    );
+  });
+  it("the missing-submitters render stays a single trailing 🛸 line (splitters hold)", () => {
+    const msg = formatDayMessage({ ...droneBase, droneMissingSubmitters: ["Влад"] });
+    const { droneLine, rosterLine } = splitRosterSuffix(msg);
+    expect(droneLine).toContain("без звіту:");
+    expect(rosterLine).toBe(`👥 У полі: ${mentionize("Влад")}, ${mentionize("Тарас")}.`);
+  });
 });
 
 describe("region discipline", () => {
@@ -316,9 +338,12 @@ describe("REJECTED rendering", () => {
     expect(msg).not.toMatch(/прийнято/);
   });
 
-  it("renders the missing-drone-report gap", () => {
-    const msg = formatDayMessage({ ...rejected, deployMin: 240, droneReportPresent: false, reasons: ["no drone-count report in #field-qa"] });
-    expect(msg).toContain("немає звіту про кількість дронів у #field-qa");
+  // The drone axis is per-person since 2026-07-28: a missing report renders in
+  // the 🛸 region («звіт не подано» / «без звіту: …»), never as a day gap.
+  it("does not render a missing drone report as a day gap", () => {
+    const msg = formatDayMessage({ ...rejected, droneReportPresent: false });
+    expect(msg).not.toContain("немає звіту про кількість дронів");
+    expect(msg).toContain("🛸 Дрони: звіт не подано.");
   });
 
   it("REJECTED days are publishable", () => {

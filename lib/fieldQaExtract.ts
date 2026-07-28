@@ -9,18 +9,14 @@
  * the fs inputs artifact stays a CLI-only concern (callers use `inputsCsv`).
  */
 import "server-only";
-import { downloadFileBase64, fetchMessages } from "./slack";
+import { downloadFileBase64, fetchRawMessages } from "./slack";
+import { TRACKED_CHANNELS } from "./slackChannels";
 import { extractAirborne } from "./flightExtract";
 import { parseAirborneFromText } from "./flightTextParse";
-import { extractDroneReports, kyivPostDate } from "./extractDroneReports";
-import { classifyDroneCount } from "./droneCountReport";
-import {
-  airborneKey,
-  droneKey,
-  dbExtractCacheStore,
-  makeCachedAirborne,
-  makeCachedDroneClassifier,
-} from "./extractCache";
+import { extractDroneReportsCached } from "./extractDroneReports";
+import { droneReminderAnchors } from "./droneReminderPlan";
+import { readOutbound } from "./outbound";
+import { airborneKey, dbExtractCacheStore, makeCachedAirborne } from "./extractCache";
 import { writeReport } from "./reports";
 import {
   buildReport,
@@ -52,10 +48,14 @@ export async function extractFieldQa(
 ): Promise<ExtractFieldQaResult> {
   const log = opts.onLog ?? (() => {});
 
-  const messages = await fetchMessages({ start: period.start, end: period.end });
-  const summaries = messages.filter(
-    (m) => m.channel === FIELD_QA_CHANNEL && m.text.startsWith(SUMMARY_PREFIX),
-  );
+  // fetchRawMessages (not fetchMessages): drone-count submissions can be
+  // replies inside the 11:00 reminder thread, and conversations.history alone
+  // never returns thread replies. Raw messages also carry authorId + thread_ts,
+  // which the per-person gate and the anchor-date defaulting need.
+  const fieldQaChannel = TRACKED_CHANNELS.find((c) => c.name === FIELD_QA_CHANNEL);
+  if (!fieldQaChannel) throw new Error(`field-qa extract: no tracked channel "${FIELD_QA_CHANNEL}"`);
+  const messages = await fetchRawMessages({ start: period.start, end: period.end }, [fieldQaChannel]);
+  const summaries = messages.filter((m) => m.text.startsWith(SUMMARY_PREFIX));
 
   // Cache the expensive vision reads by image identity (stable urlPrivate). Only
   // summaries that fail the deterministic text parse and carry an image hit
@@ -90,32 +90,27 @@ export async function extractFieldQa(
   const days = validateDays(extracted);
   const permalinkByTs = new Map(summaries.map((m) => [m.ts, m.permalink]));
 
-  // Per-day drone-count entries from that day's #field-qa messages (a separate
-  // free-text report, not the stat card). Attributed by post date / explicit date.
-  // A date whose classification failed gets NO droneReport key (unknown — the
-  // verdict skips the drone gate for it); a classified-and-none day gets [].
-  const fieldQaMessages = messages.filter((m) => m.channel === FIELD_QA_CHANNEL);
-  // Same cache treatment for the drone-count classify calls, keyed by
-  // text + Kyiv post-date (the two inputs the classifier sees).
-  const droneStore = dbExtractCacheStore("drone");
-  const dronePreloaded = await droneStore.readMany(
-    fieldQaMessages.map((m) => droneKey(m.text, kyivPostDate(m.ts))),
+  // Per-day drone-count entries from the period's #field-qa messages INCLUDING
+  // thread replies (a separate free-text report, not the stat card). Attributed
+  // by explicit date / reminder-anchor date / post date. A date whose
+  // classification failed gets NO droneReport key (unknown — the verdict skips
+  // the drone gate for it); a classified-and-none day gets [].
+  // Reminder anchors come from the bot's OWN outbound send record (never from
+  // message text), so a user message that looks like a reminder can't hijack
+  // thread-date attribution.
+  const anchorDateByThreadTs = droneReminderAnchors(
+    await readOutbound({ start: period.start, end: period.end }),
   );
-  const { classifier: cachedDroneClassifier, misses: droneMisses } = makeCachedDroneClassifier(
-    droneStore,
-    dronePreloaded,
-    classifyDroneCount,
+  const drones = await extractDroneReportsCached(
+    messages.map((m) => ({ ts: m.ts, text: m.text, authorId: m.authorId, threadTs: m.thread_ts })),
+    anchorDateByThreadTs,
   );
-  const { byDate: droneByDate, failedDates: droneFailedDates } = await extractDroneReports(
-    fieldQaMessages.map((m) => ({ ts: m.ts, text: m.text })),
-    cachedDroneClassifier,
-  );
-  log(`field-qa: Claude calls — ${cachedAirborne.misses()} vision, ${droneMisses()} drone (rest cached)`);
-  if (droneFailedDates.size > 0) {
-    log(`field-qa: drone-count classification failed for ${[...droneFailedDates].sort().join(", ")} — those days carry no droneReport key (gate skipped)`);
+  log(`field-qa: Claude calls — ${cachedAirborne.misses()} vision, ${drones.misses} drone (rest cached)`);
+  if (drones.failedDates.size > 0) {
+    log(`field-qa: drone-count classification failed for ${[...drones.failedDates].sort().join(", ")} — those days carry no droneReport key (gate skipped)`);
   }
 
-  const report = buildReport(days, period, permalinkByTs, droneByDate, droneFailedDates);
+  const report = buildReport(days, period, permalinkByTs, drones);
   const inputsCsv = toInputsCsv(days);
 
   if (opts.write) {

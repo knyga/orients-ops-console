@@ -196,7 +196,14 @@ export default function FieldVerdictPage() {
                         {[...d.roster, ...d.unknownInitials.map((u) => `?${u}`)].join(", ") || "—"}
                       </td>
                       <td className="px-3 py-2 text-slate-700">
-                        {formatDroneLine(d.droneReport ?? [])?.replace("🛸 Дрони: ", "") || "—"}
+                        {[
+                          formatDroneLine(d.droneReport ?? [])?.replace("🛸 Дрони: ", ""),
+                          d.droneMissingSubmitters?.length
+                            ? `без звіту: ${d.droneMissingSubmitters.join(", ")}`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
                       </td>
                     </tr>
                   );

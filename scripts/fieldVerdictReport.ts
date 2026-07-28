@@ -165,7 +165,14 @@ export function toCsv(report: VerdictReport): string {
       d.datasetStatus,
       csvField(d.reasons.join("; ")),
       csvField(d.roster.join("; ")),
-      csvField(formatDroneCsv(d.droneReport ?? [])),
+      csvField(
+        [
+          formatDroneCsv(d.droneReport ?? []),
+          d.droneMissingSubmitters?.length ? `no report: ${d.droneMissingSubmitters.join(", ")}` : "",
+        ]
+          .filter(Boolean)
+          .join("; "),
+      ),
     ].join(","));
   }
   return `${lines.join("\n")}\n`;

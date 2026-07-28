@@ -122,6 +122,95 @@ describe("extractDroneReports", () => {
     expect(out.byDate.size).toBe(0);
   });
 
+  // Since 2026-07-28 pilots submit independently: snapshots are per (date, author).
+  it("merges same-date reports from DIFFERENT authors instead of replacing", async () => {
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-08-03T09:00:00Z"), text: "Влад - 2шт", authorId: "U091JDN2U5B" },
+      { ts: tsFor("2026-08-03T10:00:00Z"), text: "Андріан - 3шт", authorId: "U09AAVAEE6L" },
+    ];
+    const classify = vi.fn(async (t: string) =>
+      t.includes("Влад")
+        ? { reports: [{ entries: [E("Влад", true, 2)], forDate: null }] }
+        : { reports: [{ entries: [E("Андріан", true, 3)], forDate: null }] },
+    );
+    const out = await extractDroneReports(messages, classify);
+    expect(out.byDate.get("2026-08-03")).toEqual([E("Влад", true, 2), E("Андріан", true, 3)]);
+    expect(out.submittersByDate.get("2026-08-03")).toEqual(new Set(["U091JDN2U5B", "U09AAVAEE6L"]));
+  });
+
+  it("lets the SAME author's later message replace their own earlier tally, leaving others intact", async () => {
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-08-03T09:00:00Z"), text: "Влад - 2шт", authorId: "U091JDN2U5B" },
+      { ts: tsFor("2026-08-03T10:00:00Z"), text: "Андріан - 3шт", authorId: "U09AAVAEE6L" },
+      { ts: tsFor("2026-08-03T11:00:00Z"), text: "Влад - 5шт", authorId: "U091JDN2U5B" },
+    ];
+    const classify = vi.fn(async (t: string) =>
+      t.includes("Андріан")
+        ? { reports: [{ entries: [E("Андріан", true, 3)], forDate: null }] }
+        : { reports: [{ entries: [E("Влад", true, t.includes("5шт") ? 5 : 2)], forDate: null }] },
+    );
+    const out = await extractDroneReports(messages, classify);
+    expect(out.byDate.get("2026-08-03")).toEqual([E("Влад", true, 5), E("Андріан", true, 3)]);
+  });
+
+  it("never classifies the reminder anchor message itself", async () => {
+    const anchors = new Map([["1000.10", "2026-08-03"]]);
+    const messages: DroneMessage[] = [
+      // The anchor is its own thread parent (Slack sets thread_ts = ts once it
+      // has replies) and even mentions «шт» — still not a submission.
+      { ts: "1000.10", text: "🛸 Звіт по дронах за 03.08 — вкажіть шт", authorId: "B_BOT", threadTs: "1000.10" },
+    ];
+    const classify = vi.fn(async () => ({ reports: [] }));
+    const out = await extractDroneReports(messages, classify, { anchorDateByThreadTs: anchors });
+    expect(classify).not.toHaveBeenCalled();
+    expect(out.byDate.size).toBe(0);
+  });
+
+  it("treats any reply inside a reminder thread as a candidate and defaults its date to the anchor's", async () => {
+    const anchors = new Map([["1000.10", "2026-08-03"]]);
+    const messages: DroneMessage[] = [
+      // No "шт" and posted the NEXT day — only the anchor thread makes it count, for 08-03.
+      { ts: tsFor("2026-08-04T06:00:00Z"), text: "3 дрони справні", authorId: "U09AAVAEE6L", threadTs: "1000.10" },
+    ];
+    const classify = vi.fn(async () => ({ reports: [{ entries: [E("Андріан", true, 3)], forDate: null }] }));
+    const out = await extractDroneReports(messages, classify, { anchorDateByThreadTs: anchors });
+    expect(classify).toHaveBeenCalledWith("3 дрони справні", "2026-08-03");
+    expect(out.byDate.get("2026-08-03")).toEqual([E("Андріан", true, 3)]);
+    expect(out.byDate.has("2026-08-04")).toBe(false);
+    expect(out.submittersByDate.get("2026-08-03")).toEqual(new Set(["U09AAVAEE6L"]));
+  });
+
+  it("re-attributes a drone owner's own no-name tally to the owner for display", async () => {
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-08-03T09:00:00Z"), text: "2шт вартовий + 1шт азимут", authorId: "U091JDPH9L5" },
+    ];
+    const classify = vi.fn(async () => ({
+      reports: [{ entries: [E("вартовий", false, 2), E("азимут", false, 1)], forDate: null }],
+    }));
+    const out = await extractDroneReports(messages, classify);
+    expect(out.byDate.get("2026-08-03")).toEqual([E("Любомир", true, 3)]);
+  });
+
+  it("keeps a non-owner's categories as categories and mixed entries untouched", async () => {
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-08-03T09:00:00Z"), text: "Демонстраційні - 8шт", authorId: "U_SOMEONE" },
+      { ts: tsFor("2026-08-03T10:00:00Z"), text: "Влад 1шт, 15ка - 1шт", authorId: "U091JDN2U5B" },
+    ];
+    const classify = vi.fn(async (t: string) =>
+      t.includes("Демонстраційні")
+        ? { reports: [{ entries: [E("Демонстраційні", false, 8)], forDate: null }] }
+        : { reports: [{ entries: [E("Влад", true, 1), E("15ка", false, 1)], forDate: null }] },
+    );
+    const out = await extractDroneReports(messages, classify);
+    expect(out.byDate.get("2026-08-03")).toEqual([
+      E("Демонстраційні", false, 8),
+      E("Влад", true, 1),
+      E("15ка", false, 1),
+    ]);
+    // Non-owner authors still count as submitters only for attribution keys, not the owner gate.
+    expect(out.submittersByDate.get("2026-08-03")).toEqual(new Set(["U_SOMEONE", "U091JDN2U5B"]));
+  });
+
   it("isolates classifier failures per message, continuing with the others", async () => {
     const messages: DroneMessage[] = [
       { ts: tsFor("2026-06-25T09:00:00Z"), text: "Андріан R&D - 1шт" },

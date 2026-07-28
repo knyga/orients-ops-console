@@ -114,10 +114,13 @@ describe("unified gate axes", () => {
     expect(v.status).toBe("ACCEPTED");
   });
 
-  it("REJECTS a flown day with no drone-count report (hard fail)", () => {
+  // Since 2026-07-28 the drone-count axis is PER-PERSON (lib/fieldBonus): a
+  // missing report no longer rejects the day — only the non-submitting drone
+  // owner loses their share.
+  it("ACCEPTS a flown day with no drone-count report (per-person axis, not a day gate)", () => {
     const v = verdictForDay({ ...base, deployMin: 240, droneReportPresent: false });
-    expect(v.status).toBe("REJECTED");
-    expect(v.reasons).toContain("no drone-count report in #field-qa");
+    expect(v.status).toBe("ACCEPTED");
+    expect(v.reasons).not.toContain("no drone-count report in #field-qa");
   });
 
   it("hard fail outranks curable gaps (short deploy + missing dataset → REJECTED, not PENDING)", () => {
