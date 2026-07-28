@@ -9,10 +9,12 @@
  * the fs inputs artifact stays a CLI-only concern (callers use `inputsCsv`).
  */
 import "server-only";
-import { downloadFileBase64, fetchMessages } from "./slack";
+import { downloadFileBase64, fetchRawMessages } from "./slack";
+import { TRACKED_CHANNELS } from "./slackChannels";
 import { extractAirborne } from "./flightExtract";
 import { parseAirborneFromText } from "./flightTextParse";
 import { extractDroneReports, kyivPostDate } from "./extractDroneReports";
+import { anchorDateFromText } from "./droneReminderPlan";
 import { classifyDroneCount } from "./droneCountReport";
 import {
   airborneKey,
@@ -52,10 +54,14 @@ export async function extractFieldQa(
 ): Promise<ExtractFieldQaResult> {
   const log = opts.onLog ?? (() => {});
 
-  const messages = await fetchMessages({ start: period.start, end: period.end });
-  const summaries = messages.filter(
-    (m) => m.channel === FIELD_QA_CHANNEL && m.text.startsWith(SUMMARY_PREFIX),
-  );
+  // fetchRawMessages (not fetchMessages): drone-count submissions can be
+  // replies inside the 11:00 reminder thread, and conversations.history alone
+  // never returns thread replies. Raw messages also carry authorId + thread_ts,
+  // which the per-person gate and the anchor-date defaulting need.
+  const fieldQaChannel = TRACKED_CHANNELS.find((c) => c.name === FIELD_QA_CHANNEL);
+  if (!fieldQaChannel) throw new Error(`field-qa extract: no tracked channel "${FIELD_QA_CHANNEL}"`);
+  const messages = await fetchRawMessages({ start: period.start, end: period.end }, [fieldQaChannel]);
+  const summaries = messages.filter((m) => m.text.startsWith(SUMMARY_PREFIX));
 
   // Cache the expensive vision reads by image identity (stable urlPrivate). Only
   // summaries that fail the deterministic text parse and carry an image hit
@@ -90,32 +96,44 @@ export async function extractFieldQa(
   const days = validateDays(extracted);
   const permalinkByTs = new Map(summaries.map((m) => [m.ts, m.permalink]));
 
-  // Per-day drone-count entries from that day's #field-qa messages (a separate
-  // free-text report, not the stat card). Attributed by post date / explicit date.
-  // A date whose classification failed gets NO droneReport key (unknown — the
-  // verdict skips the drone gate for it); a classified-and-none day gets [].
-  const fieldQaMessages = messages.filter((m) => m.channel === FIELD_QA_CHANNEL);
+  // Per-day drone-count entries from the period's #field-qa messages INCLUDING
+  // thread replies (a separate free-text report, not the stat card). Attributed
+  // by explicit date / reminder-anchor date / post date. A date whose
+  // classification failed gets NO droneReport key (unknown — the verdict skips
+  // the drone gate for it); a classified-and-none day gets [].
+  // Reminder anchors: the bot's 11:00 reminder's stable first line names its
+  // target date; a dateless reply in that thread defaults to it.
+  const anchorDateByThreadTs = new Map<string, string>();
+  for (const m of messages) {
+    const anchorDate = anchorDateFromText(m.text, kyivPostDate(m.ts));
+    if (anchorDate) anchorDateByThreadTs.set(m.ts, anchorDate);
+  }
   // Same cache treatment for the drone-count classify calls, keyed by
-  // text + Kyiv post-date (the two inputs the classifier sees).
+  // text + default date (the two inputs the classifier sees). The preload key
+  // must mirror extractDroneReports' default-date rule: anchor date for a reply
+  // inside a reminder thread, else the Kyiv post date.
+  const defaultDateOf = (m: { ts: string; thread_ts?: string }) =>
+    (m.thread_ts !== undefined && anchorDateByThreadTs.get(m.thread_ts)) || kyivPostDate(m.ts);
   const droneStore = dbExtractCacheStore("drone");
   const dronePreloaded = await droneStore.readMany(
-    fieldQaMessages.map((m) => droneKey(m.text, kyivPostDate(m.ts))),
+    messages.map((m) => droneKey(m.text, defaultDateOf(m))),
   );
   const { classifier: cachedDroneClassifier, misses: droneMisses } = makeCachedDroneClassifier(
     droneStore,
     dronePreloaded,
     classifyDroneCount,
   );
-  const { byDate: droneByDate, failedDates: droneFailedDates } = await extractDroneReports(
-    fieldQaMessages.map((m) => ({ ts: m.ts, text: m.text })),
+  const { byDate: droneByDate, submittersByDate, failedDates: droneFailedDates } = await extractDroneReports(
+    messages.map((m) => ({ ts: m.ts, text: m.text, authorId: m.authorId, threadTs: m.thread_ts })),
     cachedDroneClassifier,
+    { anchorDateByThreadTs },
   );
   log(`field-qa: Claude calls — ${cachedAirborne.misses()} vision, ${droneMisses()} drone (rest cached)`);
   if (droneFailedDates.size > 0) {
     log(`field-qa: drone-count classification failed for ${[...droneFailedDates].sort().join(", ")} — those days carry no droneReport key (gate skipped)`);
   }
 
-  const report = buildReport(days, period, permalinkByTs, droneByDate, droneFailedDates);
+  const report = buildReport(days, period, permalinkByTs, droneByDate, droneFailedDates, submittersByDate);
   const inputsCsv = toInputsCsv(days);
 
   if (opts.write) {

@@ -173,4 +173,25 @@ describe("buildReport drone attachment", () => {
     const report = buildReport([testDay("2026-06-25")], PERIOD, new Map());
     expect(report.days[0]).not.toHaveProperty("droneReport");
   });
+
+  it("attaches sorted droneSubmitters with the same tri-state as droneReport", () => {
+    const drones = new Map<string, DroneEntry[]>([
+      ["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]],
+    ]);
+    const submitters = new Map<string, Set<string>>([["2026-06-25", new Set(["U2", "U1"])]]);
+    const failedDates = new Set(["2026-06-27"]);
+    const report = buildReport(
+      [testDay("2026-06-25"), testDay("2026-06-26"), testDay("2026-06-27")],
+      PERIOD,
+      new Map(),
+      drones,
+      failedDates,
+      submitters,
+    );
+    expect(report.days.find((d) => d.date === "2026-06-25")?.droneSubmitters).toEqual(["U1", "U2"]);
+    // ran, nobody submitted → explicit []
+    expect(report.days.find((d) => d.date === "2026-06-26")?.droneSubmitters).toEqual([]);
+    // classification failed → unknown → no key
+    expect(report.days.find((d) => d.date === "2026-06-27")).not.toHaveProperty("droneSubmitters");
+  });
 });

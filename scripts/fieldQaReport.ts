@@ -38,6 +38,10 @@ export interface ReportDay {
    *  and no report exists; the key is ABSENT only when presence is unknown
    *  (classifier failed for the date, or a legacy report predating extraction). */
   droneReport?: DroneEntry[];
+  /** Slack author ids who submitted their OWN drone-count for the day — the
+   *  per-person gate's attribution input. Same tri-state as droneReport: `[]`
+   *  = classified-and-nobody; key ABSENT = unknown (gate skipped). */
+  droneSubmitters?: string[];
 }
 
 export interface FieldQaReport {
@@ -138,6 +142,7 @@ export function buildReport(
   permalinkByTs: Map<string, string>,
   droneByDate?: Map<string, DroneEntry[]>,
   droneFailedDates?: Set<string>,
+  droneSubmittersByDate?: Map<string, Set<string>>,
 ): FieldQaReport {
   const reportDays: ReportDay[] = days.map((d) => {
     const droneKnown = droneByDate !== undefined && !droneFailedDates?.has(d.date);
@@ -149,6 +154,9 @@ export function buildReport(
       flew: d.flew,
       permalink: permalinkByTs.get(d.sourceTs) ?? "",
       ...(droneKnown ? { droneReport: droneByDate.get(d.date) ?? [] } : {}),
+      ...(droneKnown && droneSubmittersByDate !== undefined
+        ? { droneSubmitters: [...(droneSubmittersByDate.get(d.date) ?? [])].sort() }
+        : {}),
     };
   });
   const flightHours = round2(reportDays.reduce((sum, d) => sum + d.flightHours, 0));
