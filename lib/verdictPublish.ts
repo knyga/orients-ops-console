@@ -13,6 +13,7 @@ import { MIN_DEPLOY_MIN, MIN_VIDEO_MIN } from "./fieldDayVerdict";
 import { dateWithWeekday } from "./workdays";
 import type { DayVerdict } from "./fieldDayVerdict";
 import { formatDroneLine, type DroneEntry } from "./droneReport";
+import { mentionize, dementionText } from "./mention";
 
 const ICON: Record<string, string> = {
   ACCEPTED: "✅",
@@ -27,7 +28,7 @@ export const ROSTER_MARKER = "👥 У полі: ";
 /** Append the crew suffix line. Empty roster → body unchanged. Pure. */
 export function withRosterSuffix(body: string, roster: string[]): string {
   if (roster.length === 0) return body;
-  return `${body}\n${ROSTER_MARKER}${roster.join(", ")}.`;
+  return `${body}\n${ROSTER_MARKER}${roster.map(mentionize).join(", ")}.`;
 }
 
 export const DRONE_MARKER = "🛸 Дрони: ";
@@ -82,7 +83,7 @@ export function splitRosterSuffix(text: string): { body: string; rosterLine: str
 export function parseRosterSuffix(text: string): string[] {
   const { rosterLine } = splitRosterSuffix(text);
   if (!rosterLine) return [];
-  return rosterLine
+  return dementionText(rosterLine)
     .slice(ROSTER_MARKER.length)
     .replace(/\.\s*$/, "")
     .split(",")
