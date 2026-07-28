@@ -2,13 +2,16 @@
  * Pure field-bonus calculator. Trip counts iff the day's per-flight-day
  * **verdict** is ACCEPTED or ACCEPTED_EXCEPTION — the unified qualification
  * gate lives in `fieldDayVerdict.ts` (deploy >= 3h, video >= max(2min, 50% of
- * airborne), a drone-count report, a #datasets notice); this module is money
- * math only. Adds early (arrival <= 12:30) and weekend (Sat/Sun) bonuses, then
+ * airborne), a #datasets notice); this module is money math only, PLUS the
+ * per-person drone-count gate (2026-07-28): a drone owner on a counted report
+ * is paid only if they submitted their own drone count for the date
+ * (applyDroneGate). Adds early (arrival <= 12:30) and weekend (Sat/Sun) bonuses, then
  * the drone-loss multiplier per flight group over 12 consecutive trips, and
  * the team-wide >3-loss cutoff. No DB/Next imports — unit-tested in isolation.
  */
 import type { Period } from "./period";
 import { applyRosterCorrection, correctionForReport, type RosterCorrection } from "./rosterCorrection";
+import { droneOwnerForRosterName } from "./droneOwners";
 import { MIN_DEPLOY_MIN, MIN_VIDEO_MIN, reportKey, type VerdictStatus } from "./fieldDayVerdict";
 
 export const TRIP = 700;
@@ -38,6 +41,9 @@ export interface QualifiedDay {
   start: string | null; // Звіт arrival "HH:MM" for the early bonus
   reasons: string[];
   flew: boolean; // pending money is only at stake when the day flew
+  /** Author ids who submitted their OWN drone count for the date (day-shared).
+   *  undefined = unknown (legacy report / classifier failure) → gate skipped. */
+  droneSubmitters?: string[];
 }
 export interface PendingDay { date: string; reportTs: string | null; roster: string[]; status: VerdictStatus; reasons: string[]; amountAtStake: number }
 export interface DayBonus {
@@ -69,6 +75,32 @@ function startMin(start: string | null): number | null {
   return h * 60 + m;
 }
 
+/**
+ * The per-person drone-count gate (2026-07-28): a drone owner on a counted
+ * report is paid only if they submitted their OWN drone count for the date
+ * (author-based — see lib/droneOwners). An approver `eligibility: "counted"`
+ * correction outranks the gate; unknown attribution (undefined submitters)
+ * skips it — never unpay on missing data. Excluded people are flagged
+ * `no_drone_count`. Pure.
+ */
+function applyDroneGate(
+  perPerson: { name: string; counted: boolean }[],
+  submitters: string[] | undefined,
+  correction: RosterCorrection | undefined,
+  date: string,
+  flags: Flag[],
+): { name: string; counted: boolean }[] {
+  if (submitters === undefined) return perPerson;
+  return perPerson.map((p) => {
+    if (!p.counted) return p;
+    const owner = droneOwnerForRosterName(p.name);
+    if (!owner || submitters.includes(owner.userId)) return p;
+    if (correction?.eligibility?.[p.name] === "counted") return p; // approver override outranks
+    flags.push({ kind: "no_drone_count", date, detail: `${p.name}: no own drone-count submission` });
+    return { ...p, counted: false };
+  });
+}
+
 export function computeBonuses(input: {
   period: Period;
   days: QualifiedDay[];
@@ -79,6 +111,9 @@ export function computeBonuses(input: {
   const flags: Flag[] = [];
   const days: DayBonus[] = [];
   const pendingDays: PendingDay[] = [];
+  // reportKey → drone-gated perPerson, so the tally pass reuses the exact
+  // eligibility the payout pass derived (one gate application, one flag each).
+  const gatedByReport = new Map<string, { name: string; counted: boolean }[]>();
 
   for (const q of qualified) {
     for (const u of q.unknownInitials) flags.push({ kind: "unknown_initial", date: q.date, detail: u });
@@ -89,7 +124,9 @@ export function computeBonuses(input: {
     const weekend = counted && isWeekend(q.date);
     const correction = correctionForReport(corrections, q.date, q.reportTs, q.reportCount);
     const eff = applyRosterCorrection(q.roster, counted, correction);
-    const paidRoster = eff.perPerson.filter((p) => p.counted).map((p) => p.name);
+    const gated = applyDroneGate(eff.perPerson, q.droneSubmitters, correction, q.date, flags);
+    gatedByReport.set(reportKey(q.date, q.reportTs), gated);
+    const paidRoster = gated.filter((p) => p.counted).map((p) => p.name);
     const splitFactor = paidRoster.length > 2 ? 2 / paidRoster.length : 1;
     const reason = counted ? "counted" : q.reasons.join("; ") || q.status;
     days.push({ date: q.date, reportTs: q.reportTs, reportCount: q.reportCount, roster: eff.roster, deployMin: q.deployMin, videoMin: q.videoMin, counted, early, weekend, reason, status: q.status, splitFactor, paidRoster });
@@ -106,8 +143,9 @@ export function computeBonuses(input: {
   for (const d of days) {
     const correction = correctionForReport(corrections, d.date, d.reportTs, d.reportCount ?? 1);
     const eff = applyRosterCorrection(d.roster, d.counted, correction);
+    const perPerson = gatedByReport.get(reportKey(d.date, d.reportTs)) ?? eff.perPerson;
     const share = (TRIP + (d.early ? EARLY : 0) + (d.weekend ? WEEKEND : 0)) * (d.splitFactor ?? 1);
-    for (const { name, counted } of eff.perPerson) {
+    for (const { name, counted } of perPerson) {
       if (!counted) continue;
       const t = tally.get(name) ?? { trips: 0, early: 0, weekend: 0, amount: 0, dates: [] };
       t.trips += 1; if (d.early) t.early += 1; if (d.weekend) t.weekend += 1; t.amount += share; t.dates.push(d.date);

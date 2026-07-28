@@ -121,6 +121,61 @@ describe("computeBonuses with roster corrections", () => {
   });
 });
 
+describe("per-person drone-count gate (2026-07-28)", () => {
+  const period = { start: "2026-08-01", end: "2026-08-31" };
+  // Влад (U091JDN2U5B) and Тарас (not an owner) on an ACCEPTED weekday report.
+  const day = (over: Partial<QualifiedDay>): QualifiedDay => ({
+    date: "2026-08-03", reportTs: "100.1", reportCount: 1, status: "ACCEPTED",
+    roster: ["Влад", "Тарас"], unknownInitials: [], deployMin: 240, videoMin: 30,
+    start: "14:00", reasons: [], flew: true, ...over,
+  });
+
+  it("unpays only the owner who did not submit; non-owners are untouched", () => {
+    const r = computeBonuses({ period, losses: [], days: [day({ droneSubmitters: [] })] });
+    expect(r.people.map((p) => p.name)).toEqual(["Тарас"]);
+    expect(r.days[0].counted).toBe(true); // the DAY still counts
+    expect(r.days[0].paidRoster).toEqual(["Тарас"]);
+    expect(r.flags).toContainEqual({ kind: "no_drone_count", date: "2026-08-03", detail: "Влад: no own drone-count submission" });
+  });
+
+  it("pays the owner who submitted their own count", () => {
+    const r = computeBonuses({ period, losses: [], days: [day({ droneSubmitters: ["U091JDN2U5B"] })] });
+    expect(r.people.map((p) => p.name).sort()).toEqual(["Влад", "Тарас"]);
+    expect(r.flags).toEqual([]);
+  });
+
+  it("another author's submission does NOT satisfy the owner's gate", () => {
+    const r = computeBonuses({ period, losses: [], days: [day({ droneSubmitters: ["U_SOMEONE_ELSE"] })] });
+    expect(r.people.map((p) => p.name)).toEqual(["Тарас"]);
+  });
+
+  it("skips the gate entirely when attribution is unknown (undefined)", () => {
+    const r = computeBonuses({ period, losses: [], days: [day({})] });
+    expect(r.people.map((p) => p.name).sort()).toEqual(["Влад", "Тарас"]);
+    expect(r.flags).toEqual([]);
+  });
+
+  it("an approver eligibility:counted correction outranks the gate", () => {
+    const r = computeBonuses({
+      period, losses: [], days: [day({ droneSubmitters: [] })],
+      corrections: [{ date: "2026-08-03", reportTs: "100.1", eligibility: { Влад: "counted" }, note: "n", by: "Oleksandr K", source: "s", recordedAt: "r" }],
+    });
+    expect(r.people.map((p) => p.name).sort()).toEqual(["Влад", "Тарас"]);
+    expect(r.flags).toEqual([]);
+  });
+
+  it("the split factor is derived from the drone-gated paid roster", () => {
+    // 3 counted people would split 2/3; gating one owner out leaves 2 → no split.
+    const r = computeBonuses({
+      period, losses: [],
+      days: [day({ roster: ["Влад", "Тарас", "Сергій"], droneSubmitters: [] })],
+    });
+    expect(r.days[0].paidRoster).toEqual(["Тарас", "Сергій"]);
+    expect(r.days[0].splitFactor).toBe(1);
+    expect(r.people.find((p) => p.name === "Тарас")?.net).toBe(700);
+  });
+});
+
 describe(">2-crew split rule (2-person pot divided among everyone)", () => {
   const period = { start: "2026-07-01", end: "2026-07-31" };
   const qd3 = (over: Partial<QualifiedDay>): QualifiedDay => ({

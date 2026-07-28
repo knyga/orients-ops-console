@@ -74,6 +74,8 @@ export async function computeBonusReport(
         d.airborneMinutes > 0 ||
         !d.airborneReported ||
         (d.deployMin ?? parsed?.deployMin ?? null) != null,
+      // Per-person drone gate input (undefined = unknown → gate skipped).
+      droneSubmitters: d.droneSubmitters,
     };
   });
   const report = computeBonuses({ period, days, losses, corrections });
