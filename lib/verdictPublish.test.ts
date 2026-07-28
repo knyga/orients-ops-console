@@ -165,15 +165,20 @@ describe("formatDayMessage", () => {
 describe("formatOverride", () => {
   it("strikes the original and amends for an approve", () => {
     const o = formatOverride("⚠️ 2026-06-04 — потрібна перевірка: …", "accepted_exception", "Oleksandr K", "ми тестували");
-    expect(o.updatedText).toBe("~⚠️ 2026-06-04 — потрібна перевірка: …~\n🟡 Оновлено → прийнято (виняток), Oleksandr K: ми тестували");
-    expect(o.replyText).toMatch(/^🟡 Зафіксовано: прийнято \(виняток\), Oleksandr K\. Причина: ми тестували/);
+    expect(o.updatedText).toBe(`~⚠️ 2026-06-04 — потрібна перевірка: …~\n🟡 Оновлено → прийнято (виняток), ${mentionize("Oleksandr K")}: ми тестували`);
+    expect(o.replyText).toMatch(new RegExp(`^🟡 Зафіксовано: прийнято \\(виняток\\), ${mentionize("Oleksandr K")}\\. Причина: ми тестували`));
   });
 
   it("uses the rejected icon/label for a disapprove", () => {
     const o = formatOverride("✅ 2026-06-05 — прийнято …", "rejected", "Bohdan Forostianyi", "не приймається");
     expect(o.updatedText).toContain("~✅ 2026-06-05 — прийнято …~");
-    expect(o.updatedText).toContain("⛔ Оновлено → відхилено, Bohdan Forostianyi: не приймається");
+    expect(o.updatedText).toContain(`⛔ Оновлено → відхилено, ${mentionize("Bohdan Forostianyi")}: не приймається`);
     expect(o.replyText).toMatch(/^⛔ Зафіксовано: відхилено/);
+  });
+
+  it("mentions the approver in an override", () => {
+    const { replyText } = formatOverride("✅ 2026-06-13 — прийнято (…).", "rejected", "Oleksandr K", "no dataset");
+    expect(replyText).toContain(mentionize("Oleksandr K"));
   });
 });
 

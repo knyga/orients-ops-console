@@ -128,9 +128,10 @@ export function formatOverride(
 ): OverrideMessages {
   const icon = decision === "accepted_exception" ? "🟡" : "⛔";
   const label = decision === "accepted_exception" ? "прийнято (виняток)" : "відхилено";
+  const who = mentionize(by);
   return {
-    updatedText: `~${originalText}~\n${icon} Оновлено → ${label}, ${by}: ${reason}`,
-    replyText: `${icon} Зафіксовано: ${label}, ${by}. Причина: ${reason}`,
+    updatedText: `~${originalText}~\n${icon} Оновлено → ${label}, ${who}: ${reason}`,
+    replyText: `${icon} Зафіксовано: ${label}, ${who}. Причина: ${reason}`,
   };
 }
 
