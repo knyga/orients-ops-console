@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mergeDroneEntries, droneTotals, formatDroneLine, formatDroneCsv, type DroneEntry } from "./droneReport";
+import { mentionize } from "./mention";
 
 const E = (name: string, isPerson: boolean, count: number): DroneEntry => ({ name, isPerson, count });
 
@@ -39,6 +40,10 @@ describe("formatDroneLine", () => {
   it("returns null for empty / all-zero entries", () => {
     expect(formatDroneLine([])).toBeNull();
     expect(formatDroneLine([E("X", true, 0)])).toBeNull();
+  });
+  it("mentions person entries when opts.mention is set", () => {
+    const line = formatDroneLine([E("Андріан", true, 2)], { mention: true });
+    expect(line).toBe(`🛸 Дрони: ${mentionize("Андріан")} 2 (усього 2)`);
   });
 });
 

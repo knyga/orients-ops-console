@@ -242,7 +242,7 @@ describe("formatDayMessage drone line", () => {
   it("appends the drone line after the crew suffix", () => {
     const msg = formatDayMessage(droneBase);
     expect(msg).toContain(`\n👥 У полі: ${mentionize("Влад")}, ${mentionize("Тарас")}.`);
-    expect(msg).toContain("\n🛸 Дрони: Андріан 2, інші 8 (усього 10)");
+    expect(msg).toContain(`\n🛸 Дрони: ${mentionize("Андріан")} 2, інші 8 (усього 10)`);
     expect(msg.indexOf("👥")).toBeLessThan(msg.indexOf("🛸")); // crew before drones
   });
   it("omits the drone line when drone presence is unknown (legacy verdict)", () => {
@@ -262,7 +262,7 @@ describe("formatDayMessage drone line", () => {
   });
   it("counts win over the absence marker when both could apply", () => {
     const msg = formatDayMessage({ ...droneBase, droneReportPresent: true });
-    expect(msg).toContain("🛸 Дрони: Андріан 2, інші 8 (усього 10)");
+    expect(msg).toContain(`🛸 Дрони: ${mentionize("Андріан")} 2, інші 8 (усього 10)`);
     expect(msg).not.toContain("звіт не подано");
   });
 });
@@ -272,7 +272,7 @@ describe("region discipline", () => {
   it("splitRosterSuffix peels the crew line drone-free and returns the drone line", () => {
     const { body, rosterLine, droneLine } = splitRosterSuffix(withDrones);
     expect(rosterLine).toBe(`👥 У полі: ${mentionize("Влад")}, ${mentionize("Тарас")}.`);
-    expect(droneLine).toBe("🛸 Дрони: Андріан 2, інші 8 (усього 10)");
+    expect(droneLine).toBe(`🛸 Дрони: ${mentionize("Андріан")} 2, інші 8 (усього 10)`);
     expect(body).not.toContain("👥");
     expect(body).not.toContain("🛸");
   });

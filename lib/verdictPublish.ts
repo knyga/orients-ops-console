@@ -35,7 +35,7 @@ export const DRONE_MARKER = "🛸 Дрони: ";
 
 /** Append the drone-count line. Null/empty entries → text unchanged. Pure. */
 export function withDroneLine(text: string, entries: DroneEntry[] | undefined): string {
-  const line = entries ? formatDroneLine(entries) : null;
+  const line = entries ? formatDroneLine(entries, { mention: true }) : null;
   return line ? `${text}\n${line}` : text;
 }
 
@@ -47,7 +47,7 @@ export function withDroneLine(text: string, entries: DroneEntry[] | undefined): 
  * data can't back). Pure.
  */
 export function withDroneRegion(text: string, day: DayVerdict): string {
-  const counts = formatDroneLine(day.droneReport ?? []);
+  const counts = formatDroneLine(day.droneReport ?? [], { mention: true });
   if (counts) return `${text}\n${counts}`;
   if (day.droneReportPresent === false) return `${text}\n${DRONE_MARKER}звіт не подано.`;
   return text;
