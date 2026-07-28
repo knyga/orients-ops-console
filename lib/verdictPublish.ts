@@ -40,15 +40,19 @@ export function withDroneLine(text: string, entries: DroneEntry[] | undefined): 
 }
 
 /**
- * The day's drone region: the counts when a report exists, an explicit
- * "звіт не подано" when the extraction positively says the day had none
- * (droneReportPresent === false), and nothing when presence is unknown
- * (legacy verdicts predating the extraction — never claim an absence the
- * data can't back). Pure.
+ * The day's drone region — always a SINGLE trailing 🛸 line (splitDroneLine
+ * peels exactly one): the counts when a report exists, plus «без звіту: …»
+ * naming the drone owners on the crew who still owe their OWN submission
+ * (per-person axis, 2026-07-28); an explicit "звіт не подано" when the
+ * extraction positively says the day had none (droneReportPresent === false);
+ * nothing when presence is unknown (legacy verdicts predating the extraction —
+ * never claim an absence the data can't back). Pure.
  */
 export function withDroneRegion(text: string, day: DayVerdict): string {
   const counts = formatDroneLine(day.droneReport ?? [], { mention: true });
-  if (counts) return `${text}\n${counts}`;
+  const missing = (day.droneMissingSubmitters ?? []).map(mentionize).join(", ");
+  if (counts) return `${text}\n${counts}${missing ? `; без звіту: ${missing}` : ""}`;
+  if (missing) return `${text}\n${DRONE_MARKER}звіт не подано — очікуємо: ${missing}.`;
   if (day.droneReportPresent === false) return `${text}\n${DRONE_MARKER}звіт не подано.`;
   return text;
 }
@@ -252,7 +256,6 @@ function ukrainianGaps(day: DayVerdict): string[] {
   }
   if (flew && day.deployMin != null && day.deployMin < MIN_DEPLOY_MIN) gaps.push(`виїзд ${day.deployMin} хв — менше 3 год`);
   if (flew && day.deployMin === null) gaps.push("у Звіті не вказано час виїзду");
-  if (flew && day.droneReportPresent === false) gaps.push("немає звіту про кількість дронів у #field-qa");
   if (flew && day.hasZvit === false) gaps.push("політ зафіксовано, але немає Звіту (екіпаж невідомий)");
   if (day.datasetStatus === "MISSING") gaps.push("немає повідомлення про датасет за цей день");
   if (day.datasetStatus === "DECLINED") gaps.push("датасет відхилено адміністратором");

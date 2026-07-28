@@ -1,13 +1,16 @@
 /**
  * Pure per-flight-day acceptance verdict for the field bonus. Operationalizes the
  * unified day-qualification gate: a day is ACCEPTED when every gate axis passes.
- * The gate has per-report axes (deployment >= 3h, crew), day-shared axes (video >= max(2 min, 50% x airborne),
- * a #field-qa drone-count report, and a #datasets notice). Three failures are
- * machine auto-rejects (hard no-pay, admin can override via the instruction
- * path): an admin-declined dataset, a deployment under 3h, and a missing
- * drone-count report. Curable gaps stay PENDING inside the grace window and
+ * The gate has per-report axes (deployment >= 3h, crew), day-shared axes (video >= max(2 min, 50% x airborne)
+ * and a #datasets notice). Two failures are machine auto-rejects (hard no-pay,
+ * admin can override via the instruction path): an admin-declined dataset and a
+ * deployment under 3h. Curable gaps stay PENDING inside the grace window and
  * NEEDS_REVIEW after. ACCEPTED ⇔ the crew is paid for the day (see the
- * 2026-07-03 unified-day-qualification spec).
+ * 2026-07-03 unified-day-qualification spec). The drone-count axis is
+ * PER-PERSON since 2026-07-28 (see the per-pilot drone-count spec): a missing
+ * report no longer rejects the day — it excludes only the non-submitting drone
+ * owner from the bonus (lib/fieldBonus), surfaced here as
+ * `droneMissingSubmitters` for display.
  *
  * No React/Next imports; unit-tested. Reuses MIN_RATIO and the shared working-day
  * math. See docs/.../field-day-acceptance spec (phase B).
@@ -43,7 +46,8 @@ export interface VerdictInput {
   deployWindow?: { start: string; end: string };
   /** Звіт deployment minutes: number → gate on it; null → Звіт without a window (curable gap); undefined → unknown source (don't gate). */
   deployMin?: number | null;
-  /** false when no drone-count report was attributed to this flight day. Defaults true (unknown → don't gate). */
+  /** false when no drone-count report was attributed to this flight day.
+   *  DISPLAY-ONLY since 2026-07-28 (the drone axis is per-person, in the bonus). */
   droneReportPresent?: boolean;
   /** false when the day has no parsed "Звіт" at all (nobody attributable to pay). Defaults true. */
   hasZvit?: boolean;
@@ -77,12 +81,18 @@ export interface DayVerdict {
   deployWindow?: { start: string; end: string };
   /** Звіт deployment minutes (gate axis); absent on legacy reports. */
   deployMin?: number | null;
-  /** false when no drone-count report was attributed to the day; absent = ungated. */
+  /** false when no drone-count report was attributed to the day (display only). */
   droneReportPresent?: boolean;
   /** false when the day has no parsed "Звіт"; absent = true. */
   hasZvit?: boolean;
   /** Per-person / per-category drone counts for the day (display only; not a gate). */
   droneReport?: DroneEntry[];
+  /** Author ids who submitted their own drone count for the day (day-shared);
+   *  absent = unknown (legacy report / classifier failure) → per-person gate skipped. */
+  droneSubmitters?: string[];
+  /** Drone owners on THIS report's crew still owing their own submission
+   *  (roster names; display — the pay effect lives in lib/fieldBonus). */
+  droneMissingSubmitters?: string[];
   /** Drone-loss state for THIS report (from the loss ledger); absent = no loss. */
   loss?: { lost: boolean; found: boolean };
 }
@@ -103,7 +113,6 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
   const flew = airborneMinutes > 0 || !airborneReported;
   const deployShort = flew && typeof deployMin === "number" && deployMin < MIN_DEPLOY_MIN; // hard fail
   const deployUnknown = flew && deployMin === null;                                        // curable gap
-  const droneMissing = flew && !droneReportPresent;                                        // hard fail
   const noZvit = flew && !hasZvit;                                                         // curable gap
 
   const reasons: string[] = [];
@@ -122,14 +131,13 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
   }
   if (deployShort) reasons.push(`deployment ${deployMin}m is under 3h`);
   if (deployUnknown) reasons.push("deployment window not recorded in the Звіт");
-  if (droneMissing) reasons.push("no drone-count report in #field-qa");
   if (noZvit) reasons.push("flight detected but no Звіт (crew/deployment unknown)");
   if (datasetStatus === "MISSING") reasons.push("no #datasets notice for the day");
   if (datasetStatus === "WAIVED") reasons.push("no dataset — reason accepted (waived)");
   if (datasetStatus === "DECLINED") reasons.push("dataset reason declined by an admin");
 
   let status: VerdictStatus;
-  if (datasetStatus === "DECLINED" || deployShort || droneMissing) {
+  if (datasetStatus === "DECLINED" || deployShort) {
     status = "REJECTED";
   } else if (videoOk && datasetOk && !deployUnknown && !noZvit) {
     status = "ACCEPTED";

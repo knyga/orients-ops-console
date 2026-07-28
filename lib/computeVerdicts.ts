@@ -25,6 +25,7 @@ import { applyRosterCorrection, correctionForReport } from "./rosterCorrection";
 import { buildReport, mergeFlightDays, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
 import { todayInFieldTz } from "./syncChannels";
 import type { DroneEntry } from "./droneReport";
+import { DRONE_OWNERS } from "./droneOwners";
 import { readLossRecords } from "./lossStore";
 import { lossForVerdict } from "./lossLedger";
 
@@ -33,7 +34,7 @@ const DATASETS_CHANNEL = "datasets";
 
 /** Shape of the committed field-qa report we read airborne minutes from (S2). */
 interface FieldQaReport {
-  days: { date: string; airborneMinutes: number; droneReport?: DroneEntry[] }[];
+  days: { date: string; airborneMinutes: number; droneReport?: DroneEntry[]; droneSubmitters?: string[] }[];
 }
 
 export interface ComputeVerdictsOptions {
@@ -145,11 +146,24 @@ export async function computeVerdicts(
     const eff = applyRosterCorrection(row.roster, true, correctionForReport(corrections, date, row.reportTs, row.reportCount));
     const drones = fqDay?.droneReport;
     const loss = lossForVerdict(lossRows, date, row.reportTs);
+    // Per-person drone axis (display; the pay effect lives in lib/fieldBonus):
+    // drone owners on this report's crew without their OWN submission for the
+    // date. Only meaningful when the day flew and attribution is known.
+    const submitters = fqDay?.droneSubmitters;
+    const flew = row.airborneMinutes > 0 || !row.airborneReported;
+    const missingOwners =
+      flew && submitters !== undefined
+        ? DRONE_OWNERS.filter((o) => eff.roster.includes(o.rosterName) && !submitters.includes(o.userId)).map(
+            (o) => o.rosterName,
+          )
+        : [];
     return {
       ...resolved,
       roster: eff.roster,
       unknownInitials: row.unknownInitials,
       ...(drones && drones.length ? { droneReport: drones } : {}),
+      ...(submitters !== undefined ? { droneSubmitters: submitters } : {}),
+      ...(missingOwners.length ? { droneMissingSubmitters: missingOwners } : {}),
       ...(loss ? { loss } : {}),
     };
   });
