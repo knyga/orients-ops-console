@@ -153,6 +153,19 @@ describe("extractDroneReports", () => {
     expect(out.byDate.get("2026-08-03")).toEqual([E("Влад", true, 5), E("Андріан", true, 3)]);
   });
 
+  it("never classifies the reminder anchor message itself", async () => {
+    const anchors = new Map([["1000.10", "2026-08-03"]]);
+    const messages: DroneMessage[] = [
+      // The anchor is its own thread parent (Slack sets thread_ts = ts once it
+      // has replies) and even mentions «шт» — still not a submission.
+      { ts: "1000.10", text: "🛸 Звіт по дронах за 03.08 — вкажіть шт", authorId: "B_BOT", threadTs: "1000.10" },
+    ];
+    const classify = vi.fn(async () => ({ reports: [] }));
+    const out = await extractDroneReports(messages, classify, { anchorDateByThreadTs: anchors });
+    expect(classify).not.toHaveBeenCalled();
+    expect(out.byDate.size).toBe(0);
+  });
+
   it("treats any reply inside a reminder thread as a candidate and defaults its date to the anchor's", async () => {
     const anchors = new Map([["1000.10", "2026-08-03"]]);
     const messages: DroneMessage[] = [

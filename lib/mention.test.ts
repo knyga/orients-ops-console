@@ -13,7 +13,7 @@ describe("mentionize", () => {
     expect(mentionize("Taras Panasyuk")).toBe(`<@${taras.slackId}>`);
   });
   it("resolves an alias form", () => {
-    expect(mentionize("Влад")).toBe("<@U09UA5J6CHH>");
+    expect(mentionize("Влад")).toBe("<@U091JDN2U5B>");
   });
   it("resolves the 'Сер' prefix roster name", () => {
     expect(mentionize("Сергій")).toBe(`<@${serhiy.slackId}>`);

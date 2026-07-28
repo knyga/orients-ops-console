@@ -78,8 +78,8 @@ export const PEOPLE: Person[] = [
   { name: "Andrian Korchynskiy", role: "field operator", slackId: "U09AAVAEE6L", jiraAccount: "Andrian Korchynskiy", rosterInitial: "А", aliases: ["Андріан Корчинський"] },
   { name: "Taras Panasyuk", role: "field operator", slackId: "U09LT4HM9PY", jiraAccount: "taras.panasyuk", rosterInitial: "Т", aliases: ["Тарас Панасюк"] },
   { name: "Kostiantyn V.", role: "field operator", slackId: "U0A77GNUDBJ", jiraAccount: "Kostiantyn V.", rosterInitial: "К", aliases: ["Костянтин"] },
-  // alt slack U091JDN2U5B ("Владислав")
-  { name: "Vlad_G", role: "field operator", slackId: "U09UA5J6CHH", rosterInitial: "В", aliases: ["Владислав", "Влад"] },
+  // Влад mentions → Владислав (U091JDN2U5B), not the Vlad_G alt account U09UA5J6CHH
+  { name: "Владислав", role: "field operator", slackId: "U091JDN2U5B", rosterInitial: "В", aliases: ["Влад", "Vlad_G"] },
   // rosterInitial "Сер" resolves to "Сергій" via resolveInitial's prefix rule
   { name: "Serhiy Shainyuk", role: "field operator", slackId: "U09P35EQUGZ", rosterInitial: "Сер", aliases: ["Сергій Шайнюк"] },
 ];

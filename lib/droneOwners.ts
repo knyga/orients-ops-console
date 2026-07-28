@@ -31,3 +31,20 @@ export function droneOwnerForUserId(userId: string): DroneOwner | undefined {
 export function droneOwnerForRosterName(name: string): DroneOwner | undefined {
   return DRONE_OWNERS.find((o) => o.rosterName === name.trim());
 }
+
+/**
+ * THE per-person drone-count predicate — the single definition both the pay
+ * gate (lib/fieldBonus) and the display surfaces (verdict «без звіту», the
+ * reminder) use, so they cannot diverge: a crew member owes a submission iff
+ * they are a drone owner, are not among the date's submitters, and no approver
+ * `eligibility: "counted"` correction explicitly counts them. Pure.
+ */
+export function owesDroneSubmission(
+  name: string,
+  submitters: readonly string[],
+  eligibility?: Record<string, "counted" | "not_counted">,
+): boolean {
+  const owner = droneOwnerForRosterName(name);
+  if (!owner || submitters.includes(owner.userId)) return false;
+  return eligibility?.[name] !== "counted";
+}

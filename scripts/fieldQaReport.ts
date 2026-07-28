@@ -1,5 +1,6 @@
 import { FIELD_TIMEZONE } from "../lib/reconcile";
 import type { DroneEntry } from "../lib/droneReport";
+import type { ExtractDroneReportsResult } from "../lib/extractDroneReports";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -131,21 +132,20 @@ export function toInputsCsv(days: ExtractedDay[]): string {
 }
 
 /** Build the lossless report artifact, attaching a Slack permalink and (when
- *  provided) the day's parsed drone-count entries per day. With `droneByDate`
- *  present (= extraction ran), every day gets an explicit `droneReport` —
- *  entries when found, `[]` when classified-and-none — EXCEPT dates in
- *  `droneFailedDates` (classifier failed → presence unknown → no key), so the
- *  verdict's drone gate skips just that day instead of hard-rejecting it. */
+ *  provided) the day's drone extraction. With `drones` present (= extraction
+ *  ran), every day gets explicit `droneReport` + `droneSubmitters` — entries /
+ *  author ids when found, `[]` when classified-and-none — EXCEPT dates in
+ *  `drones.failedDates` (classifier failed → presence unknown → no keys), so
+ *  the per-person drone gate skips just that day instead of unpaying on
+ *  missing data. */
 export function buildReport(
   days: ExtractedDay[],
   period: Period,
   permalinkByTs: Map<string, string>,
-  droneByDate?: Map<string, DroneEntry[]>,
-  droneFailedDates?: Set<string>,
-  droneSubmittersByDate?: Map<string, Set<string>>,
+  drones?: ExtractDroneReportsResult,
 ): FieldQaReport {
   const reportDays: ReportDay[] = days.map((d) => {
-    const droneKnown = droneByDate !== undefined && !droneFailedDates?.has(d.date);
+    const droneKnown = drones !== undefined && !drones.failedDates.has(d.date);
     return {
       date: d.date,
       flightHours: round2(d.airborneSeconds / 3600),
@@ -153,9 +153,11 @@ export function buildReport(
       flights: d.flew ? d.flights : 0, // a no-fly day carries 0 flights (no phantom count)
       flew: d.flew,
       permalink: permalinkByTs.get(d.sourceTs) ?? "",
-      ...(droneKnown ? { droneReport: droneByDate.get(d.date) ?? [] } : {}),
-      ...(droneKnown && droneSubmittersByDate !== undefined
-        ? { droneSubmitters: [...(droneSubmittersByDate.get(d.date) ?? [])].sort() }
+      ...(droneKnown
+        ? {
+            droneReport: drones.byDate.get(d.date) ?? [],
+            droneSubmitters: [...(drones.submittersByDate.get(d.date) ?? [])].sort(),
+          }
         : {}),
     };
   });

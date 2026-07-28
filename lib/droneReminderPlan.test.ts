@@ -1,27 +1,41 @@
 import { describe, it, expect } from "vitest";
-import { anchorDateFromText, droneReminderAnchorLine, planDroneReminder } from "./droneReminderPlan";
+import {
+  dateFromDroneReminderKey,
+  droneReminderAnchorLine,
+  droneReminderAnchors,
+  droneReminderKey,
+  planDroneReminder,
+} from "./droneReminderPlan";
 import { DRONE_OWNERS } from "./droneOwners";
 
-describe("droneReminderAnchorLine / anchorDateFromText", () => {
-  it("round-trips: the anchor line parses back to its date", () => {
-    const line = droneReminderAnchorLine("2026-08-03");
-    expect(line).toBe("🛸 Звіт по дронах за 03.08");
-    expect(anchorDateFromText(line, "2026-08-03")).toBe("2026-08-03");
+describe("droneReminderKey / dateFromDroneReminderKey", () => {
+  it("round-trips", () => {
+    expect(droneReminderKey("2026-08-03")).toBe("drone-reminder:2026-08-03");
+    expect(dateFromDroneReminderKey("drone-reminder:2026-08-03")).toBe("2026-08-03");
   });
 
-  it("parses the anchor out of the FULL reminder message (first line)", () => {
-    const plan = planDroneReminder({ date: "2026-08-03", submittedUserIds: [] });
-    expect(plan).not.toBeNull();
-    expect(anchorDateFromText(plan!.text, "2026-08-03")).toBe("2026-08-03");
+  it("rejects foreign or malformed keys and dates", () => {
+    expect(dateFromDroneReminderKey("verdict:2026-08-03")).toBeNull();
+    expect(dateFromDroneReminderKey("drone-reminder:03.08")).toBeNull();
+    expect(() => droneReminderKey("03.08.2026")).toThrow();
   });
+});
 
-  it("returns null for non-anchor text", () => {
-    expect(anchorDateFromText("Звіт 08:00–19:00 Влад, Тарас", "2026-08-03")).toBeNull();
-    expect(anchorDateFromText("шось про 🛸 Звіт по дронах за колись", "2026-08-03")).toBeNull();
+describe("droneReminderAnchors", () => {
+  it("maps only SENT drone-reminder rows with a ts", () => {
+    const anchors = droneReminderAnchors([
+      { feature: "drone-reminder", status: "sent", ts: "1000.1", key: "drone-reminder:2026-08-03" },
+      { feature: "drone-reminder", status: "failed", ts: "1000.2", key: "drone-reminder:2026-08-04" },
+      { feature: "drone-reminder", status: "sent", ts: null, key: "drone-reminder:2026-08-05" },
+      { feature: "verdict", status: "sent", ts: "1000.3", key: "verdict:2026-08-03" },
+    ]);
+    expect(anchors).toEqual(new Map([["1000.1", "2026-08-03"]]));
   });
+});
 
-  it("takes the year from the post date", () => {
-    expect(anchorDateFromText("🛸 Звіт по дронах за 31.12", "2027-12-31")).toBe("2027-12-31");
+describe("droneReminderAnchorLine", () => {
+  it("renders the human first line", () => {
+    expect(droneReminderAnchorLine("2026-08-03")).toBe("🛸 Звіт по дронах за 03.08");
   });
 
   it("rejects a malformed date input", () => {

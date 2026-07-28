@@ -27,6 +27,7 @@ import { videoUploadDate } from "./reconcile";
 import { classifyDroneCount } from "./droneCountReport";
 import { mergeDroneEntries, type DroneEntry } from "./droneReport";
 import { droneOwnerForUserId } from "./droneOwners";
+import { dbExtractCacheStore, droneKey, makeCachedDroneClassifier } from "./extractCache";
 import type { DroneDayReport } from "./droneCountReportPrompt";
 
 export interface DroneMessage {
@@ -44,6 +45,22 @@ export const kyivPostDate = (ts: string) => videoUploadDate(new Date(Number(ts) 
 
 /** A report candidate carries at least one per-unit tally ("1шт", "0 шт", …). */
 const CANDIDATE = /шт/;
+
+/** The "" author key for messages with no author id. Its per-date snapshots
+ *  merge under one shared key (later such message replaces the earlier — same
+ *  as any single author) and it is never reported as a submitter. */
+const UNKNOWN_AUTHOR = "";
+
+/** The date a report defaults to when its text names none: the reminder
+ *  anchor's target date for a reply inside a reminder thread, else the Kyiv
+ *  post date. THE cache-key input — every caller preloading the drone cache
+ *  must key with this exact rule (extractDroneReportsCached owns that). */
+export function defaultDateFor(
+  m: { ts: string; threadTs?: string },
+  anchors: Map<string, string>,
+): string {
+  return (m.threadTs !== undefined && anchors.get(m.threadTs)) || kyivPostDate(m.ts);
+}
 
 export interface ExtractDroneReportsOptions {
   /** Reminder-anchor thread ts → the date that anchor targets. A reply inside
@@ -81,14 +98,21 @@ export async function extractDroneReports(
 ): Promise<ExtractDroneReportsResult> {
   const anchors = opts.anchorDateByThreadTs ?? new Map<string, string>();
   const candidates = messages
-    .filter((m) => m.text && (CANDIDATE.test(m.text) || (m.threadTs !== undefined && anchors.has(m.threadTs))))
+    .filter(
+      (m) =>
+        m.text &&
+        // The reminder anchor itself is never a submission — skip it so a
+        // replied-to reminder doesn't burn a classify call every run.
+        !anchors.has(m.ts) &&
+        (CANDIDATE.test(m.text) || (m.threadTs !== undefined && anchors.has(m.threadTs))),
+    )
     .sort((a, b) => Number(a.ts) - Number(b.ts));
 
   // date → author id → that author's latest snapshot for the date.
   const byAuthorDate = new Map<string, Map<string, DroneEntry[]>>();
   const failedDates = new Set<string>();
   for (const m of candidates) {
-    const defaultDate = (m.threadTs !== undefined && anchors.get(m.threadTs)) || kyivPostDate(m.ts);
+    const defaultDate = defaultDateFor(m, anchors);
     let reports: DroneDayReport[];
     try {
       ({ reports } = await classify(m.text, defaultDate));
@@ -105,7 +129,7 @@ export async function extractDroneReports(
     }
     // Per-author snapshot semantics: this author's tally for a date supersedes
     // THEIR earlier message's; other authors' same-date tallies are untouched.
-    const author = m.authorId ?? "";
+    const author = m.authorId ?? UNKNOWN_AUTHOR;
     for (const [date, entries] of perDate) {
       const perAuthor = byAuthorDate.get(date) ?? new Map<string, DroneEntry[]>();
       perAuthor.set(author, mergeDroneEntries(attributeToOwner(entries, m.authorId)));
@@ -117,7 +141,28 @@ export async function extractDroneReports(
   const submittersByDate = new Map<string, Set<string>>();
   for (const [date, perAuthor] of byAuthorDate) {
     byDate.set(date, mergeDroneEntries([...perAuthor.values()].flat()));
-    submittersByDate.set(date, new Set([...perAuthor.keys()].filter(Boolean)));
+    submittersByDate.set(date, new Set([...perAuthor.keys()].filter((a) => a !== UNKNOWN_AUTHOR)));
   }
   return { byDate, submittersByDate, failedDates };
+}
+
+/**
+ * The production entry point: extractDroneReports behind the shared
+ * content-addressed Claude cache (`extract_cache`, kind "drone"). Owns the
+ * preload so the cache key and the classifier's default date CANNOT diverge —
+ * both come from defaultDateFor. Returns the extraction result plus the number
+ * of real Claude calls (`misses`). Used by the field-qa extract and the
+ * drone-reminder; unit tests keep injecting a classifier into the base fn.
+ */
+export async function extractDroneReportsCached(
+  messages: DroneMessage[],
+  anchorDateByThreadTs: Map<string, string>,
+): Promise<ExtractDroneReportsResult & { misses: number }> {
+  const store = dbExtractCacheStore("drone");
+  const preloaded = await store.readMany(
+    messages.map((m) => droneKey(m.text, defaultDateFor(m, anchorDateByThreadTs))),
+  );
+  const { classifier, misses } = makeCachedDroneClassifier(store, preloaded, classifyDroneCount);
+  const result = await extractDroneReports(messages, classifier, { anchorDateByThreadTs });
+  return { ...result, misses: misses() };
 }

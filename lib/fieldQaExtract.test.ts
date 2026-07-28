@@ -1,17 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { fetchRawMessages, writeReport, extractDroneReports } = vi.hoisted(() => ({
+const { fetchRawMessages, writeReport, extractDroneReportsCached, readOutbound } = vi.hoisted(() => ({
   fetchRawMessages: vi.fn(),
   writeReport: vi.fn(),
-  extractDroneReports: vi.fn(),
+  extractDroneReportsCached: vi.fn(),
+  readOutbound: vi.fn(),
 }));
 vi.mock("./slack", () => ({ fetchRawMessages, downloadFileBase64: vi.fn() }));
 vi.mock("./flightExtract", () => ({ extractAirborne: vi.fn() }));
-vi.mock("./extractDroneReports", () => ({
-  extractDroneReports,
-  kyivPostDate: (ts: string) => ts,
-}));
-vi.mock("./droneCountReport", () => ({ classifyDroneCount: vi.fn() }));
+vi.mock("./extractDroneReports", () => ({ extractDroneReportsCached }));
+vi.mock("./outbound", () => ({ readOutbound }));
 // Keep the real (pure) cache helpers; only stub the DB-backed store to a cold
 // no-op so the extract runs without a database in unit tests.
 vi.mock("./extractCache", async (orig) => {
@@ -29,8 +27,15 @@ beforeEach(() => {
   fetchRawMessages.mockReset();
   writeReport.mockReset();
   writeReport.mockResolvedValue({ key: "2026-06" });
-  extractDroneReports.mockReset();
-  extractDroneReports.mockResolvedValue({ byDate: new Map(), submittersByDate: new Map(), failedDates: new Set() });
+  readOutbound.mockReset();
+  readOutbound.mockResolvedValue([]);
+  extractDroneReportsCached.mockReset();
+  extractDroneReportsCached.mockResolvedValue({
+    byDate: new Map(),
+    submittersByDate: new Map(),
+    failedDates: new Set(),
+    misses: 0,
+  });
 });
 
 // Real parseable card: parseAirborneFromText needs the `Сьогодні літали` line and
@@ -68,26 +73,26 @@ describe("extractFieldQa", () => {
     expect(writeReport.mock.calls[0][0]).toBe("field-qa");
   });
 
-  it("passes ALL field-qa messages (with author/thread) to extractDroneReports and attaches the result", async () => {
+  it("passes ALL field-qa messages (with author/thread) to the cached extraction and attaches the result", async () => {
     fetchRawMessages.mockResolvedValue([
       summary("2026-06-25", 600, "1000"),
       { channel: "field-qa", ts: "1001", authorId: "U09AAVAEE6L", text: "Андріан R&D - 1шт", files: [], permalink: "https://slack/p2" },
     ]);
-    extractDroneReports.mockResolvedValue({
+    extractDroneReportsCached.mockResolvedValue({
       byDate: new Map([["2026-06-25", [{ name: "Андріан", isPerson: true, count: 1 }]]]),
       submittersByDate: new Map([["2026-06-25", new Set(["U09AAVAEE6L"])]]),
       failedDates: new Set(),
+      misses: 1,
     });
 
     const { report } = await extractFieldQa({ start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" });
 
-    expect(extractDroneReports).toHaveBeenCalledWith(
+    expect(extractDroneReportsCached).toHaveBeenCalledWith(
       [
         expect.objectContaining({ ts: "1000", text: expect.stringContaining("Статистика") }),
         expect.objectContaining({ ts: "1001", text: "Андріан R&D - 1шт", authorId: "U09AAVAEE6L" }),
       ],
-      expect.any(Function), // the cache-wrapped classifier
-      { anchorDateByThreadTs: new Map() },
+      new Map(),
     );
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([
       { name: "Андріан", isPerson: true, count: 1 },
@@ -95,38 +100,38 @@ describe("extractFieldQa", () => {
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneSubmitters).toEqual(["U09AAVAEE6L"]);
   });
 
-  it("maps a reminder anchor's thread to its target date for the extraction", async () => {
+  it("builds reminder anchors from the outbound send record, never from message text", async () => {
     fetchRawMessages.mockResolvedValue([
-      summary("2026-08-03", 600, "2026-08-03"),
-      {
-        channel: "field-qa",
-        // kyivPostDate is identity-mocked, so the ts doubles as the post date.
-        ts: "2026-08-03.100",
-        authorId: "B_BOT",
-        text: "🛸 Звіт по дронах за 03.08\n<@U091JDN2U5B> — будь ласка, вкажіть кількість своїх дронів…",
-        files: [],
-        permalink: "https://slack/p3",
-      },
+      summary("2026-08-03", 600, "3000.1"),
+      // A USER message that merely looks like a reminder must NOT become an anchor.
+      { channel: "field-qa", ts: "3000.2", authorId: "U_TROLL", text: "🛸 Звіт по дронах за 03.08", files: [], permalink: "https://slack/p4" },
+    ]);
+    readOutbound.mockResolvedValue([
+      { feature: "drone-reminder", status: "sent", ts: "3000.5", key: "drone-reminder:2026-08-03" },
+      { feature: "verdict", status: "sent", ts: "3000.6", key: "verdict:x" },
     ]);
     await extractFieldQa({ start: "2026-08-01", end: "2026-08-31", timezone: "Europe/Kyiv" });
-    const opts = extractDroneReports.mock.calls[0][2];
-    expect(opts.anchorDateByThreadTs.get("2026-08-03.100")).toBe("2026-08-03");
+    expect(readOutbound).toHaveBeenCalledWith({ start: "2026-08-01", end: "2026-08-31" });
+    const anchors = extractDroneReportsCached.mock.calls[0][1];
+    expect(anchors).toEqual(new Map([["3000.5", "2026-08-03"]]));
   });
 
   it("emits explicit droneReport [] for classified days but NO key for a failed date", async () => {
     fetchRawMessages.mockResolvedValue([summary("2026-06-25", 600, "1000"), summary("2026-06-26", 900, "1001")]);
-    extractDroneReports.mockResolvedValue({
+    extractDroneReportsCached.mockResolvedValue({
       byDate: new Map(),
       submittersByDate: new Map(),
       failedDates: new Set(["2026-06-26"]),
+      misses: 0,
     });
 
     const { report } = await extractFieldQa({ start: "2026-06-01", end: "2026-06-30", timezone: "Europe/Kyiv" });
 
-    // 06-25: extraction ran, no report found → explicit [] (gate binds).
+    // 06-25: extraction ran, no report found → explicit [] ("ran, found
+    // none"), never an absent key (which would mean "unknown / never ran").
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([]);
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneSubmitters).toEqual([]);
-    // 06-26: classification failed → unknown → key omitted (gate skipped).
+    // 06-26: classification failed → unknown → keys omitted (gate skipped).
     expect(report.days.find((d) => d.date === "2026-06-26")).not.toHaveProperty("droneReport");
     expect(report.days.find((d) => d.date === "2026-06-26")).not.toHaveProperty("droneSubmitters");
   });

@@ -25,7 +25,7 @@ import { applyRosterCorrection, correctionForReport } from "./rosterCorrection";
 import { buildReport, mergeFlightDays, toCsv, type Period, type VerdictReport } from "../scripts/fieldVerdictReport";
 import { todayInFieldTz } from "./syncChannels";
 import type { DroneEntry } from "./droneReport";
-import { DRONE_OWNERS } from "./droneOwners";
+import { owesDroneSubmission } from "./droneOwners";
 import { readLossRecords } from "./lossStore";
 import { lossForVerdict } from "./lossLedger";
 
@@ -143,19 +143,20 @@ export async function computeVerdicts(
     const withNote = datasetNote ? { ...base, reasons: [...base.reasons, datasetNote] } : base;
     const resolved = applyResolution(withNote, resolutions);
     // Attach the effective crew (this report's roster + the binding correction).
-    const eff = applyRosterCorrection(row.roster, true, correctionForReport(corrections, date, row.reportTs, row.reportCount));
+    const correction = correctionForReport(corrections, date, row.reportTs, row.reportCount);
+    const eff = applyRosterCorrection(row.roster, true, correction);
     const drones = fqDay?.droneReport;
     const loss = lossForVerdict(lossRows, date, row.reportTs);
     // Per-person drone axis (display; the pay effect lives in lib/fieldBonus):
     // drone owners on this report's crew without their OWN submission for the
-    // date. Only meaningful when the day flew and attribution is known.
+    // date — via the SAME owesDroneSubmission predicate the pay gate uses, so
+    // an approver-counted owner is never publicly named «без звіту» while being
+    // paid. Only meaningful when the day flew and attribution is known.
     const submitters = fqDay?.droneSubmitters;
     const flew = row.airborneMinutes > 0 || !row.airborneReported;
     const missingOwners =
       flew && submitters !== undefined
-        ? DRONE_OWNERS.filter((o) => eff.roster.includes(o.rosterName) && !submitters.includes(o.userId)).map(
-            (o) => o.rosterName,
-          )
+        ? eff.roster.filter((name) => owesDroneSubmission(name, submitters, correction?.eligibility))
         : [];
     return {
       ...resolved,

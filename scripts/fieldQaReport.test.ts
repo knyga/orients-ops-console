@@ -137,10 +137,20 @@ describe("buildReport drone attachment", () => {
     sourceTs: `${date}-ts`,
   });
 
+  const extraction = (over: {
+    byDate?: Map<string, DroneEntry[]>;
+    submittersByDate?: Map<string, Set<string>>;
+    failedDates?: Set<string>;
+  }) => ({
+    byDate: over.byDate ?? new Map<string, DroneEntry[]>(),
+    submittersByDate: over.submittersByDate ?? new Map<string, Set<string>>(),
+    failedDates: over.failedDates ?? new Set<string>(),
+  });
+
   it("attaches drone entries by date; a classified-and-none day gets an explicit []", () => {
-    const drones = new Map<string, DroneEntry[]>([
-      ["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]],
-    ]);
+    const drones = extraction({
+      byDate: new Map([["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]]]),
+    });
     const report = buildReport([testDay("2026-06-25"), testDay("2026-06-26")], PERIOD, new Map(), drones);
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([
       { name: "Андріан", isPerson: true, count: 2 },
@@ -151,16 +161,15 @@ describe("buildReport drone attachment", () => {
   });
 
   it("omits the droneReport key for a date whose classification failed (unknown, not [])", () => {
-    const drones = new Map<string, DroneEntry[]>([
-      ["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]],
-    ]);
-    const failedDates = new Set(["2026-06-26"]);
+    const drones = extraction({
+      byDate: new Map([["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]]]),
+      failedDates: new Set(["2026-06-26"]),
+    });
     const report = buildReport(
       [testDay("2026-06-25"), testDay("2026-06-26"), testDay("2026-06-27")],
       PERIOD,
       new Map(),
       drones,
-      failedDates,
     );
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneReport).toEqual([
       { name: "Андріан", isPerson: true, count: 2 },
@@ -169,24 +178,23 @@ describe("buildReport drone attachment", () => {
     expect(report.days.find((d) => d.date === "2026-06-27")?.droneReport).toEqual([]);
   });
 
-  it("omits droneReport entirely when no map is passed", () => {
+  it("omits droneReport entirely when no extraction is passed", () => {
     const report = buildReport([testDay("2026-06-25")], PERIOD, new Map());
     expect(report.days[0]).not.toHaveProperty("droneReport");
+    expect(report.days[0]).not.toHaveProperty("droneSubmitters");
   });
 
   it("attaches sorted droneSubmitters with the same tri-state as droneReport", () => {
-    const drones = new Map<string, DroneEntry[]>([
-      ["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]],
-    ]);
-    const submitters = new Map<string, Set<string>>([["2026-06-25", new Set(["U2", "U1"])]]);
-    const failedDates = new Set(["2026-06-27"]);
+    const drones = extraction({
+      byDate: new Map([["2026-06-25", [{ name: "Андріан", isPerson: true, count: 2 }]]]),
+      submittersByDate: new Map([["2026-06-25", new Set(["U2", "U1"])]]),
+      failedDates: new Set(["2026-06-27"]),
+    });
     const report = buildReport(
       [testDay("2026-06-25"), testDay("2026-06-26"), testDay("2026-06-27")],
       PERIOD,
       new Map(),
       drones,
-      failedDates,
-      submitters,
     );
     expect(report.days.find((d) => d.date === "2026-06-25")?.droneSubmitters).toEqual(["U1", "U2"]);
     // ran, nobody submitted → explicit []

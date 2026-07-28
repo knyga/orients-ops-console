@@ -11,7 +11,7 @@
  */
 import type { Period } from "./period";
 import { applyRosterCorrection, correctionForReport, type RosterCorrection } from "./rosterCorrection";
-import { droneOwnerForRosterName } from "./droneOwners";
+import { owesDroneSubmission } from "./droneOwners";
 import { MIN_DEPLOY_MIN, MIN_VIDEO_MIN, reportKey, type VerdictStatus } from "./fieldDayVerdict";
 
 export const TRIP = 700;
@@ -92,10 +92,7 @@ function applyDroneGate(
 ): { name: string; counted: boolean }[] {
   if (submitters === undefined) return perPerson;
   return perPerson.map((p) => {
-    if (!p.counted) return p;
-    const owner = droneOwnerForRosterName(p.name);
-    if (!owner || submitters.includes(owner.userId)) return p;
-    if (correction?.eligibility?.[p.name] === "counted") return p; // approver override outranks
+    if (!p.counted || !owesDroneSubmission(p.name, submitters, correction?.eligibility)) return p;
     flags.push({ kind: "no_drone_count", date, detail: `${p.name}: no own drone-count submission` });
     return { ...p, counted: false };
   });

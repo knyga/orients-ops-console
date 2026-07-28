@@ -5,8 +5,9 @@
  * #field-qa messages (incl. thread replies), work out which drone owners
  * already submitted their OWN count for today, and — only when someone is
  * missing — post the Ukrainian reminder tagging exactly those people. The
- * reminder is the day's thread anchor: its stable first line names the date, so
- * the extraction attributes dateless replies in its thread to today.
+ * reminder is the day's thread anchor: its outbound send record (feature
+ * "drone-reminder", key "drone-reminder:<date>") maps its thread to the target
+ * date, so the extraction attributes dateless replies in its thread to today.
  *
  * Idempotent: the post keys `drone-reminder:<date>` at the lib/slack reserve-
  * then-send chokepoint, so a cron re-fire posts once. All submitted → no post.
@@ -15,13 +16,17 @@ import "server-only";
 import { fetchRawMessages, postMessage } from "./slack";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { todayInFieldTz } from "./syncChannels";
-import { extractDroneReports, kyivPostDate } from "./extractDroneReports";
-import { classifyDroneCount } from "./droneCountReport";
-import { anchorDateFromText, planDroneReminder } from "./droneReminderPlan";
-import { dbExtractCacheStore, droneKey, makeCachedDroneClassifier } from "./extractCache";
+import { extractDroneReportsCached } from "./extractDroneReports";
+import { DRONE_REMINDER_FEATURE, droneReminderAnchors, droneReminderKey, planDroneReminder } from "./droneReminderPlan";
+import { readOutbound } from "./outbound";
 import type { SendTrigger } from "./outboundKeys";
 
 const FIELD_QA = "field-qa";
+
+/** The previous calendar day of a YYYY-MM-DD date. */
+function dayBefore(date: string): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+}
 
 export interface DroneReminderResult {
   date: string;
@@ -49,27 +54,19 @@ export async function runDroneReminder(opts: RunDroneReminderOptions): Promise<D
   const channel = TRACKED_CHANNELS.find((c) => c.name === FIELD_QA);
   if (!channel) throw new Error(`drone-reminder: no tracked channel "${FIELD_QA}"`);
 
-  // Today's #field-qa messages incl. thread replies — the submission surface.
-  const messages = await fetchRawMessages({ start: today, end: today }, [channel]);
-  const anchorDateByThreadTs = new Map<string, string>();
-  for (const m of messages) {
-    const anchorDate = anchorDateFromText(m.text, kyivPostDate(m.ts));
-    if (anchorDate) anchorDateByThreadTs.set(m.ts, anchorDate);
-  }
-  const defaultDateOf = (m: { ts: string; thread_ts?: string }) =>
-    (m.thread_ts !== undefined && anchorDateByThreadTs.get(m.thread_ts)) || kyivPostDate(m.ts);
-
-  // Same content-addressed cache as the nightly extract, so this run is
-  // near-free on Claude: unchanged messages are hits.
-  const droneStore = dbExtractCacheStore("drone");
-  const dronePreloaded = await droneStore.readMany(messages.map((m) => droneKey(m.text, defaultDateOf(m))));
-  const { classifier, misses } = makeCachedDroneClassifier(droneStore, dronePreloaded, classifyDroneCount);
-  const { submittersByDate } = await extractDroneReports(
+  // Yesterday + today's #field-qa messages incl. thread replies — one day of
+  // lookback so a previous-evening submission with an explicit «за DD.MM» date
+  // for today still counts at 11:00. Anchors come from the bot's outbound send
+  // record (never message text). Extraction runs behind the shared drone cache,
+  // so this run is near-free on Claude.
+  const window = { start: dayBefore(today), end: today };
+  const messages = await fetchRawMessages(window, [channel]);
+  const anchorDateByThreadTs = droneReminderAnchors(await readOutbound(window));
+  const { submittersByDate, misses } = await extractDroneReportsCached(
     messages.map((m) => ({ ts: m.ts, text: m.text, authorId: m.authorId, threadTs: m.thread_ts })),
-    classifier,
-    { anchorDateByThreadTs },
+    anchorDateByThreadTs,
   );
-  log(`drone-reminder: ${messages.length} message(s) today, ${misses()} Claude call(s) (rest cached)`);
+  log(`drone-reminder: ${messages.length} message(s) in ${window.start}..${window.end}, ${misses} Claude call(s) (rest cached)`);
 
   const submitted = [...(submittersByDate.get(today) ?? new Set<string>())];
   const plan = planDroneReminder({ date: today, submittedUserIds: submitted });
@@ -85,8 +82,8 @@ export async function runDroneReminder(opts: RunDroneReminderOptions): Promise<D
   }
 
   await postMessage(channel.id, plan.text, {
-    key: `drone-reminder:${today}`,
-    feature: "drone-reminder",
+    key: droneReminderKey(today),
+    feature: DRONE_REMINDER_FEATURE,
     channel: channel.name,
     trigger: opts.trigger ?? "cron",
   });

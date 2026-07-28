@@ -62,7 +62,12 @@ Drone owners (hardcoded, auditable — like `lib/approvers.ts`):
   with ≥1 entry). Owner-authored reports whose entries name no person are
   re-attributed to the author's roster name for the 🛸 display line.
 - `lib/fieldQaExtract.ts`: fetches #field-qa via `fetchRawMessages`; builds the
-  anchor map by regexing bot messages for the stable reminder first line.
+  anchor map (reminder thread ts → target date) from the bot's OWN durable send
+  record — `outbound_messages` rows with feature `drone-reminder`, key
+  `drone-reminder:<date>`, via `droneReminderAnchors` — never by parsing message
+  text, so a user message that merely looks like a reminder cannot hijack
+  thread-date attribution. The reminder's «🛸 Звіт по дронах за DD.MM» first
+  line is display-only.
 - `scripts/fieldQaReport.ts`: `ReportDay.droneSubmitters?: string[]` — same
   tri-state as `droneReport` (absent = unknown → gate skipped; never reject on
   missing data).
@@ -74,8 +79,10 @@ Drone owners (hardcoded, auditable — like `lib/approvers.ts`):
   ungated); after roster corrections, an owner on the crew without a submission
   and without an explicit `counted` override is excluded and flagged.
 - Reminder: pure `lib/droneReminderPlan.ts` (text + missing list, null when all
-  submitted, stable first line «🛸 Звіт по дронах за DD.MM …»), server-only
-  `lib/droneReminder.ts` (live fetch + cached extraction + idempotent
+  submitted; owns the `drone-reminder:<date>` key format + the outbound-row →
+  anchor-map helper), server-only `lib/droneReminder.ts` (fetches yesterday +
+  today — one day of lookback so a previous-evening submission with an explicit
+  date for today still counts at 11:00 — + cached extraction + idempotent
   `postMessage` key `drone-reminder:<date>`), `/api/cron/drone-reminder`
   (`0 8 * * *` UTC ≈ 11:00 Kyiv summer / 10:00 winter — same fixed-UTC
   compromise as the other crons), CLI `npm run drone-reminder` (dry-run default,
