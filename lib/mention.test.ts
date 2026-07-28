@@ -46,9 +46,13 @@ describe("mention", () => {
 });
 
 describe("dementionText", () => {
-  it("rewrites a known id back to the canonical name", () => {
+  it("rewrites a known id back to the roster first-name (not the canonical name)", () => {
     expect(dementionText(`👥 У полі: <@${taras.slackId}>, <@${serhiy.slackId}>.`))
-      .toBe("👥 У полі: Taras Panasyuk, Serhiy Shainyuk.");
+      .toBe("👥 У полі: Тарас, Сергій.");
+  });
+  it("falls back to the canonical name for a person without a rosterInitial", () => {
+    const andrii = PEOPLE.find((p) => p.name === "Andrii Svidnytskyi")!; // slackId, no rosterInitial
+    expect(dementionText(`<@${andrii.slackId}>`)).toBe("Andrii Svidnytskyi");
   });
   it("leaves an unknown id token intact", () => {
     expect(dementionText("<@U000UNKNOWN>")).toBe("<@U000UNKNOWN>");

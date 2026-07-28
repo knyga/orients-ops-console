@@ -192,6 +192,10 @@ describe("crew suffix", () => {
     expect(splitRosterSuffix("body")).toEqual({ body: "body", rosterLine: null, droneLine: null });
   });
 
+  it("round-trips the roster namespace: first-names out as mentions, back as first-names", () => {
+    expect(parseRosterSuffix(withRosterSuffix("body", ["Влад", "Тарас"]))).toEqual(["Влад", "Тарас"]);
+  });
+
   it("formatDayMessage appends the crew line for an ACCEPTED day", () => {
     const msg = formatDayMessage(day({ roster: ["Андріан", "Любомир"] }));
     expect(msg).toContain(`\n${ROSTER_MARKER}${mentionize("Андріан")}, ${mentionize("Любомир")}.`);

@@ -39,9 +39,18 @@ const NAME_TO_ID: Map<string, string> = (() => {
   return out;
 })();
 
-/** slackId → canonical display name, for dementionText. */
+/** slackId → the roster-namespace name for dementionText: the person's roster
+ *  first-name (via resolveInitial) when they have a rosterInitial, else their
+ *  canonical name. Every crew-suffix consumer matches on roster first-names
+ *  (see parseRosterSuffix), so de-mentioning must land back in that namespace. */
 const ID_TO_NAME: Map<string, string> = new Map(
-  PEOPLE.filter((p) => p.slackId).map((p) => [p.slackId!, p.name]),
+  PEOPLE.filter((p) => p.slackId).map((p) => {
+    if (p.rosterInitial) {
+      const r = resolveInitial(p.rosterInitial);
+      if ("name" in r) return [p.slackId!, r.name];
+    }
+    return [p.slackId!, p.name];
+  }),
 );
 
 /** "<@ID>" if `name` resolves to exactly one person with a slackId; else the
@@ -60,8 +69,12 @@ export function mention(person: Person): string {
   return person.slackId ? `<@${person.slackId}>` : person.name;
 }
 
-/** Rewrite every "<@ID>" token back to the person's canonical name (unknown id
- *  tokens left intact). For parse/display surfaces that must stay name-based. */
+/** Rewrite every "<@ID>" token back to the person's ROSTER FIRST-NAME (e.g.
+ *  "Тарас", "Сергій") when they have a rosterInitial, else their canonical
+ *  name; unknown id tokens are left intact. This is the roster namespace the
+ *  crew suffix (parseRosterSuffix) and its downstream matchers (roster
+ *  add/remove/eligibility resolution) operate in — never the canonical name.
+ *  For parse/display surfaces that must stay name-based. */
 export function dementionText(text: string): string {
   return text.replace(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g, (whole, id) => ID_TO_NAME.get(id) ?? whole);
 }
