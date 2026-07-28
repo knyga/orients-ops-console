@@ -26,6 +26,7 @@ import { postMessage } from "@/lib/slack";
 import { contentRev, instructionAckKey } from "@/lib/outboundKeys";
 import { reportKey } from "@/lib/fieldDayVerdict";
 import { APPROVERS } from "@/lib/approvers";
+import { mentionize } from "./mention";
 
 export type ProposalKind =
   | "jira_create"
@@ -179,10 +180,11 @@ export async function applyProposal(kind: ProposalKind, params: Record<string, u
         updatedAt: new Date().toISOString(),
         updatedBy: by,
       });
+      const who = mentionize(by);
       const ack =
         state === "found"
-          ? `🛸 Зафіксовано: борт знайдено — втрату за ${date} знято — ${by}. Причина: ${note}`
-          : `🛸 Зафіксовано: борт за ${date} втрачено (не знайдено) — ${by}. Причина: ${note}`;
+          ? `🛸 Зафіксовано: борт знайдено — втрату за ${date} знято — ${who}. Причина: ${note}`
+          : `🛸 Зафіксовано: борт за ${date} втрачено (не знайдено) — ${who}. Причина: ${note}`;
       await ackLossInVerdictThread(date, ack);
       return state === "found"
         ? `🛸 Зафіксовано: борт знайдено — втрату за ${date} знято.`
