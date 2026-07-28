@@ -42,7 +42,9 @@ const NAME_TO_ID: Map<string, string> = (() => {
 /** slackId → the roster-namespace name for dementionText: the person's roster
  *  first-name (via resolveInitial) when they have a rosterInitial, else their
  *  canonical name. Every crew-suffix consumer matches on roster first-names
- *  (see parseRosterSuffix), so de-mentioning must land back in that namespace. */
+ *  (see parseRosterSuffix), so de-mentioning must land back in that namespace.
+ *  Resolves via seed-only resolveInitial (no DB aliases) — same as resolveNames
+ *  today; a future DB alias that remaps a single initial would need updating here too. */
 const ID_TO_NAME: Map<string, string> = new Map(
   PEOPLE.filter((p) => p.slackId).map((p) => {
     if (p.rosterInitial) {

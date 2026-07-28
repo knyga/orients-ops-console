@@ -136,6 +136,20 @@ describe("applyInstruction dataset axis", () => {
     expect(updateMessage).not.toHaveBeenCalled();
   });
 
+  it("mentionizes the approver in the dataset ack", async () => {
+    await applyInstruction({
+      entry: entry(),
+      period,
+      axis: "dataset",
+      instruction: { ...datasetDecline, datasetStatus: "WAIVED" } as InstructionClassification,
+      by: "Oleksandr K",
+      evidence: "",
+      trigger: "webhook",
+    });
+    const ackTexts = postMessage.mock.calls.map((c) => c[1] as string);
+    expect(ackTexts.some((t) => t.includes(mentionize("Oleksandr K")))).toBe(true);
+  });
+
   it("is idempotent: an already-rejected override skips the edit on redelivery", async () => {
     await applyInstruction({
       entry: entry({ decision: "rejected", by: "Oleksandr K", ackedAt: "2026-07-03T19:23:00.000Z" }),

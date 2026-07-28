@@ -13,6 +13,7 @@
 import "server-only";
 import { classifyInstruction } from "./instructionClassify";
 import { applyInstruction } from "./applyInstruction";
+import { mentionize } from "./mention";
 import { createProposal, readActiveProposal, settleProposal } from "./proposals";
 import { renderProposalSummary } from "./proposalSummary";
 import { postMessage } from "./slack";
@@ -67,7 +68,7 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
     const next = await settleProposal(active, "cancel");
     if (next !== "CANCELLED") return { handled: "noop", intent: c.intent };
     if (channel) {
-      const text = `❌ Скасовано: ${active.summaryUk} — ${approverName}.`;
+      const text = `❌ Скасовано: ${active.summaryUk} — ${mentionize(approverName)}.`;
       await postMessage(
         channel.id,
         text,
