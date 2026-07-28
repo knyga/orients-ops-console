@@ -4,7 +4,6 @@ import { PEOPLE } from "./people";
 
 const taras = PEOPLE.find((p) => p.name === "Taras Panasyuk")!; // slackId U09LT4HM9PY, rosterInitial "Т"
 const serhiy = PEOPLE.find((p) => p.name === "Serhiy Shainyuk")!; // slackId, rosterInitial "Сер"
-const noSlack = PEOPLE.find((p) => p.name === "Andrii Svidnytskyi")!; // has slackId though
 
 describe("mentionize", () => {
   it("resolves the roster first-name form", () => {
