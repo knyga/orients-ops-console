@@ -22,12 +22,24 @@ interface AssigneeGroup {
   displayName: string;
   issues: Issue[];
 }
-interface StuckIssue { key: string; summary: string; displayName: string; sprintCount: number }
+interface IssueRef { key: string; summary: string }
+interface AssigneeCompletion {
+  accountId: string | null;
+  displayName: string;
+  committed: number;
+  done: number;
+  rate: number;
+  doneByStatus: { status: string; issues: IssueRef[] }[];
+  transitions: { from: string; to: string; issues: IssueRef[] }[];
+  noProgress: { status: string; key: string; summary: string }[];
+}
+interface StuckIssue { key: string; summary: string; displayName: string; statusName?: string; sprintCount: number }
 interface CompletionResult {
   committed: number;
   completed: number;
   rate: number;
-  byAssignee: AssigneeGroup[];
+  assignees?: AssigneeCompletion[];
+  byAssignee?: AssigneeGroup[];
   stuck: StuckIssue[];
 }
 interface SprintRecord {
@@ -138,11 +150,56 @@ export default function SprintPage() {
               <ul className="space-y-0.5 text-sm text-amber-900">
                 {completed.stuck.map((s) => (
                   <li key={s.key}>
+                    {s.statusName && (
+                      <span className="mr-1 rounded bg-amber-100 px-1 text-xs">{s.statusName}</span>
+                    )}
                     <span className="font-mono">{s.key}</span> — {s.summary}{" "}
                     <span className="text-amber-700">({s.sprintCount} спринтів · {s.displayName})</span>
                   </li>
                 ))}
               </ul>
+            </section>
+          )}
+
+          {completed?.assignees && (
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700">Виконання (за виконавцем)</h3>
+              {completed.assignees.map((a) => (
+                <div key={a.accountId ?? "__unassigned__"} className="rounded-md border border-slate-200 p-3">
+                  <div className="mb-1 font-medium">
+                    {a.displayName}
+                    <span className="ml-2 text-sm text-slate-600">— {a.done}/{a.committed} ({a.rate}%)</span>
+                  </div>
+                  <ul className="space-y-0.5 text-sm">
+                    {a.doneByStatus.map((b) =>
+                      b.issues.map((i) => (
+                        <li key={i.key} className="flex items-baseline gap-2">
+                          <span className="rounded bg-green-100 px-1 text-xs text-green-800">{b.status}</span>
+                          <span className="font-mono text-xs">{i.key}</span>
+                          <span>{i.summary}</span>
+                        </li>
+                      )),
+                    )}
+                    {a.transitions.map((t) =>
+                      t.issues.map((i) => (
+                        <li key={i.key} className="flex items-baseline gap-2">
+                          <span className="rounded bg-blue-100 px-1 text-xs text-blue-800">{t.from} → {t.to}</span>
+                          <span className="font-mono text-xs">{i.key}</span>
+                          <span>{i.summary}</span>
+                        </li>
+                      )),
+                    )}
+                    {a.noProgress.map((i) => (
+                      <li key={i.key} className="flex items-baseline gap-2">
+                        <span className="rounded bg-slate-100 px-1 text-xs text-slate-600">{i.status}</span>
+                        <span className="font-mono text-xs">{i.key}</span>
+                        <span>{i.summary}</span>
+                        <span className="text-xs text-slate-400">· без прогресу</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </section>
           )}
 
