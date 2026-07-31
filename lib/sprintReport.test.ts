@@ -280,38 +280,76 @@ describe("formatCommittedMessage", () => {
       ],
     };
     const msg = formatCommittedMessage(snapshot);
-    expect(msg).toContain(`*${mention(personForJiraAccountId(acc)!)}*`);
+    const p = personForJiraAccountId(acc)!;
+    expect(msg).toContain(`*Volodymyr Pavliukevych (${mention(p)})*`);
   });
 });
 
 describe("formatCompletedMessage", () => {
-  it("renders a Ukrainian completed message with rate, per-assignee done, and stuck section", () => {
-    const frozen: SprintIssue[] = [
-      issue({ key: "ATP-1", summary: "Login", assignee: A, sprintCount: 1 }),
-      issue({ key: "ATP-2", summary: "Signup", assignee: A, sprintCount: 2 }),
-    ];
-    const live: SprintIssue[] = [
-      issue({ key: "ATP-1", summary: "Login", assignee: A, statusCategory: "Done", sprintCount: 1 }),
-      issue({ key: "ATP-2", summary: "Signup", assignee: A, statusCategory: "To Do", sprintCount: 2 }),
-    ];
-    const r = computeCompletion(frozen, live);
-    const text = formatCompletedMessage("ATP 42", r);
-    expect(text).toContain("ATP 42");
-    expect(text).toContain("1/2");
-    expect(text).toContain("50%");
-    expect(text).toContain("Taras");
-    expect(text).toContain("ATP-1");
-    // stuck section present with the carried issue + sprint count
-    expect(text).toContain("ATP-2");
-    expect(text).toContain("2 спринти");
+  const frozen: SprintIssue[] = [
+    issue({ key: "ATP-1", summary: "Login", assignee: A, statusName: "In Progress", statusCategory: "In Progress" }),
+    issue({ key: "ATP-2", summary: "Signup", assignee: A, statusName: "QA Blocked", statusCategory: "In Progress", sprintCount: 2 }),
+    issue({ key: "ATP-3", summary: "Cleanup", assignee: A, statusName: "To Do" }),
+    issue({ key: "ATP-4", summary: "Legacy", assignee: A, statusName: "To Do" }),
+  ];
+  const live: SprintIssue[] = [
+    issue({ key: "ATP-1", summary: "Login", assignee: A, statusName: "Done", statusCategory: "Done" }),
+    issue({ key: "ATP-2", summary: "Signup", assignee: A, statusName: "Review", statusCategory: "In Progress", sprintCount: 2 }),
+    issue({ key: "ATP-3", summary: "Cleanup", assignee: A, statusName: "To Do" }),
+    issue({ key: "ATP-4", summary: "Legacy", assignee: A, statusName: "CANCELLED", statusCategory: "Done" }),
+  ];
+
+  it("renders per-person buckets: done-by-status, transitions, no progress", () => {
+    const text = formatCompletedMessage("ATP 42", computeCompletion(frozen, live));
+    expect(text).toContain("✅ Спринт *ATP 42* — виконано 2/4 (50%)");
+    expect(text).toContain("*Taras* — 2/4 (50%)");
+    const lines = text.split("\n");
+    const iDone = lines.indexOf("  Done:");
+    const iCancelled = lines.indexOf("  CANCELLED:");
+    const iTransition = lines.indexOf("  QA Blocked -> Review:");
+    const iNoProgress = lines.indexOf("  No progress:");
+    // All four buckets present, in order: Done, CANCELLED, transitions, No progress.
+    expect(iDone).toBeGreaterThan(-1);
+    expect(iCancelled).toBeGreaterThan(iDone);
+    expect(iTransition).toBeGreaterThan(iCancelled);
+    expect(iNoProgress).toBeGreaterThan(iTransition);
+    expect(lines[iDone + 1]).toBe("    • ATP-1 — Login");
+    expect(lines[iCancelled + 1]).toBe("    • ATP-4 — Legacy");
+    expect(lines[iTransition + 1]).toBe("    • ATP-2 — Signup");
+    expect(lines[iNoProgress + 1]).toBe("    • To Do - ATP-3 — Cleanup");
+  });
+
+  it("renders stuck lines as status - assignee - key — summary (N спринтів)", () => {
+    const text = formatCompletedMessage("ATP 42", computeCompletion(frozen, live));
+    expect(text).toContain("⚠️ Зависли (кілька спринтів):");
+    expect(text).toContain("  • Review - Taras - ATP-2 — Signup (2 спринти)");
+  });
+
+  it("labels a known assignee as Name (<@ID>) in the completed message", () => {
+    const acc = "712020:2c9fa200-866c-4d8b-b00a-bd7d434220b0";
+    const person = personForJiraAccountId(acc)!;
+    const who = { accountId: acc, displayName: "Volodymyr Pavliukevych" };
+    const fr = [issue({ key: "ATP-1", assignee: who })];
+    const lv = [issue({ key: "ATP-1", assignee: who, statusName: "Done", statusCategory: "Done" })];
+    const text = formatCompletedMessage("ATP 43", computeCompletion(fr, lv));
+    expect(text).toContain(`*Volodymyr Pavliukevych (${mention(person)})* — 1/1 (100%)`);
+  });
+
+  it("keeps the zero-done line and still lists the per-person blocks", () => {
+    const fr = [issue({ key: "ATP-1", assignee: A, statusName: "To Do" })];
+    const lv = [issue({ key: "ATP-1", assignee: A, statusName: "To Do" })];
+    const text = formatCompletedMessage("ATP 42", computeCompletion(fr, lv));
+    expect(text).toContain("_Жодної задачі не завершено._");
+    expect(text).toContain("*Taras* — 0/1 (0%)");
+    expect(text).toContain("  No progress:");
   });
 
   it("omits the stuck section when nothing is stuck", () => {
-    const frozen: SprintIssue[] = [issue({ key: "ATP-1", assignee: A, sprintCount: 1 })];
-    const live: SprintIssue[] = [
-      issue({ key: "ATP-1", assignee: A, statusCategory: "Done", sprintCount: 1 }),
+    const fr: SprintIssue[] = [issue({ key: "ATP-1", assignee: A, sprintCount: 1 })];
+    const lv: SprintIssue[] = [
+      issue({ key: "ATP-1", assignee: A, statusName: "Done", statusCategory: "Done", sprintCount: 1 }),
     ];
-    const text = formatCompletedMessage("ATP 42", computeCompletion(frozen, live));
+    const text = formatCompletedMessage("ATP 42", computeCompletion(fr, lv));
     expect(text).not.toContain("Зависли");
   });
 });

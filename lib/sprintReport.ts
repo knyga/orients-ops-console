@@ -119,11 +119,11 @@ function assigneeName(issue: SprintIssue): string {
   return issue.assignee?.displayName ?? UNASSIGNED_LABEL;
 }
 
-/** Bold Slack label for an assignee group: a mention when the Jira accountId
- *  maps to a person with a slackId, else the plain display name. */
+/** Slack label for an assignee: "Display Name (<@SLACKID>)" when the Jira
+ *  accountId maps to a person with a slackId, else the plain display name. */
 function assigneeLabel(group: { accountId: string | null; displayName: string }): string {
   const p = group.accountId ? personForJiraAccountId(group.accountId) : undefined;
-  return p ? mention(p) : group.displayName;
+  return p?.slackId ? `${group.displayName} (${mention(p)})` : group.displayName;
 }
 
 /**
@@ -273,8 +273,10 @@ export function formatCommittedMessage(snapshot: SprintSnapshot): string {
 }
 
 /**
- * The Sunday "Completed" #general post: overall rate, done issues grouped by
- * assignee, and a stuck-across-sprints highlight.
+ * The Sunday "Completed" #general post: overall rate, then EVERY committed
+ * assignee with their per-person rate and buckets (done by status name,
+ * transitions since the freeze, no progress), and the stuck highlight.
+ * Section headers are English Jira status names verbatim; the rest Ukrainian.
  */
 export function formatCompletedMessage(sprintName: string, result: CompletionResult): string {
   const lines: string[] = [];
@@ -282,17 +284,25 @@ export function formatCompletedMessage(sprintName: string, result: CompletionRes
     `✅ Спринт *${sprintName}* — виконано ${result.completed}/${result.committed} (${result.rate}%)`,
   );
 
-  if (result.assignees.every((a) => a.done === 0)) {
+  if (result.completed === 0) {
     lines.push("");
     lines.push("_Жодної задачі не завершено._");
   }
-  for (const group of result.assignees.filter((a) => a.done > 0)) {
+
+  for (const a of result.assignees) {
     lines.push("");
-    lines.push(`*${assigneeLabel(group)}*`);
-    for (const bucket of group.doneByStatus) {
-      for (const issue of bucket.issues) {
-        lines.push(`  • ${issue.key} — ${issue.summary}`);
-      }
+    lines.push(`*${assigneeLabel(a)}* — ${a.done}/${a.committed} (${a.rate}%)`);
+    for (const bucket of a.doneByStatus) {
+      lines.push(`  ${bucket.status}:`);
+      for (const i of bucket.issues) lines.push(`    • ${i.key} — ${i.summary}`);
+    }
+    for (const t of a.transitions) {
+      lines.push(`  ${t.from} -> ${t.to}:`);
+      for (const i of t.issues) lines.push(`    • ${i.key} — ${i.summary}`);
+    }
+    if (a.noProgress.length > 0) {
+      lines.push("  No progress:");
+      for (const i of a.noProgress) lines.push(`    • ${i.status} - ${i.key} — ${i.summary}`);
     }
   }
 
@@ -300,7 +310,9 @@ export function formatCompletedMessage(sprintName: string, result: CompletionRes
     lines.push("");
     lines.push("⚠️ Зависли (кілька спринтів):");
     for (const s of result.stuck) {
-      lines.push(`  • ${s.key} — ${s.summary} (${pluralizeSprints(s.sprintCount)})`);
+      lines.push(
+        `  • ${s.statusName} - ${s.displayName} - ${s.key} — ${s.summary} (${pluralizeSprints(s.sprintCount)})`,
+      );
     }
   }
   return lines.join("\n");
