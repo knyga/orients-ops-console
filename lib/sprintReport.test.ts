@@ -8,7 +8,6 @@ import {
   pluralizeSprints,
   type SprintIssue,
   type SprintSnapshot,
-  type AssigneeCompletion,
 } from "./sprintReport";
 import { mention } from "./mention";
 import { personForJiraAccountId } from "./people";

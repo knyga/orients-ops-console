@@ -19,6 +19,7 @@ export interface SprintRecord {
   committed: SprintSnapshot;
   completed?: {
     computedAt: string;
+    /** Legacy rows (pre-v2) may hold the old result shape (`byAssignee`, no `assignees`). */
     result: CompletionResult;
   };
 }

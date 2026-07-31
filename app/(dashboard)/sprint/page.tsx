@@ -38,7 +38,9 @@ interface CompletionResult {
   committed: number;
   completed: number;
   rate: number;
+  /** v2 records */
   assignees?: AssigneeCompletion[];
+  /** legacy records (pre-v2) */
   byAssignee?: AssigneeGroup[];
   stuck: StuckIssue[];
 }
