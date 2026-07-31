@@ -46,10 +46,34 @@ export interface AssigneeGroup {
   issues: SprintIssue[];
 }
 
+export interface IssueRef {
+  key: string;
+  summary: string;
+}
+
+export interface AssigneeCompletion {
+  accountId: string | null;
+  displayName: string;
+  /** Frozen issues attributed to this person. */
+  committed: number;
+  /** Done-category count. */
+  done: number;
+  /** Whole-percent per-person rate (0 when committed === 0). */
+  rate: number;
+  /** Done-category issues grouped by live status name; "Done" first, rest alphabetical. */
+  doneByStatus: { status: string; issues: IssueRef[] }[];
+  /** Non-done issues whose status changed since the freeze; alphabetical by "from -> to". */
+  transitions: { from: string; to: string; issues: IssueRef[] }[];
+  /** Non-done issues with an unchanged status; `status` is the current status name. */
+  noProgress: { status: string; key: string; summary: string }[];
+}
+
 export interface StuckIssue {
   key: string;
   summary: string;
   displayName: string;
+  /** Live status name (frozen fallback when absent from live). */
+  statusName: string;
   sprintCount: number;
 }
 
@@ -58,8 +82,8 @@ export interface CompletionResult {
   completed: number;
   /** Whole-percent completion rate (0 when nothing committed). */
   rate: number;
-  /** Done issues grouped by assignee (unassigned last). */
-  byAssignee: AssigneeGroup[];
+  /** Every committed assignee (not only those with done issues); unassigned last. */
+  assignees: AssigneeCompletion[];
   /** Incomplete issues carried across >= 2 sprints. */
   stuck: StuckIssue[];
 }
@@ -125,39 +149,99 @@ export function groupByAssignee(issues: SprintIssue[]): AssigneeGroup[] {
 }
 
 /**
- * Measure completion of a frozen baseline against a live re-fetch.
- *
- * @param frozen the committed baseline issue set (the denominator).
- * @param live   the same keys re-fetched now (status + current sprint count). A
- *               frozen key absent from `live` counts as not done.
+ * Measure completion of a frozen baseline against a live re-fetch, classifying
+ * every frozen issue per assignee: done (grouped by live status name — CANCELLED
+ * etc. still count toward the rate), transitioned (frozen status ≠ live status),
+ * or no progress. A frozen key absent from `live` keeps its frozen fields, so it
+ * counts as not done with no transition.
  */
 export function computeCompletion(frozen: SprintIssue[], live: SprintIssue[]): CompletionResult {
   const liveByKey = new Map(live.map((i) => [i.key, i]));
   const committed = frozen.length;
 
-  const done: SprintIssue[] = [];
+  interface Acc {
+    accountId: string | null;
+    displayName: string;
+    committed: number;
+    done: number;
+    doneByStatus: Map<string, IssueRef[]>;
+    transitions: Map<string, { from: string; to: string; issues: IssueRef[] }>;
+    noProgress: { status: string; key: string; summary: string }[];
+  }
+  const accs = new Map<string, Acc>();
   const stuck: StuckIssue[] = [];
+  let completed = 0;
+
   for (const f of frozen) {
-    const current = liveByKey.get(f.key);
-    const cat = current?.statusCategory ?? f.statusCategory;
-    const sprintCount = current?.sprintCount ?? f.sprintCount;
-    // Prefer the live assignee/summary; fall back to the frozen snapshot.
-    const merged: SprintIssue = current ?? f;
-    if (isDone(cat)) {
-      done.push(merged);
-    } else if (sprintCount >= 2) {
-      stuck.push({
-        key: f.key,
-        summary: merged.summary,
+    // Prefer the live status/assignee/summary; fall back to the frozen snapshot.
+    const merged = liveByKey.get(f.key) ?? f;
+    const id = merged.assignee?.accountId ?? "__unassigned__";
+    let a = accs.get(id);
+    if (!a) {
+      a = {
+        accountId: merged.assignee?.accountId ?? null,
         displayName: assigneeName(merged),
-        sprintCount,
-      });
+        committed: 0,
+        done: 0,
+        doneByStatus: new Map(),
+        transitions: new Map(),
+        noProgress: [],
+      };
+      accs.set(id, a);
+    }
+    a.committed++;
+
+    const ref: IssueRef = { key: f.key, summary: merged.summary };
+    if (isDone(merged.statusCategory)) {
+      completed++;
+      a.done++;
+      const arr = a.doneByStatus.get(merged.statusName) ?? [];
+      arr.push(ref);
+      a.doneByStatus.set(merged.statusName, arr);
+    } else {
+      if (merged.statusName !== f.statusName) {
+        const key = `${f.statusName} -> ${merged.statusName}`;
+        const bucket = a.transitions.get(key) ?? { from: f.statusName, to: merged.statusName, issues: [] };
+        bucket.issues.push(ref);
+        a.transitions.set(key, bucket);
+      } else {
+        a.noProgress.push({ status: merged.statusName, key: f.key, summary: merged.summary });
+      }
+      if (merged.sprintCount >= 2) {
+        stuck.push({
+          key: f.key,
+          summary: merged.summary,
+          displayName: assigneeName(merged),
+          statusName: merged.statusName,
+          sprintCount: merged.sprintCount,
+        });
+      }
     }
   }
 
-  const completed = done.length;
+  const assignees: AssigneeCompletion[] = [...accs.values()]
+    .map((a) => ({
+      accountId: a.accountId,
+      displayName: a.displayName,
+      committed: a.committed,
+      done: a.done,
+      rate: a.committed === 0 ? 0 : Math.round((a.done / a.committed) * 100),
+      doneByStatus: [...a.doneByStatus.entries()]
+        .sort(([s1], [s2]) => (s1 === "Done" ? -1 : s2 === "Done" ? 1 : s1.localeCompare(s2)))
+        .map(([status, issues]) => ({ status, issues })),
+      transitions: [...a.transitions.values()].sort((x, y) =>
+        `${x.from} -> ${x.to}`.localeCompare(`${y.from} -> ${y.to}`),
+      ),
+      noProgress: a.noProgress,
+    }))
+    .sort((x, y) => {
+      if (x.accountId === null) return 1;
+      if (y.accountId === null) return -1;
+      return x.displayName.localeCompare(y.displayName);
+    });
+
   const rate = committed === 0 ? 0 : Math.round((completed / committed) * 100);
-  return { committed, completed, rate, byAssignee: groupByAssignee(done), stuck };
+  return { committed, completed, rate, assignees, stuck };
 }
 
 /**
@@ -198,15 +282,17 @@ export function formatCompletedMessage(sprintName: string, result: CompletionRes
     `✅ Спринт *${sprintName}* — виконано ${result.completed}/${result.committed} (${result.rate}%)`,
   );
 
-  if (result.byAssignee.length === 0) {
+  if (result.assignees.every((a) => a.done === 0)) {
     lines.push("");
     lines.push("_Жодної задачі не завершено._");
   }
-  for (const group of result.byAssignee) {
+  for (const group of result.assignees.filter((a) => a.done > 0)) {
     lines.push("");
     lines.push(`*${assigneeLabel(group)}*`);
-    for (const issue of group.issues) {
-      lines.push(`  • ${issue.key} — ${issue.summary}`);
+    for (const bucket of group.doneByStatus) {
+      for (const issue of bucket.issues) {
+        lines.push(`  • ${issue.key} — ${issue.summary}`);
+      }
     }
   }
 

@@ -8,6 +8,7 @@ import {
   pluralizeSprints,
   type SprintIssue,
   type SprintSnapshot,
+  type AssigneeCompletion,
 } from "./sprintReport";
 import { mention } from "./mention";
 import { personForJiraAccountId } from "./people";
@@ -115,22 +116,123 @@ describe("computeCompletion", () => {
     expect(r.stuck).toEqual([]);
   });
 
-  it("groups done issues by assignee, unassigned last", () => {
+  it("lists every committed assignee, unassigned last", () => {
     const fr: SprintIssue[] = [
       issue({ key: "ATP-1", assignee: A }),
       issue({ key: "ATP-2", assignee: null }),
       issue({ key: "ATP-3", assignee: B }),
     ];
     const live: SprintIssue[] = [
-      issue({ key: "ATP-1", assignee: A, statusCategory: "Done" }),
-      issue({ key: "ATP-2", assignee: null, statusCategory: "Done" }),
-      issue({ key: "ATP-3", assignee: B, statusCategory: "Done" }),
+      issue({ key: "ATP-1", assignee: A, statusCategory: "Done", statusName: "Done" }),
+      // ATP-2 untouched, ATP-3 untouched → still present in assignees
+      issue({ key: "ATP-2", assignee: null }),
+      issue({ key: "ATP-3", assignee: B }),
     ];
     const r = computeCompletion(fr, live);
-    const names = r.byAssignee.map((g) => g.displayName);
-    expect(names[names.length - 1]).toBe("Не призначено");
-    expect(names).toContain("Taras");
-    expect(names).toContain("Vlad");
+    const names = r.assignees.map((g) => g.displayName);
+    expect(names).toEqual(["Taras", "Vlad", "Не призначено"]);
+  });
+
+  it("splits done issues by live status name; CANCELLED still counts toward the rate", () => {
+    const fr: SprintIssue[] = [
+      issue({ key: "ATP-1", assignee: A, statusName: "In Progress", statusCategory: "In Progress" }),
+      issue({ key: "ATP-2", assignee: A, statusName: "To Do" }),
+    ];
+    const live: SprintIssue[] = [
+      issue({ key: "ATP-1", assignee: A, statusName: "Done", statusCategory: "Done" }),
+      issue({ key: "ATP-2", assignee: A, statusName: "CANCELLED", statusCategory: "Done" }),
+    ];
+    const r = computeCompletion(fr, live);
+    expect(r.completed).toBe(2);
+    expect(r.rate).toBe(100);
+    const a = r.assignees[0];
+    // "Done" bucket first, then other done statuses alphabetically.
+    expect(a.doneByStatus.map((b) => b.status)).toEqual(["Done", "CANCELLED"]);
+    expect(a.doneByStatus[1].issues).toEqual([{ key: "ATP-2", summary: "Summary of ATP-2" }]);
+  });
+
+  it("classifies a moved non-done issue as a transition, grouped by from -> to", () => {
+    const fr: SprintIssue[] = [
+      issue({ key: "ATP-1", assignee: A, statusName: "QA Blocked", statusCategory: "In Progress" }),
+      issue({ key: "ATP-2", assignee: A, statusName: "QA Blocked", statusCategory: "In Progress" }),
+      issue({ key: "ATP-3", assignee: A, statusName: "To Do" }),
+    ];
+    const live: SprintIssue[] = [
+      issue({ key: "ATP-1", assignee: A, statusName: "Review", statusCategory: "In Progress" }),
+      issue({ key: "ATP-2", assignee: A, statusName: "Review", statusCategory: "In Progress" }),
+      issue({ key: "ATP-3", assignee: A, statusName: "In Progress", statusCategory: "In Progress" }),
+    ];
+    const a = computeCompletion(fr, live).assignees[0];
+    expect(a.transitions).toEqual([
+      {
+        from: "QA Blocked",
+        to: "Review",
+        issues: [
+          { key: "ATP-1", summary: "Summary of ATP-1" },
+          { key: "ATP-2", summary: "Summary of ATP-2" },
+        ],
+      },
+      { from: "To Do", to: "In Progress", issues: [{ key: "ATP-3", summary: "Summary of ATP-3" }] },
+    ]);
+    expect(a.noProgress).toEqual([]);
+  });
+
+  it("classifies an unchanged non-done issue (or one missing from live) as no progress", () => {
+    const fr: SprintIssue[] = [
+      issue({ key: "ATP-1", assignee: A, statusName: "To Do" }),
+      issue({ key: "ATP-2", assignee: A, statusName: "In Progress", statusCategory: "In Progress" }),
+    ];
+    const live: SprintIssue[] = [
+      issue({ key: "ATP-1", assignee: A, statusName: "To Do" }),
+      // ATP-2 missing from live → frozen fields, no transition
+    ];
+    const a = computeCompletion(fr, live).assignees[0];
+    expect(a.transitions).toEqual([]);
+    expect(a.noProgress).toEqual([
+      { status: "To Do", key: "ATP-1", summary: "Summary of ATP-1" },
+      { status: "In Progress", key: "ATP-2", summary: "Summary of ATP-2" },
+    ]);
+  });
+
+  it("computes per-person committed/done/rate", () => {
+    const fr: SprintIssue[] = [
+      issue({ key: "ATP-1", assignee: A }),
+      issue({ key: "ATP-2", assignee: A }),
+      issue({ key: "ATP-3", assignee: A }),
+      issue({ key: "ATP-4", assignee: B }),
+    ];
+    const live: SprintIssue[] = [
+      issue({ key: "ATP-1", assignee: A, statusName: "Done", statusCategory: "Done" }),
+      issue({ key: "ATP-2", assignee: A, statusName: "To Do" }),
+      issue({ key: "ATP-3", assignee: A, statusName: "To Do" }),
+      issue({ key: "ATP-4", assignee: B, statusName: "Done", statusCategory: "Done" }),
+    ];
+    const r = computeCompletion(fr, live);
+    const taras = r.assignees.find((g) => g.displayName === "Taras")!;
+    expect(taras.committed).toBe(3);
+    expect(taras.done).toBe(1);
+    expect(taras.rate).toBe(33);
+    const vlad = r.assignees.find((g) => g.displayName === "Vlad")!;
+    expect(vlad.rate).toBe(100);
+  });
+
+  it("stuck entries carry the live status name and keep the key", () => {
+    const fr: SprintIssue[] = [
+      issue({ key: "ATP-2", assignee: A, statusName: "To Do", sprintCount: 2 }),
+    ];
+    const live: SprintIssue[] = [
+      issue({ key: "ATP-2", assignee: A, statusName: "QA Blocked", statusCategory: "In Progress", sprintCount: 2 }),
+    ];
+    const r = computeCompletion(fr, live);
+    expect(r.stuck).toEqual([
+      {
+        key: "ATP-2",
+        summary: "Summary of ATP-2",
+        displayName: "Taras",
+        statusName: "QA Blocked",
+        sprintCount: 2,
+      },
+    ]);
   });
 });
 
