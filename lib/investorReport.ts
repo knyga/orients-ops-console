@@ -129,7 +129,7 @@ export function buildWeekData(input: BuildInput): InvestorWeekData {
     jira: {
       resolved: input.jiraTotals.totalResolved,
       storyPoints: input.jiraTotals.totalStoryPoints,
-      noteworthy: input.noteworthy.slice(0, 5),
+      noteworthy: input.noteworthy.slice(0, 15),
     },
     sprint: input.sprint,
     field: { reports: reports.length, accepted, flagged, fieldHours, airHours, flightDays },
@@ -190,37 +190,35 @@ export function formatWeekLabel(start: string, end: string): string {
 }
 
 /**
- * The exact #general post: title, then the 3–5 «•» takeaway bullets (Claude or
- * fallback), then one compact «Цифри тижня» list. House report style: round
+ * The exact #general post: title, then the 3–5 «•» key-result bullets (Claude
+ * or fallback), then one compact «Цифри тижня» list. House report style: round
  * bullets, 3–5 items per list, each point ≤ ~10 words — scannable, never a
- * narrative paragraph.
+ * narrative paragraph. Investor-facing scope: concrete results, no task/sprint
+ * counts, no internal acceptance statuses, no dataset-day counts (those all
+ * stay in the stored record for the internal web tab).
  */
 export function formatInvestorMessage(summary: string, data: InvestorWeekData): string {
-  const sprintPart = data.sprint
-    ? `, спринт ${data.sprint.name} — ${data.sprint.rate}% (${data.sprint.completed}/${data.sprint.committed} задач)`
-    : "";
   return [
-    `📊 Тижневий звіт для інвесторів — ${formatWeekLabel(data.window.start, data.window.end)}`,
+    `📊 Тижневий звіт — ${formatWeekLabel(data.window.start, data.window.end)}`,
     "",
     summary.trim(),
     "",
     "Цифри тижня:",
-    `• Розробка: закрито ${data.jira.resolved} задач${sprintPart}`,
-    // REJECTED reports count toward `reports` (the total) but deliberately fall
-    // into neither `accepted` nor `flagged` — spec is accepted vs flagged only.
-    `• Виїзди: ${data.field.reports} (прийнято ${data.field.accepted}, на розгляді ${data.field.flagged})`,
+    // Deliberately just the trip count — flight-day and dataset-day counts can
+    // legitimately diverge from it (flights without a formal Звіт, dataset
+    // posts on non-flight days) and read as contradictions to investors.
+    `• Виїзди: ${data.field.reports}`,
     `• У повітрі ${data.field.airHours} год, у полі ${data.field.fieldHours} год`,
     `• Відео: ${data.video.count} роликів, ${data.video.minutes} хв`,
-    `• Датасети: передано за ${data.datasets.noticeDays} дн.`,
   ].join("\n");
 }
 
-/** Deterministic «•» takeaway bullets used when the Claude summary call fails. */
+/** Deterministic «•» key-result bullets used when the Claude summary call fails. */
 export function fallbackSummary(data: InvestorWeekData): string {
   return [
-    `• Закрито ${data.jira.resolved} задач розробки`,
     `• ${data.field.reports} польових виїздів, ${data.field.airHours} год у повітрі`,
-    `• Записано ${data.video.minutes} хв відео для датасетів`,
+    `• ${data.field.fieldHours} год роботи у полі`,
+    `• Записано ${data.video.minutes} хв відео для навчання моделей`,
   ].join("\n");
 }
 
@@ -240,38 +238,36 @@ export function normalizeSummaryBullets(text: string): string | null {
 }
 
 /**
- * The one Claude call's prompt: every figure is passed in; the model narrates,
- * never invents numbers. Output contract: 3–5 «• » bullets, ≤10 words each.
- * Sprint figures are labeled as ISSUE counts (`completedIssues`/`committedIssues`)
- * so the model never mislabels them as story points.
+ * The one Claude call's prompt: KEY RESULTS only — what capability was
+ * delivered/improved and why it matters, drawn from the resolved-issue titles
+ * and field outcomes. Task/sprint counts and internal statuses are deliberately
+ * NOT in the prompt (investors don't care, and their absence makes «13 із 54
+ * задач» bullets impossible). Numbers that ARE passed (hours, videos, flights)
+ * may be used but never invented. Output contract: 3–5 «• » bullets, ≤10 words.
  */
 export function buildInvestorPrompt(data: InvestorWeekData): string {
   return [
     "Ти пишеш короткий тижневий звіт для ангел-інвесторів української оборонної компанії, що розробляє автопілот для FPV-дронів.",
     "Інвестори добре розуміють бойове застосування, але не технічні нюанси — без жаргону.",
     "Поверни РІВНО 3–5 рядків-пунктів українською. Кожен рядок починається з «• » і має ЩОНАЙБІЛЬШЕ 10 слів.",
-    "Це головні висновки тижня: що зроблено і яку цінність це дає (спирайся на noteworthyIssues для якісних пунктів).",
-    "Використовуй ЛИШЕ наведені нижче числа — нічого не вигадуй і не додавай нових цифр.",
-    "Спринт вимірюється в ЗАДАЧАХ (completedIssues/committedIssues), не в сторі-поїнтах.",
+    "Кожен пункт — КОНКРЕТНИЙ КЛЮЧОВИЙ РЕЗУЛЬТАТ тижня: яка можливість з'явилась чи покращилась і що це дає (спирайся на resolvedIssueTitles та польові результати).",
+    "ЗАБОРОНЕНО: кількість задач, відсотки спринту, внутрішні статуси приймання — це нікого не цікавить.",
+    "Числа (години, відео, виїзди) бери ЛИШЕ з наведених нижче даних — нічого не вигадуй.",
     "Відповідай лише рядками-пунктами, без заголовків, вступу чи абзаців.",
     "",
     "Дані тижня (JSON):",
     JSON.stringify(
       {
         period: formatWeekLabel(data.window.start, data.window.end),
-        jira: { resolved: data.jira.resolved, storyPoints: data.jira.storyPoints },
-        sprint: data.sprint
-          ? {
-              name: data.sprint.name,
-              ratePercent: data.sprint.rate,
-              completedIssues: data.sprint.completed,
-              committedIssues: data.sprint.committed,
-            }
-          : null,
-        field: data.field,
+        // No flightDays here: it can exceed trips (flights without a formal
+        // Звіт) and would read as a contradiction in the bullets.
+        field: {
+          trips: data.field.reports,
+          airHours: data.field.airHours,
+          fieldHours: data.field.fieldHours,
+        },
         video: data.video,
-        datasets: data.datasets,
-        noteworthyIssues: data.jira.noteworthy.map((n) => n.summary),
+        resolvedIssueTitles: data.jira.noteworthy.map((n) => n.summary),
       },
       null,
       2,

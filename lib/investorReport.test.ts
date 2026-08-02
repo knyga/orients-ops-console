@@ -171,50 +171,55 @@ describe("pickSprintCompletion", () => {
 });
 
 describe("formatInvestorMessage", () => {
-  it("puts the takeaway bullets first, then the compact «Цифри тижня» list", () => {
-    const summary = "• Автопілот стабільний у полі\n• Спринт іде за планом";
+  it("puts the key-result bullets first, then the compact «Цифри тижня» list", () => {
+    const summary = "• Автопілот стабільний у полі\n• Камера наводиться точніше";
     const msg = formatInvestorMessage(summary, DATA);
-    expect(msg).toContain("📊 Тижневий звіт для інвесторів — 20–26 липня 2026");
+    expect(msg).toContain("📊 Тижневий звіт — 20–26 липня 2026");
+    expect(msg).not.toContain("для інвесторів");
     expect(msg.indexOf("• Автопілот стабільний у полі")).toBeLessThan(msg.indexOf("Цифри тижня:"));
-    expect(msg).toContain("• Розробка: закрито 12 задач, спринт ATP 42 — 80% (8/10 задач)");
-    expect(msg).toContain("• Виїзди: 3 (прийнято 2, на розгляді 1)");
+    expect(msg).toContain("• Виїзди: 3");
+    expect(msg).not.toContain("льотних днів");
     expect(msg).toContain("• У повітрі 6.2 год, у полі 14.5 год");
     expect(msg).toContain("• Відео: 9 роликів, 187 хв");
-    expect(msg).toContain("• Датасети: передано за 2 дн.");
+    // Investor-facing scope: no task counts, no acceptance statuses, no dataset days.
+    expect(msg).not.toContain("задач");
+    expect(msg).not.toContain("прийнято");
+    expect(msg).not.toContain("Датасети");
     // House style: the «Цифри тижня» list stays within 5 items.
     const dataBullets = msg.slice(msg.indexOf("Цифри тижня:")).split("\n").filter((l) => l.startsWith("• "));
     expect(dataBullets.length).toBeLessThanOrEqual(5);
   });
 
-  it("drops the sprint fragment when sprint is null and shows an honest zero-field week", () => {
+  it("shows an honest zero-field week", () => {
     const data: InvestorWeekData = {
       ...DATA,
       sprint: null,
       field: { reports: 0, accepted: 0, flagged: 0, fieldHours: 0, airHours: 0, flightDays: 0 },
     };
     const msg = formatInvestorMessage("• X", data);
-    expect(msg).not.toContain("спринт");
-    expect(msg).toContain("• Розробка: закрито 12 задач");
     expect(msg).toContain("• Виїзди: 0");
   });
 });
 
 describe("fallbackSummary / buildInvestorPrompt / normalizeSummaryBullets", () => {
-  it("fallback is 3 «• » bullets carrying the headline numbers", () => {
+  it("fallback is 3 «• » bullets carrying field/video numbers, no task counts", () => {
     const lines = fallbackSummary(DATA).split("\n");
     expect(lines).toHaveLength(3);
     for (const l of lines) expect(l.startsWith("• ")).toBe(true);
-    expect(lines[0]).toContain("12");
-    expect(lines[1]).toContain("3");
+    expect(lines[0]).toContain("3");
+    expect(lines[2]).toContain("187");
+    expect(fallbackSummary(DATA)).not.toContain("задач");
   });
-  it("prompt embeds the numbers, issue titles, the bullets contract, and issue-labeled sprint fields", () => {
+  it("prompt carries issue titles + field/video numbers, forbids task counts, omits sprint/jira counters", () => {
     const p = buildInvestorPrompt(DATA);
-    expect(p).toContain('"resolved": 12');
     expect(p).toContain("Автопілот: утримання висоти");
     expect(p).toContain("3–5 рядків-пунктів");
-    expect(p).toContain('"completedIssues": 8');
-    expect(p).toContain('"committedIssues": 10');
-    expect(p).not.toContain('"completed": 8');
+    expect(p).toContain("КЛЮЧОВИЙ РЕЗУЛЬТАТ");
+    expect(p).toContain("ЗАБОРОНЕНО: кількість задач");
+    expect(p).toContain('"airHours": 6.2');
+    expect(p).not.toContain('"resolved"');
+    expect(p).not.toContain("completedIssues");
+    expect(p).not.toContain('"storyPoints"');
   });
   it("normalizeSummaryBullets keeps only bullet lines, converts -/* markers, caps at 5", () => {
     const raw = "Вступ, який треба відкинути\n- перший пункт\n* другий пункт\n• третій\n• 4\n• 5\n• шостий зайвий";

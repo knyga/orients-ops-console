@@ -110,7 +110,7 @@ export async function runInvestor(opts: RunInvestorOptions): Promise<InvestorRes
   try {
     const issues = await fetchResolvedIssues(window.start, window.end);
     jiraTotals = aggregateByUser(issues).totals;
-    noteworthy = issues.slice(0, 5).map((i) => ({ key: i.key, summary: i.summary }));
+    noteworthy = issues.slice(0, 15).map((i) => ({ key: i.key, summary: i.summary }));
   } catch (e) {
     return fail("jira", e);
   }
