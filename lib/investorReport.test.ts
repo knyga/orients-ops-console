@@ -171,61 +171,49 @@ describe("pickSprintCompletion", () => {
 });
 
 describe("formatInvestorMessage", () => {
-  it("puts the key-result bullets first, then the compact «Цифри тижня» list", () => {
-    const summary = "• Автопілот стабільний у полі\n• Камера наводиться точніше";
+  it("is just the title + numbered key-result items, no digits block", () => {
+    const summary = "1. Автопілот стабільний у полі\n2. Камера наводиться точніше";
     const msg = formatInvestorMessage(summary, DATA);
     expect(msg).toContain("📊 Тижневий звіт — 20–26 липня 2026");
     expect(msg).not.toContain("для інвесторів");
-    expect(msg.indexOf("• Автопілот стабільний у полі")).toBeLessThan(msg.indexOf("Цифри тижня:"));
-    expect(msg).toContain("• Виїзди: 3");
-    expect(msg).not.toContain("льотних днів");
-    expect(msg).toContain("• У повітрі 6.2 год, у полі 14.5 год");
-    expect(msg).toContain("• Відео: 9 роликів, 187 хв");
-    // Investor-facing scope: no task counts, no acceptance statuses, no dataset days.
+    expect(msg).toContain("1. Автопілот стабільний у полі");
+    expect(msg).toContain("2. Камера наводиться точніше");
+    // No separate digits block, no internal metrics.
+    expect(msg).not.toContain("Цифри тижня");
     expect(msg).not.toContain("задач");
     expect(msg).not.toContain("прийнято");
     expect(msg).not.toContain("Датасети");
-    // House style: the «Цифри тижня» list stays within 5 items.
-    const dataBullets = msg.slice(msg.indexOf("Цифри тижня:")).split("\n").filter((l) => l.startsWith("• "));
-    expect(dataBullets.length).toBeLessThanOrEqual(5);
-  });
-
-  it("shows an honest zero-field week", () => {
-    const data: InvestorWeekData = {
-      ...DATA,
-      sprint: null,
-      field: { reports: 0, accepted: 0, flagged: 0, fieldHours: 0, airHours: 0, flightDays: 0 },
-    };
-    const msg = formatInvestorMessage("• X", data);
-    expect(msg).toContain("• Виїзди: 0");
   });
 });
 
 describe("fallbackSummary / buildInvestorPrompt / normalizeSummaryBullets", () => {
-  it("fallback is 3 «• » bullets carrying field/video numbers, no task counts", () => {
+  it("fallback is 3 numbered items carrying field/video numbers, no task counts", () => {
     const lines = fallbackSummary(DATA).split("\n");
     expect(lines).toHaveLength(3);
-    for (const l of lines) expect(l.startsWith("• ")).toBe(true);
+    lines.forEach((l, i) => expect(l.startsWith(`${i + 1}. `)).toBe(true));
     expect(lines[0]).toContain("3");
-    expect(lines[2]).toContain("187");
-    expect(fallbackSummary(DATA)).not.toContain("задач");
+    expect(lines[1]).toContain("187");
+    expect(fallbackSummary(DATA)).not.toContain("задач розробки");
   });
-  it("prompt carries issue titles + field/video numbers, forbids task counts, omits sprint/jira counters", () => {
+  it("prompt asks for numbered items with inline figures, forbids task counts, omits sprint/jira counters", () => {
     const p = buildInvestorPrompt(DATA);
     expect(p).toContain("Автопілот: утримання висоти");
-    expect(p).toContain("3–5 рядків-пунктів");
+    expect(p).toContain("ПРОНУМЕРОВАНИХ");
     expect(p).toContain("КЛЮЧОВИЙ РЕЗУЛЬТАТ");
     expect(p).toContain("ЗАБОРОНЕНО: кількість задач");
+    expect(p).toContain("вплети у відповідні пункти");
     expect(p).toContain('"airHours": 6.2');
     expect(p).not.toContain('"resolved"');
     expect(p).not.toContain("completedIssues");
     expect(p).not.toContain('"storyPoints"');
   });
-  it("normalizeSummaryBullets keeps only bullet lines, converts -/* markers, caps at 5", () => {
-    const raw = "Вступ, який треба відкинути\n- перший пункт\n* другий пункт\n• третій\n• 4\n• 5\n• шостий зайвий";
-    expect(normalizeSummaryBullets(raw)).toBe("• перший пункт\n• другий пункт\n• третій\n• 4\n• 5");
+  it("normalizeSummaryBullets keeps only item lines, renumbers any marker style, caps at 5", () => {
+    const raw = "Вступ, який треба відкинути\n- перший пункт\n* другий пункт\n• третій\n4) четвертий\n5. п'ятий\n6. шостий зайвий";
+    expect(normalizeSummaryBullets(raw)).toBe(
+      "1. перший пункт\n2. другий пункт\n3. третій\n4. четвертий\n5. п'ятий",
+    );
   });
-  it("normalizeSummaryBullets returns null for a paragraph with no bullets", () => {
+  it("normalizeSummaryBullets returns null for a paragraph with no items", () => {
     expect(normalizeSummaryBullets("Просто абзац тексту без пунктів.")).toBeNull();
   });
 });

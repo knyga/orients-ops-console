@@ -14,7 +14,10 @@ import {
   type InvestorWeekData,
 } from "./investorReport";
 
-const MODEL = "claude-sonnet-5";
+// Opus with adaptive thinking: the weekly investor draft is important enough to
+// spend the extra reasoning on (one call a week). `budget_tokens` is gone on
+// current models — adaptive thinking + `output_config.effort` replaces it.
+const MODEL = "claude-opus-5";
 
 export async function generateSummary(
   data: InvestorWeekData,
@@ -23,10 +26,15 @@ export async function generateSummary(
     return { text: fallbackSummary(data), source: "fallback" };
   }
   try {
-    const client = new Anthropic({ timeout: 20_000 });
+    // 45s cap: fits the cron's 60s budget; a hung/slow call soft-fails to the
+    // deterministic bullets rather than blowing up the whole run.
+    const client = new Anthropic({ timeout: 45_000 });
     const message = await client.messages.create({
       model: MODEL,
-      max_tokens: 2048,
+      // Thinking counts against max_tokens on Opus 5 — leave it headroom.
+      max_tokens: 16000,
+      thinking: { type: "adaptive" },
+      output_config: { effort: "high" },
       messages: [{ role: "user", content: buildInvestorPrompt(data) }],
     });
     if (message.stop_reason === "refusal") {

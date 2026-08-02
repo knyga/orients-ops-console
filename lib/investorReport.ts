@@ -190,51 +190,46 @@ export function formatWeekLabel(start: string, end: string): string {
 }
 
 /**
- * The exact #general post: title, then the 3–5 «•» key-result bullets (Claude
- * or fallback), then one compact «Цифри тижня» list. House report style: round
- * bullets, 3–5 items per list, substantive points up to ~50 words — scannable, never a
- * narrative paragraph. Investor-facing scope: concrete results, no task/sprint
- * counts, no internal acceptance statuses, no dataset-day counts (those all
- * stay in the stored record for the internal web tab).
+ * The exact #general post: title, then the 3–5 NUMBERED key-result items
+ * (Claude or fallback). Items are substantive (up to ~50 words) and carry the
+ * week's key figures inline, so there is no separate digits block — that data
+ * stays in the stored record for the internal web tab. Investor-facing scope:
+ * concrete results, no task/sprint counts, no internal acceptance statuses,
+ * no dataset-day counts.
  */
 export function formatInvestorMessage(summary: string, data: InvestorWeekData): string {
   return [
     `📊 Тижневий звіт — ${formatWeekLabel(data.window.start, data.window.end)}`,
     "",
     summary.trim(),
-    "",
-    "Цифри тижня:",
-    // Deliberately just the trip count — flight-day and dataset-day counts can
-    // legitimately diverge from it (flights without a formal Звіт, dataset
-    // posts on non-flight days) and read as contradictions to investors.
-    `• Виїзди: ${data.field.reports}`,
-    `• У повітрі ${data.field.airHours} год, у полі ${data.field.fieldHours} год`,
-    `• Відео: ${data.video.count} роликів, ${data.video.minutes} хв`,
   ].join("\n");
 }
 
-/** Deterministic «•» key-result bullets used when the Claude summary call fails. */
+/** Deterministic numbered key-result items used when the Claude summary call fails. */
 export function fallbackSummary(data: InvestorWeekData): string {
   return [
-    `• ${data.field.reports} польових виїздів, ${data.field.airHours} год у повітрі`,
-    `• ${data.field.fieldHours} год роботи у полі`,
-    `• Записано ${data.video.minutes} хв відео для навчання моделей`,
+    `1. ${data.field.reports} польових виїздів: ${data.field.airHours} год у повітрі, ${data.field.fieldHours} год у полі.`,
+    `2. Записано ${data.video.count} відео (${data.video.minutes} хв) для навчання моделей.`,
+    `3. Розробка тривала за планом тижня — деталі у внутрішньому дашборді.`,
   ].join("\n");
 }
 
 /**
- * Normalize the model's summary into 3–5 «• » bullet lines: accepts •/-/* line
- * markers, drops everything else, caps at 5. Returns null when no bullet lines
- * survive (caller falls back to the deterministic bullets).
+ * Normalize the model's summary into 3–5 NUMBERED lines ("1. …"): accepts
+ * numbered or •/-/* line markers, drops everything else, renumbers
+ * sequentially, caps at 5. Returns null when no item lines survive (caller
+ * falls back to the deterministic items).
  */
 export function normalizeSummaryBullets(text: string): string | null {
-  const bullets = text
+  const MARKER = /^(?:\d+[.)]|[-*•])\s+/;
+  const items = text
     .split("\n")
     .map((l) => l.trim())
-    .map((l) => l.replace(/^[-*•]\s+/, "• ").replace(/^•\s*/, "• "))
-    .filter((l) => l.startsWith("• ") && l.length > 2)
+    .filter((l) => MARKER.test(l))
+    .map((l) => l.replace(MARKER, ""))
+    .filter((l) => l.length > 1)
     .slice(0, 5);
-  return bullets.length ? bullets.join("\n") : null;
+  return items.length ? items.map((l, i) => `${i + 1}. ${l}`).join("\n") : null;
 }
 
 /**
@@ -249,8 +244,9 @@ export function buildInvestorPrompt(data: InvestorWeekData): string {
   return [
     "Ти пишеш короткий тижневий звіт для ангел-інвесторів української оборонної компанії, що розробляє автопілот для FPV-дронів.",
     "Інвестори добре розуміють бойове застосування; пиши ПОМІРНО ТЕХНІЧНО: називай конкретні підсистеми, моделі й механізми (напр. YOLOv8M/N, стабілізація зльоту, наведення камери), але без глибоких нюансів імплементації.",
-    "Поверни РІВНО 3–5 рядків-пунктів українською. Кожен рядок починається з «• » і має до 50 слів.",
+    "Поверни РІВНО 3–5 ПРОНУМЕРОВАНИХ пунктів українською (кожен рядок починається з «1. », «2. » тощо), кожен до 50 слів.",
     "Кожен пункт — КОНКРЕТНИЙ КЛЮЧОВИЙ РЕЗУЛЬТАТ тижня по суті: що саме зроблено, як перевірено, який ефект чи наступний крок (спирайся на resolvedIssueTitles та польові результати).",
+    "Ключові цифри тижня (виїзди, години нальоту/у полі, відео) вплети у відповідні пункти — окремого блоку цифр у звіті немає.",
     "Уникай порожніх загальних фраз на кшталт «точніша класифікація цілей» — замість цього скажи, ЩО порівняли/змінили і ЩО це показало.",
     "ЗАБОРОНЕНО: кількість задач, відсотки спринту, внутрішні статуси приймання — це нікого не цікавить.",
     "Числа (години, відео, виїзди) бери ЛИШЕ з наведених нижче даних — нічого не вигадуй.",
