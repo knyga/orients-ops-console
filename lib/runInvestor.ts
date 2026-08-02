@@ -63,15 +63,22 @@ interface VerdictMonth {
   days: DayVerdict[];
 }
 
-/** Best-effort operator DM; a failed DM must not mask the original error. */
-async function notifyOperator(stage: string, reason: string): Promise<void> {
+/** Best-effort operator DM; a failed DM must not mask the original error.
+ *  Keyed by week + stage (not the reason text) so a recurring weekly failure
+ *  re-DMs every week instead of deduping to a single lifetime send. */
+async function notifyOperator(
+  weekKey: string,
+  stage: string,
+  reason: string,
+  trigger: SendTrigger,
+): Promise<void> {
   try {
     const dm = await openDm(APPROVERS[0].userId);
     await postMessage(dm, `⛔ Тижневий звіт для інвесторів не сформовано (${stage}): ${reason}`, {
-      key: `investor-failure:${stage}:${reason.slice(0, 40)}`,
+      key: `investor-failure:${weekKey}:${stage}`,
       feature: "investor-failure",
       channel: "dm",
-      trigger: "cron",
+      trigger,
     });
   } catch (e) {
     console.error("runInvestor: operator DM failed:", e);
@@ -82,13 +89,14 @@ export async function runInvestor(opts: RunInvestorOptions): Promise<InvestorRes
   const today = opts.today ?? todayInFieldTz();
   const window = computeWeekWindow(today);
   const channelName = opts.channelName ?? "general";
+  const trigger = opts.trigger ?? "unknown";
 
   const fail = async (
     stage: "jira" | "sprint" | "field" | "vimeo" | "store",
     err: unknown,
   ): Promise<InvestorResult> => {
     const reason = err instanceof Error ? err.message : String(err);
-    if (opts.publish) await notifyOperator(stage, reason);
+    if (opts.publish) await notifyOperator(window.key, stage, reason, trigger);
     return { status: "failed", stage, reason };
   };
 
