@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { InvestorRecord, InvestorWeekData } from "@/lib/investorReport";
+import type { InvestorRecord } from "@/lib/investorReport";
 
 export default function InvestorPage() {
   const [keys, setKeys] = useState<string[]>([]);
