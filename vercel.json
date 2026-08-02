@@ -5,6 +5,7 @@
     { "path": "/api/cron/field-nightly", "schedule": "30 6 * * *" },
     { "path": "/api/cron/drone-reminder", "schedule": "0 8 * * *" },
     { "path": "/api/cron/sprint-commit", "schedule": "0 18 * * 1" },
-    { "path": "/api/cron/sprint-report", "schedule": "0 20 * * 0" }
+    { "path": "/api/cron/sprint-report", "schedule": "0 20 * * 0" },
+    { "path": "/api/cron/investor-report", "schedule": "0 6 * * 2" }
   ]
 }
