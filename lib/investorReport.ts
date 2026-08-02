@@ -46,7 +46,7 @@ export interface InvestorWeekData {
   jira: {
     resolved: number;
     storyPoints: number;
-    /** Up to 5 issue titles fed to the summary prompt (never printed as bullets). */
+    /** Up to 15 issue titles fed to the summary prompt (never printed as bullets). */
     noteworthy: { key: string; summary: string }[];
   };
   /** Null when no completed sprint report matched the window (line omitted). */
@@ -192,7 +192,7 @@ export function formatWeekLabel(start: string, end: string): string {
 /**
  * The exact #general post: title, then the 3–5 «•» key-result bullets (Claude
  * or fallback), then one compact «Цифри тижня» list. House report style: round
- * bullets, 3–5 items per list, each point ≤ ~10 words — scannable, never a
+ * bullets, 3–5 items per list, substantive points up to ~50 words — scannable, never a
  * narrative paragraph. Investor-facing scope: concrete results, no task/sprint
  * counts, no internal acceptance statuses, no dataset-day counts (those all
  * stay in the stored record for the internal web tab).
@@ -243,14 +243,15 @@ export function normalizeSummaryBullets(text: string): string | null {
  * and field outcomes. Task/sprint counts and internal statuses are deliberately
  * NOT in the prompt (investors don't care, and their absence makes «13 із 54
  * задач» bullets impossible). Numbers that ARE passed (hours, videos, flights)
- * may be used but never invented. Output contract: 3–5 «• » bullets, ≤10 words.
+ * may be used but never invented. Output contract: 3–5 «• » bullets, ≤50 words each.
  */
 export function buildInvestorPrompt(data: InvestorWeekData): string {
   return [
     "Ти пишеш короткий тижневий звіт для ангел-інвесторів української оборонної компанії, що розробляє автопілот для FPV-дронів.",
     "Інвестори добре розуміють бойове застосування; пиши ПОМІРНО ТЕХНІЧНО: називай конкретні підсистеми, моделі й механізми (напр. YOLOv8M/N, стабілізація зльоту, наведення камери), але без глибоких нюансів імплементації.",
-    "Поверни РІВНО 3–5 рядків-пунктів українською. Кожен рядок починається з «• » і має ЩОНАЙБІЛЬШЕ 10 слів.",
-    "Кожен пункт — КОНКРЕТНИЙ КЛЮЧОВИЙ РЕЗУЛЬТАТ тижня: яка можливість чи підсистема з'явилась/покращилась і що це дає (спирайся на resolvedIssueTitles та польові результати).",
+    "Поверни РІВНО 3–5 рядків-пунктів українською. Кожен рядок починається з «• » і має до 50 слів.",
+    "Кожен пункт — КОНКРЕТНИЙ КЛЮЧОВИЙ РЕЗУЛЬТАТ тижня по суті: що саме зроблено, як перевірено, який ефект чи наступний крок (спирайся на resolvedIssueTitles та польові результати).",
+    "Уникай порожніх загальних фраз на кшталт «точніша класифікація цілей» — замість цього скажи, ЩО порівняли/змінили і ЩО це показало.",
     "ЗАБОРОНЕНО: кількість задач, відсотки спринту, внутрішні статуси приймання — це нікого не цікавить.",
     "Числа (години, відео, виїзди) бери ЛИШЕ з наведених нижче даних — нічого не вигадуй.",
     "Відповідай лише рядками-пунктами, без заголовків, вступу чи абзаців.",
