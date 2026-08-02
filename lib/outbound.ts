@@ -70,12 +70,19 @@ export async function reserveSend(
   );
 
   if (decision.won && existing) {
+    // Reclaiming a FAILED row: refresh the payload columns too — the retry may
+    // carry different text (e.g. the agent's error fallback replacing a toolong
+    // answer), and the row must record what was ACTUALLY sent, not the first
+    // attempt's payload (mislead a 2026-08-01 debug session: the audit showed
+    // a "sent" answer while Slack displayed the fallback).
     await db
       .update(schema.outboundMessages)
       .set({
         status: "pending",
         attempts: (existing.attempts ?? 1) + 1,
         error: null,
+        text: args.text,
+        threadTs: args.threadTs,
         reservedAt: args.reservedAt,
       })
       .where(eq(schema.outboundMessages.key, args.key));

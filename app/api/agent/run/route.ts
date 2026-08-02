@@ -11,7 +11,8 @@ import { runSlackTurn } from "@/lib/agent/slackTurn";
 import { markdownToMrkdwn } from "@/lib/mrkdwn";
 import { loadTranscript, appendTurn } from "@/lib/agentThread";
 import { insertPending } from "@/lib/agentProposals";
-import { updateMessage, permalinkFor } from "@/lib/slack";
+import { updateMessage, postMessage, permalinkFor } from "@/lib/slack";
+import { chunkForSlack } from "@/lib/slackChunk";
 import { agentReplyKey } from "@/lib/outboundKeys";
 import type { ProposalKind } from "@/lib/proposalExecutor";
 import { fetchThreadContext } from "@/lib/agent/threadContext";
@@ -48,6 +49,31 @@ export async function POST(req: Request): Promise<Response> {
     trigger: "webhook" as const,
   };
 
+  /**
+   * Deliver `text` by editing the placeholder, splitting the overflow into
+   * follow-up posts. Slack rejects texts over ~4000 UTF-8 bytes with
+   * `msg_too_long` (bit the 2026-08-01 «список завершених задач» answers —
+   * the edit threw and the catch below masked the whole turn as a generic
+   * error), so a long answer MUST be chunked, never sent as one message.
+   * Follow-ups thread under the incoming thread when there is one; in a
+   * channel mention without a thread they thread under the placeholder
+   * (keeps the channel tidy); in a DM they post top-level.
+   */
+  const deliver = async (text: string): Promise<void> => {
+    const chunks = chunkForSlack(text);
+    await updateMessage(body.channelId, body.placeholderTs, chunks[0], meta);
+    const followUpThreadTs =
+      body.threadTs ?? (body.surface === "dm" ? undefined : body.placeholderTs);
+    for (let i = 1; i < chunks.length; i++) {
+      await postMessage(
+        body.channelId,
+        chunks[i],
+        { ...meta, key: `${meta.key}:${i + 1}` },
+        followUpThreadTs,
+      );
+    }
+  };
+
   try {
     const history = await loadTranscript(body.conversationKey);
     // A mention/thread turn carries threadTs: inject the surrounding thread as
@@ -71,7 +97,7 @@ export async function POST(req: Request): Promise<Response> {
     const sourceUrl = body.threadTs ? permalinkFor(body.channelId, body.threadTs) : undefined;
     const result = await runSlackTurn(question, history, { sourceUrl });
     if (result.kind === "proposal" && result.proposal) {
-      await updateMessage(body.channelId, body.placeholderTs, result.proposal.echoUk, meta);
+      await deliver(result.proposal.echoUk);
       await insertPending({
         channelId: body.conversationKey,
         kind: result.proposal.kind as ProposalKind,
@@ -84,7 +110,7 @@ export async function POST(req: Request): Promise<Response> {
     }
     // The model writes GitHub markdown; Slack renders mrkdwn — convert at this boundary.
     const answer = markdownToMrkdwn(result.text.trim()) || "Не маю відповіді на це.";
-    await updateMessage(body.channelId, body.placeholderTs, answer, meta);
+    await deliver(answer);
     await appendTurn(body.conversationKey, body.question, answer);
     return Response.json({ ok: true, surface: body.surface });
   } catch (err) {
