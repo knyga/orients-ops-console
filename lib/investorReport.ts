@@ -189,64 +189,85 @@ export function formatWeekLabel(start: string, end: string): string {
   return `${dayLabel(start, !sameYear)} – ${dayLabel(end, true)}`;
 }
 
-/** The exact #general post: summary paragraph first, then the bullet blocks. */
+/**
+ * The exact #general post: title, then the 3–5 «•» takeaway bullets (Claude or
+ * fallback), then one compact «Цифри тижня» list. House report style: round
+ * bullets, 3–5 items per list, each point ≤ ~10 words — scannable, never a
+ * narrative paragraph.
+ */
 export function formatInvestorMessage(summary: string, data: InvestorWeekData): string {
-  const lines: string[] = [
+  const sprintPart = data.sprint
+    ? `, спринт ${data.sprint.name} — ${data.sprint.rate}% (${data.sprint.completed}/${data.sprint.committed} задач)`
+    : "";
+  return [
     `📊 Тижневий звіт для інвесторів — ${formatWeekLabel(data.window.start, data.window.end)}`,
     "",
     summary.trim(),
     "",
-    "🛠 Розробка",
-    `• Закрито ${data.jira.resolved} задач (${data.jira.storyPoints} стор-поїнтів)`,
-  ];
-  if (data.sprint) {
-    lines.push(
-      `• Виконання спринту: ${data.sprint.rate}% (${data.sprint.completed}/${data.sprint.committed})`,
-    );
-  }
-  lines.push(
-    "",
-    "🚁 Польові роботи",
+    "Цифри тижня:",
+    `• Розробка: закрито ${data.jira.resolved} задач${sprintPart}`,
     // REJECTED reports count toward `reports` (the total) but deliberately fall
     // into neither `accepted` nor `flagged` — spec is accepted vs flagged only.
-    `• Виїздів: ${data.field.reports} (прийнято ${data.field.accepted}, на розгляді ${data.field.flagged})`,
-    `• Час у полі: ${data.field.fieldHours} год, час у повітрі: ${data.field.airHours} год`,
-    "",
-    "🎥 Дані",
-    `• Відео: ${data.video.count} роликів, ${data.video.minutes} хв записано`,
+    `• Виїзди: ${data.field.reports} (прийнято ${data.field.accepted}, на розгляді ${data.field.flagged})`,
+    `• У повітрі ${data.field.airHours} год, у полі ${data.field.fieldHours} год`,
+    `• Відео: ${data.video.count} роликів, ${data.video.minutes} хв`,
     `• Датасети: передано за ${data.datasets.noticeDays} дн.`,
-  );
-  return lines.join("\n");
+  ].join("\n");
 }
 
-/** Deterministic Ukrainian paragraph used when the Claude summary call fails. */
+/** Deterministic «•» takeaway bullets used when the Claude summary call fails. */
 export function fallbackSummary(data: InvestorWeekData): string {
-  return (
-    `За тиждень команда закрила ${data.jira.resolved} задач розробки, ` +
-    `виконала ${data.field.reports} польових виїздів ` +
-    `(${data.field.airHours} год у повітрі) та записала ${data.video.minutes} хв відео. ` +
-    `Деталі — у цифрах нижче.`
-  );
+  return [
+    `• Закрито ${data.jira.resolved} задач розробки`,
+    `• ${data.field.reports} польових виїздів, ${data.field.airHours} год у повітрі`,
+    `• Записано ${data.video.minutes} хв відео для датасетів`,
+  ].join("\n");
+}
+
+/**
+ * Normalize the model's summary into 3–5 «• » bullet lines: accepts •/-/* line
+ * markers, drops everything else, caps at 5. Returns null when no bullet lines
+ * survive (caller falls back to the deterministic bullets).
+ */
+export function normalizeSummaryBullets(text: string): string | null {
+  const bullets = text
+    .split("\n")
+    .map((l) => l.trim())
+    .map((l) => l.replace(/^[-*•]\s+/, "• ").replace(/^•\s*/, "• "))
+    .filter((l) => l.startsWith("• ") && l.length > 2)
+    .slice(0, 5);
+  return bullets.length ? bullets.join("\n") : null;
 }
 
 /**
  * The one Claude call's prompt: every figure is passed in; the model narrates,
- * never invents numbers.
+ * never invents numbers. Output contract: 3–5 «• » bullets, ≤10 words each.
+ * Sprint figures are labeled as ISSUE counts (`completedIssues`/`committedIssues`)
+ * so the model never mislabels them as story points.
  */
 export function buildInvestorPrompt(data: InvestorWeekData): string {
   return [
     "Ти пишеш короткий тижневий звіт для ангел-інвесторів української оборонної компанії, що розробляє автопілот для FPV-дронів.",
     "Інвестори добре розуміють бойове застосування, але не технічні нюанси — без жаргону.",
-    "Напиши РІВНО один абзац із 3–5 речень українською: що зроблено за тиждень і яку цінність це дає.",
+    "Поверни РІВНО 3–5 рядків-пунктів українською. Кожен рядок починається з «• » і має ЩОНАЙБІЛЬШЕ 10 слів.",
+    "Це головні висновки тижня: що зроблено і яку цінність це дає (спирайся на noteworthyIssues для якісних пунктів).",
     "Використовуй ЛИШЕ наведені нижче числа — нічого не вигадуй і не додавай нових цифр.",
-    "Відповідай лише текстом абзацу, без заголовків і списків.",
+    "Спринт вимірюється в ЗАДАЧАХ (completedIssues/committedIssues), не в сторі-поїнтах.",
+    "Відповідай лише рядками-пунктами, без заголовків, вступу чи абзаців.",
     "",
     "Дані тижня (JSON):",
     JSON.stringify(
       {
         period: formatWeekLabel(data.window.start, data.window.end),
         jira: { resolved: data.jira.resolved, storyPoints: data.jira.storyPoints },
-        sprint: data.sprint,
+        sprint: data.sprint
+          ? {
+              name: data.sprint.name,
+              ratePercent: data.sprint.rate,
+              completedIssues: data.sprint.completed,
+              committedIssues: data.sprint.committed,
+            }
+          : null,
         field: data.field,
         video: data.video,
         datasets: data.datasets,
