@@ -5,7 +5,7 @@
  * Usage:
  *   npm run investor                                     # dry-run: compute + store + print the Ukrainian post
  *   npm run investor -- --today 2026-08-04               # dry-run for another week's Tuesday
- *   npm run investor -- --format json                    # dry-run, print the stored record as JSON
+ *   npm run investor -- --format json                    # dry-run, print the run result (status/key/message/posted/summarySource) as JSON
  *   npm run investor -- --publish --channel general      # ACTUALLY POST to #general (needs chat:write)
  *
  * Safety:

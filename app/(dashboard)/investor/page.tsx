@@ -1,22 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-interface InvestorWeekData {
-  window: { start: string; end: string; key: string };
-  jira: { resolved: number; storyPoints: number; noteworthy: { key: string; summary: string }[] };
-  sprint: { name: string; rate: number; completed: number; committed: number } | null;
-  field: { reports: number; accepted: number; flagged: number; fieldHours: number; airHours: number; flightDays: number };
-  video: { count: number; minutes: number };
-  datasets: { noticeDays: number };
-}
-interface InvestorRecord {
-  data: InvestorWeekData;
-  summary: string;
-  summarySource: "claude" | "fallback";
-  message: string;
-  generatedAt: string;
-}
+import type { InvestorRecord, InvestorWeekData } from "@/lib/investorReport";
 
 export default function InvestorPage() {
   const [keys, setKeys] = useState<string[]>([]);

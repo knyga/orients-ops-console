@@ -62,6 +62,15 @@ describe("computeWeekWindow", () => {
     // Tue 2026-07-14 → Mon 2026-07-06 .. Sun 2026-07-12, same month.
     expect(computeWeekWindow("2026-07-14").key).toBe("2026-07-06_2026-07-12");
   });
+
+  it("is unaffected by the Kyiv DST transition (2026-10-25)", () => {
+    // Kyiv DST ended Sun 2026-10-25; the UTC date-only math must not drift.
+    expect(computeWeekWindow("2026-10-27")).toEqual({
+      start: "2026-10-19",
+      end: "2026-10-25",
+      key: "2026-10-19_2026-10-25",
+    });
+  });
 });
 
 describe("monthKeysCovering", () => {

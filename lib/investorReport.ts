@@ -207,6 +207,8 @@ export function formatInvestorMessage(summary: string, data: InvestorWeekData): 
   lines.push(
     "",
     "🚁 Польові роботи",
+    // REJECTED reports count toward `reports` (the total) but deliberately fall
+    // into neither `accepted` nor `flagged` — spec is accepted vs flagged only.
     `• Виїздів: ${data.field.reports} (прийнято ${data.field.accepted}, на розгляді ${data.field.flagged})`,
     `• Час у полі: ${data.field.fieldHours} год, час у повітрі: ${data.field.airHours} год`,
     "",

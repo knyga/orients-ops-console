@@ -17,7 +17,7 @@ export async function generateSummary(
     return { text: fallbackSummary(data), source: "fallback" };
   }
   try {
-    const client = new Anthropic();
+    const client = new Anthropic({ timeout: 20_000 });
     const message = await client.messages.create({
       model: MODEL,
       max_tokens: 1024,

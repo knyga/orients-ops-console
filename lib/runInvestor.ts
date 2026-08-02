@@ -54,7 +54,11 @@ export type InvestorResult =
       posted: boolean;
       summarySource: "claude" | "fallback";
     }
-  | { status: "failed"; stage: "jira" | "sprint" | "field" | "vimeo" | "store"; reason: string };
+  | {
+      status: "failed";
+      stage: "jira" | "sprint" | "field" | "vimeo" | "store" | "post";
+      reason: string;
+    };
 
 interface FieldQaMonth {
   days: { date: string; airborneMinutes: number; flew: boolean }[];
@@ -92,7 +96,7 @@ export async function runInvestor(opts: RunInvestorOptions): Promise<InvestorRes
   const trigger = opts.trigger ?? "unknown";
 
   const fail = async (
-    stage: "jira" | "sprint" | "field" | "vimeo" | "store",
+    stage: "jira" | "sprint" | "field" | "vimeo" | "store" | "post",
     err: unknown,
   ): Promise<InvestorResult> => {
     const reason = err instanceof Error ? err.message : String(err);
@@ -189,13 +193,17 @@ export async function runInvestor(opts: RunInvestorOptions): Promise<InvestorRes
   let posted = false;
   if (opts.publish) {
     const channel = TRACKED_CHANNELS.find((c) => c.name === channelName);
-    if (!channel) return fail("store", new Error(`unknown tracked channel "${channelName}"`));
-    await postMessage(channel.id, message, {
-      key: investorKey(window.key),
-      feature: "investor",
-      channel: channel.name,
-      trigger: opts.trigger ?? "unknown",
-    });
+    if (!channel) return fail("post", new Error(`unknown tracked channel "${channelName}"`));
+    try {
+      await postMessage(channel.id, message, {
+        key: investorKey(window.key),
+        feature: "investor",
+        channel: channel.name,
+        trigger: opts.trigger ?? "unknown",
+      });
+    } catch (e) {
+      return fail("post", e);
+    }
     posted = true;
   }
 

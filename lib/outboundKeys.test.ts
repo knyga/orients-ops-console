@@ -11,6 +11,7 @@ import {
   decideReserve,
   dmHelpKey,
   detectOrigin,
+  investorKey,
   rosterAckKey,
   rosterEditKey,
   verdictKey,
@@ -106,5 +107,11 @@ describe("roster outbound keys", () => {
   it("namespaces edit + ack by date and rev", () => {
     expect(rosterEditKey("2026-06-10", "abc")).toBe("roster-edit:2026-06-10:abc");
     expect(rosterAckKey("2026-06-10", "abc")).toBe("roster-ack:2026-06-10:abc");
+  });
+});
+
+describe("investorKey", () => {
+  it("namespaces the send by the explicit week key", () => {
+    expect(investorKey("2026-07-20_2026-07-26")).toBe("investor:2026-07-20_2026-07-26");
   });
 });
