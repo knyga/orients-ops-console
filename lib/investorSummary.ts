@@ -26,7 +26,7 @@ export async function generateSummary(
     const client = new Anthropic({ timeout: 20_000 });
     const message = await client.messages.create({
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages: [{ role: "user", content: buildInvestorPrompt(data) }],
     });
     if (message.stop_reason === "refusal") {
