@@ -74,6 +74,9 @@ export const instructionAckKey = (date: string, axis: string, rev: string): stri
 export const sprintCommittedKey = (slug: string): string => `sprint-committed:${slug}`;
 export const sprintCompletedKey = (slug: string): string => `sprint-completed:${slug}`;
 
+/** Weekly investor report post, keyed by the explicit Mon_Sun week key. */
+export const investorKey = (periodKey: string): string => `investor:${periodKey}`;
+
 /** Roster correction (S-roster): edit the verdict's crew suffix + threaded ack. */
 export const rosterEditKey = (date: string, rev: string): string =>
   `roster-edit:${date}:${rev}`;
