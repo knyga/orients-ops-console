@@ -1,5 +1,5 @@
 /**
- * The daily 11:00 drone-count reminder. SERVER-ONLY (live Slack + the cached
+ * The daily 09:00 drone-count reminder. SERVER-ONLY (live Slack + the cached
  * Claude drone classifier). One source of truth for BOTH the
  * `/api/cron/drone-reminder` route and the `drone-reminder` CLI: fetch today's
  * #field-qa messages (incl. thread replies), work out which drone owners
@@ -56,7 +56,7 @@ export async function runDroneReminder(opts: RunDroneReminderOptions): Promise<D
 
   // Yesterday + today's #field-qa messages incl. thread replies — one day of
   // lookback so a previous-evening submission with an explicit «за DD.MM» date
-  // for today still counts at 11:00. Anchors come from the bot's outbound send
+  // for today still counts at 09:00. Anchors come from the bot's outbound send
   // record (never message text). Extraction runs behind the shared drone cache,
   // so this run is near-free on Claude.
   const window = { start: dayBefore(today), end: today };

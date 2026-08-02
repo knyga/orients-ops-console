@@ -1,4 +1,4 @@
-# Per-pilot drone-count reports + 11:00 reminder — design
+# Per-pilot drone-count reports + morning reminder — design
 
 Date: 2026-07-28. Status: approved (user confirmed every decision below).
 
@@ -28,7 +28,7 @@ Drone owners (hardcoded, auditable — like `lib/approvers.ts`):
    X's gate. Another pilot listing X's counts still shows in the 🛸 display line
    but does not satisfy X's gate. An approver `eligibility: "counted"` roster
    correction outranks the gate (the existing person-level escape hatch).
-3. **Daily 11:00 Kyiv reminder** in #field-qa tags only the owners who have not
+3. **Daily 09:00 Kyiv reminder** (11:00 until 2026-07-31) in #field-qa tags only the owners who have not
    yet submitted for today; when all three have submitted, nothing is posted.
    The reminder is the day's canonical thread anchor — pilots are asked to reply
    in its thread.
@@ -82,9 +82,9 @@ Drone owners (hardcoded, auditable — like `lib/approvers.ts`):
   submitted; owns the `drone-reminder:<date>` key format + the outbound-row →
   anchor-map helper), server-only `lib/droneReminder.ts` (fetches yesterday +
   today — one day of lookback so a previous-evening submission with an explicit
-  date for today still counts at 11:00 — + cached extraction + idempotent
+  date for today still counts at 09:00 — + cached extraction + idempotent
   `postMessage` key `drone-reminder:<date>`), `/api/cron/drone-reminder`
-  (`0 8 * * *` UTC ≈ 11:00 Kyiv summer / 10:00 winter — same fixed-UTC
+  (`0 6 * * *` UTC ≈ 09:00 Kyiv summer / 08:00 winter — same fixed-UTC
   compromise as the other crons), CLI `npm run drone-reminder` (dry-run default,
   `--publish` posts).
 

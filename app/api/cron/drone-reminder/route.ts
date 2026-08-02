@@ -1,6 +1,6 @@
 /**
- * Vercel Cron: the daily drone-count reminder. At ~11:00 Kyiv (0 8 * * * UTC —
- * 10:00 in winter, the same fixed-UTC compromise as the other crons) it tags
+ * Vercel Cron: the daily drone-count reminder. At ~09:00 Kyiv (0 6 * * * UTC —
+ * 08:00 in winter, the same fixed-UTC compromise as the other crons) it tags
  * the drone owners who have not yet submitted their own count for today in
  * #field-qa; all submitted → posts nothing. Guarded by CRON_SECRET; idempotent
  * via the `drone-reminder:<date>` outbound key. Scheduled in vercel.json.

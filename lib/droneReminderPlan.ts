@@ -1,5 +1,5 @@
 /**
- * Pure planning for the daily 11:00 drone-count reminder: which drone owners
+ * Pure planning for the daily 09:00 drone-count reminder: which drone owners
  * still owe today's submission, and the exact Ukrainian #field-qa message.
  * The reminder's thread → target-date mapping (for attributing dateless
  * replies) comes from the bot's OWN durable send record (`outbound_messages`

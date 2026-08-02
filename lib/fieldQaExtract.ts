@@ -49,7 +49,7 @@ export async function extractFieldQa(
   const log = opts.onLog ?? (() => {});
 
   // fetchRawMessages (not fetchMessages): drone-count submissions can be
-  // replies inside the 11:00 reminder thread, and conversations.history alone
+  // replies inside the 09:00 reminder thread, and conversations.history alone
   // never returns thread replies. Raw messages also carry authorId + thread_ts,
   // which the per-person gate and the anchor-date defaulting need.
   const fieldQaChannel = TRACKED_CHANNELS.find((c) => c.name === FIELD_QA_CHANNEL);
