@@ -44,5 +44,6 @@ deployment < 3h or an admin-declined dataset. No pay for that report's crew.
 ## July impact
 
 2026-07-10 (Андріан, Тарас) ACCEPTED → REJECTED: −1 400 ₴, period total
-18 700 → 17 300 ₴. 2026-07-06 stays NEEDS_REVIEW (gains the loss reason).
-2026-07-04 / 2026-07-11 untouched (found).
+18 700 → 17 300 ₴. 2026-07-06 (Звіт 2, the loss report) NEEDS_REVIEW →
+REJECTED — the hard fail outranks the curable video gap, settling the day
+(the 1 800 ₴ leaves pendingDays). 2026-07-04 / 2026-07-11 untouched (found).

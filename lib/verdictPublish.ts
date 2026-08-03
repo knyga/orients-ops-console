@@ -259,5 +259,6 @@ function ukrainianGaps(day: DayVerdict): string[] {
   if (flew && day.hasZvit === false) gaps.push("політ зафіксовано, але немає Звіту (екіпаж невідомий)");
   if (day.datasetStatus === "MISSING") gaps.push("немає повідомлення про датасет за цей день");
   if (day.datasetStatus === "DECLINED") gaps.push("датасет відхилено адміністратором");
+  if (day.loss?.lost && !day.loss.found) gaps.push("втрата борта — не знайдено");
   return gaps;
 }

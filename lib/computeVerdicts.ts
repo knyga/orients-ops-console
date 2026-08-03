@@ -122,6 +122,7 @@ export async function computeVerdicts(
     const datasetPosted = hasDatasetNotice(datasetMessages, date, windowEnd);
     const { status: datasetStatus, note: datasetNote } = deriveDatasetStatus(datasetPosted, date, resolutions, row.reportTs);
     const fqDay = fqDayByDate.get(date);
+    const loss = lossForVerdict(lossRows, date, row.reportTs);
     const base = verdictForDay({
       flightDate: date,
       airborneMinutes: row.airborneMinutes,
@@ -138,6 +139,8 @@ export async function computeVerdicts(
       reportCount: row.reportCount,
       // Per-day presence: gate only when this date's fq record carries the key.
       ...(fqDay?.droneReport !== undefined ? { droneReportPresent: fqDay.droneReport.length > 0 } : {}),
+      // Unrecovered loss on this Звіт machine-rejects it (2026-08-04 spec).
+      ...(loss ? { loss } : {}),
     });
     // Surface the verbatim waiver/decline reason in the verdict reasons.
     const withNote = datasetNote ? { ...base, reasons: [...base.reasons, datasetNote] } : base;
@@ -146,7 +149,6 @@ export async function computeVerdicts(
     const correction = correctionForReport(corrections, date, row.reportTs, row.reportCount);
     const eff = applyRosterCorrection(row.roster, true, correction);
     const drones = fqDay?.droneReport;
-    const loss = lossForVerdict(lossRows, date, row.reportTs);
     // Per-person drone axis (display; the pay effect lives in lib/fieldBonus):
     // drone owners on this report's crew without their OWN submission for the
     // date — via the SAME owesDroneSubmission predicate the pay gate uses, so

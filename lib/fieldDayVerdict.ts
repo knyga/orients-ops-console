@@ -2,9 +2,11 @@
  * Pure per-flight-day acceptance verdict for the field bonus. Operationalizes the
  * unified day-qualification gate: a day is ACCEPTED when every gate axis passes.
  * The gate has per-report axes (deployment >= 3h, crew), day-shared axes (video >= max(2 min, 50% x airborne)
- * and a #datasets notice). Two failures are machine auto-rejects (hard no-pay,
- * admin can override via the instruction path): an admin-declined dataset and a
- * deployment under 3h. Curable gaps stay PENDING inside the grace window and
+ * and a #datasets notice). Three failures are machine auto-rejects (hard no-pay,
+ * admin can override via the instruction path): an admin-declined dataset, a
+ * deployment under 3h, and an unrecovered drone loss on the Звіт (2026-08-04
+ * spec — «не платимо бонуси в день втрати борта»; «борт знайшли» self-heals on
+ * recompute). Curable gaps stay PENDING inside the grace window and
  * NEEDS_REVIEW after. ACCEPTED ⇔ the crew is paid for the day (see the
  * 2026-07-03 unified-day-qualification spec). The drone-count axis is
  * PER-PERSON since 2026-07-28 (see the per-pilot drone-count spec): a missing
@@ -56,6 +58,10 @@ export interface VerdictInput {
   /** 1-based position among the day's reports (display: «виїзд 2/2»). */
   reportSeq?: number;
   reportCount?: number;
+  /** Drone-loss ledger state for THIS report. `lost && !found` is a machine
+   *  hard fail — «не платимо бонуси в день втрати борта» (2026-08-04 spec);
+   *  a found loss has no verdict effect. Absent = no loss recorded. */
+  loss?: { lost: boolean; found: boolean };
 }
 
 export interface DayVerdict {
@@ -114,6 +120,9 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
   const deployShort = flew && typeof deployMin === "number" && deployMin < MIN_DEPLOY_MIN; // hard fail
   const deployUnknown = flew && deployMin === null;                                        // curable gap
   const noZvit = flew && !hasZvit;                                                         // curable gap
+  // Unrecovered drone loss is a hard fail regardless of telemetry — the loss
+  // ledger row is the crew's own crash report; «борт знайшли» self-heals it.
+  const unrecoveredLoss = input.loss?.lost === true && input.loss.found === false;
 
   const reasons: string[] = [];
   if (!videoOk) {
@@ -135,9 +144,10 @@ export function verdictForDay(input: VerdictInput): DayVerdict {
   if (datasetStatus === "MISSING") reasons.push("no #datasets notice for the day");
   if (datasetStatus === "WAIVED") reasons.push("no dataset — reason accepted (waived)");
   if (datasetStatus === "DECLINED") reasons.push("dataset reason declined by an admin");
+  if (unrecoveredLoss) reasons.push("drone lost and not recovered");
 
   let status: VerdictStatus;
-  if (datasetStatus === "DECLINED" || deployShort) {
+  if (datasetStatus === "DECLINED" || deployShort || unrecoveredLoss) {
     status = "REJECTED";
   } else if (videoOk && datasetOk && !deployUnknown && !noZvit) {
     status = "ACCEPTED";

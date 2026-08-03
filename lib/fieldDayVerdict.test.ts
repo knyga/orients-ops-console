@@ -160,6 +160,28 @@ describe("unified gate axes", () => {
     expect(v.droneReportPresent).toBe(true);
     expect(v.hasZvit).toBe(true);
   });
+
+  // 2026-08-04 policy: «не платимо бонуси в день втрати борта» — an
+  // unrecovered drone loss on the Звіт is a machine hard fail; a found loss
+  // has no verdict effect, and «борт знайшли» self-heals on recompute.
+  it("REJECTS an otherwise-passing day whose Звіт carries an unrecovered loss", () => {
+    const v = verdictForDay({ ...base, deployMin: 240, loss: { lost: true, found: false } });
+    expect(v.status).toBe("REJECTED");
+    expect(v.reasons).toContain("drone lost and not recovered");
+  });
+
+  it("a found loss does not affect the verdict", () => {
+    const v = verdictForDay({ ...base, deployMin: 240, loss: { lost: true, found: true } });
+    expect(v.status).toBe("ACCEPTED");
+    expect(v.reasons).toEqual([]);
+  });
+
+  it("an unrecovered loss on a no-fly day still hard-rejects (the loss happened)", () => {
+    const v = verdictForDay({
+      ...base, airborneMinutes: 0, videoMinutes: 0, loss: { lost: true, found: false },
+    });
+    expect(v.status).toBe("REJECTED");
+  });
 });
 
 describe("verdictForDay with DatasetStatus", () => {
