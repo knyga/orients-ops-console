@@ -5,7 +5,7 @@ date,report,status,crew,deployMin,videoMin,ratePerPerson,splitFactor,dayTotal,re
 2026-07-02,1783065929.667389,ACCEPTED_EXCEPTION,,,70,700,1,0,
 2026-07-03,,ACCEPTED,Андріан + Тарас,195,82.4,700,1,1400,
 2026-07-04,,ACCEPTED_EXCEPTION,Андріан + Сергій + Данило,,94.8,1000,1,2000,counted
-2026-07-05,,NEEDS_REVIEW,,,71.7,0,1,0,flight detected but no Звіт (crew/deployment unknown)
+2026-07-05,,ACCEPTED_EXCEPTION,,,71.7,1000,1,0,
 2026-07-06,1783277995.255719,NEEDS_REVIEW,,,0,0,1,0,video 0m is 0% of airborne 55m (< 50%); deployment window not recorded in the Звіт
 2026-07-06,1783278315.759349,REJECTED,Андріан + Любомир + Данило,360,0,0,1,0,video 0m is 0% of airborne 55m (< 50%); drone lost and not recovered
 2026-07-07,1783410714.313619,NEEDS_REVIEW,,,54.4,0,1,0,deployment window not recorded in the Звіт
@@ -16,7 +16,7 @@ date,report,status,crew,deployMin,videoMin,ratePerPerson,splitFactor,dayTotal,re
 2026-07-11,1783781338.320739,ACCEPTED,Андріан + Сергій,200,74.6,1000,1,2000,
 2026-07-11,1783928133.629859,NEEDS_REVIEW,,,74.6,0,1,0,deployment window not recorded in the Звіт
 2026-07-12,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
-2026-07-13,1783950308.045779,NEEDS_REVIEW,Андріан,315,78.6,0,1,0,video 79m is 37% of airborne 210m (< 50%)
+2026-07-13,1783950308.045779,ACCEPTED_EXCEPTION,Андріан,315,78.6,900,1,900,
 2026-07-13,1783964997.679149,NEEDS_REVIEW,Влад,180,78.6,0,1,0,video 79m is 37% of airborne 210m (< 50%)
 2026-07-14,,NEEDS_REVIEW,,,0,0,1,0,video 0m is 0% of airborne 79m (< 50%); flight detected but no Звіт (crew/deployment unknown)
 2026-07-15,,NEEDS_REVIEW,Андріан,220,56.7,0,1,0,video 57m is 42% of airborne 134m (< 50%)
@@ -29,7 +29,7 @@ date,report,status,crew,deployMin,videoMin,ratePerPerson,splitFactor,dayTotal,re
 2026-07-22,,NEEDS_REVIEW,,,117.9,0,1,0,flight detected but no Звіт (crew/deployment unknown)
 2026-07-23,,ACCEPTED,Андріан + Влад,260,56.2,900,1,900,counted
 2026-07-24,,ACCEPTED,Андріан + Любомир,200,74.8,900,1,900,counted
-2026-07-25,,NEEDS_REVIEW,,,93.9,0,1,0,flight detected but no Звіт (crew/deployment unknown)
+2026-07-25,,ACCEPTED_EXCEPTION,,,93.9,1000,1,0,
 2026-07-26,,ACCEPTED_EXCEPTION,,,32.8,1000,1,0,
 2026-07-27,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne)"
 2026-07-28,,REJECTED,Андріан,270,82.5,0,1,0,rejected (Oleksandr K): немає звіту по дронах за день

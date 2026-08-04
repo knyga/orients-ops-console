@@ -6,7 +6,7 @@ person,date,report,outcome,pay,early,weekend,reason
 Андріан,2026-07-09,,paid,700,false,false,
 Андріан,2026-07-10,,rejected,0,,,drone lost and not recovered
 Андріан,2026-07-11,1783781338.320739,paid,1000,false,true,
-Андріан,2026-07-13,1783950308.045779,unsettled (NEEDS_REVIEW),0,,,video 79m is 37% of airborne 210m (< 50%)
+Андріан,2026-07-13,1783950308.045779,paid,900,true,false,
 Андріан,2026-07-15,,unsettled (NEEDS_REVIEW),0,,,video 57m is 42% of airborne 134m (< 50%)
 Андріан,2026-07-16,,unsettled (NEEDS_REVIEW),0,,,video 13m is 10% of airborne 131m (< 50%)
 Андріан,2026-07-18,,paid,1000,false,true,
@@ -19,7 +19,7 @@ person,date,report,outcome,pay,early,weekend,reason
 Андріан,2026-07-29,,paid,900,true,false,
 Андріан,2026-07-30,,paid,700,false,false,
 Андріан,2026-07-31,,unsettled (PENDING),0,,,flight reported but airborne time not recorded
-Андріан,TOTAL,,,9500,,,
+Андріан,TOTAL,,,10400,,,
 Сергій,2026-07-04,,paid,1000,false,true,
 Сергій,2026-07-11,1783781338.320739,paid,1000,false,true,
 Сергій,TOTAL,,,2000,,,
