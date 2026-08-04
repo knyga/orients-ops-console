@@ -1,0 +1,19 @@
+{
+  "period": "2026-07-01..2026-07-31",
+  "generatedFrom": "npm run field-bonus -- --start 2026-07-01 --end 2026-07-31 (committed report, generated 2026-08-04)",
+  "sums": {
+    "report1_perPersonNets": 17300,
+    "report3_dayTotals": 17300,
+    "canonicalReportTotal": 17300
+  },
+  "allSumsMatch": true,
+  "perPersonRederivedFromDays_matchesCanonical": true,
+  "discrepancies": [],
+  "countedReports": 16,
+  "rejectedReports": 5,
+  "pendingOrReviewRows": 13,
+  "amountAtStake": 4600,
+  "teamZeroed": false,
+  "unrecoveredLosses": 2,
+  "penaltyApplied": false
+}

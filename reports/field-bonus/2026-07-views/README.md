@@ -1,0 +1,80 @@
+# Field-bonus payout report — July 2026
+
+Period 2026-07-01..2026-07-31, computed 2026-08-04 from the committed field-bonus
+report (unified verdict gate, incl. the 2026-08-04 unrecovered-loss reject rule).
+**NOT fully settled: 13 pending/review rows, 4 600 ₴ still at stake.**
+**Total to pay (settled): 17 300 ₴** across 7 people; 16 counted / 5 rejected
+reports; 2 unrecovered drone losses (within the >3 monthly limit — no team-zero,
+no penalty multiplier).
+
+Files here:
+
+- `1-per-person.csv` — Report 1: totals per person (trips, early, weekend, gross, net).
+- `2-per-member-detail.csv` — Report 2: every person's paid / excluded / rejected /
+  unsettled report-days with pay + reasons, plus a TOTAL row per person.
+- `3-per-day.csv` — Report 3: per Звіт (multi-report days carry the `report` ts) —
+  status, crew, deploy/video minutes, per-person rate, split factor, day total.
+- `4-crosscheck.json` — the reconciliation result (see below).
+
+## Report 1 — totals per person
+
+| Person | Trips | Early | Weekend | Net (₴) |
+|---|---|---|---|---|
+| Андріан | 11 | 6 | 1 | **9 500** |
+| Сергій | 2 | 0 | 2 | **2 000** |
+| Надія | 2 | 2 | 0 | **1 800** |
+| Данило | 2 | 0 | 1 | **1 700** |
+| Любомир | 1 | 1 | 0 | **900** |
+| Влад | 1 | 0 | 0 | **700** |
+| Тарас | 1 | 0 | 0 | **700** |
+| **Total** | 20 | 9 | 4 | **17 300** |
+
+## Report 2 — per-member detail (summary; full data in the CSV)
+
+- **Андріан — 9 500**: paid 07-01, 07-20, 07-21, 07-23, 07-24, 07-29 (early, 900
+  each); 07-18 (weekend exception, 1000); 07-11 (weekend, 1000); 07-03, 07-09,
+  07-30 (700 each). Excluded: 07-04, 07-28-adjacent drone-gate cases. Rejected:
+  07-10 (drone lost, not recovered), 07-19 (deploy < 3h + no dataset), 07-28
+  (approver: no drone report). Pending: 07-13, 07-15, 07-16, 07-31.
+- **Сергій — 2 000**: paid 07-04 (weekend exception), 07-11 (weekend) — 1000 each.
+- **Надія — 1 800**: paid 07-01, 07-07 (early, 900 each). Rejected: 07-01 виїзд 2
+  (deploy 110m < 3h).
+- **Данило — 1 700**: paid 07-02 (700), 07-04 (weekend exception, 1000).
+  Pending: 07-06 виїзд 1... rejected: 07-06 виїзд 2 (drone lost).
+- **Любомир — 900**: paid 07-07 (early; restored by approver eligibility
+  correction — his counts were in Влад's combined drone tally). Excluded: 07-24,
+  07-30 (no own drone-count submission). Rejected/pending: 07-06.
+- **Влад — 700**: paid 07-02 (restored by the same kind of eligibility
+  correction). Excluded: 07-23 (no own drone count). Rejected: 07-01 виїзд 2,
+  07-19. Pending: 07-13, 07-16.
+- **Тарас — 700**: paid 07-03. Rejected: 07-10 (drone lost, not recovered).
+
+## Report 3 — per-day payout (summary; full data in the CSV)
+
+Paid reports: 07-01 (1800), 07-02 (1400), 07-03 (1400), 07-04 (2000, exception),
+07-07 (1800), 07-09 (700), 07-11 (2000), 07-18 (1000, exception), 07-20 (900),
+07-21 (900), 07-23 (900), 07-24 (900), 07-29 (900), 07-30 (700).
+Counted but 0 ₴: 07-02 виїзд 2 + 07-26 (exceptions with empty crew).
+
+Rejected (0 ₴): 07-01 виїзд 2 (deploy 110m), 07-06 виїзд 2 + 07-10 (**drone lost
+and not recovered** — the 2026-08-04 rule), 07-19 (deploy 140m + no airborne +
+no dataset), 07-28 (approver: no drone report).
+
+Pending/review (4 600 ₴ at stake): 07-13 ×2 (video 37%), 07-15 (42%), 07-16
+(10%), 07-31 (airborne not recorded) + no-Звіт flight days 07-05, 07-08, 07-22,
+07-25 and telemetry-only rows (0 ₴ attributable).
+
+## Cross-check — PASSED ✅
+
+Verified by script (`4-crosscheck.json`):
+
+- sum of per-person nets (Report 1) = **17 300**
+- sum of day totals (Report 3) = **17 300**
+- canonical report `total` = **17 300**
+- per-person trips/early/weekend/net re-derived from `days[]` match the
+  canonical `people[]` for all 7 people — 0 discrepancies.
+
+Rate model: per person per counted Звіт = (700 + 200 early(≤12:30) + 300 weekend)
+× splitFactor (all 1 this month). Drone-gate exclusions and approver corrections
+per the per-pilot drone-count spec (2026-07-28); unrecovered-loss rejections per
+the 2026-08-04 spec.
