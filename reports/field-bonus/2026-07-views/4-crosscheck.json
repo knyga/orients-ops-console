@@ -1,20 +1,21 @@
 {
   "period": "2026-07-01..2026-07-31",
-  "generatedFrom": "npm run field-bonus -- --start 2026-07-01 --end 2026-07-31 (committed report, generated 2026-08-04)",
+  "generatedFrom": "npm run field-bonus -- --start 2026-07-01 --end 2026-07-31 (committed report, regenerated 2026-08-13 after the drone-gate effective-date fix)",
   "sums": {
-    "report1_perPersonNets": 24401,
-    "report3_dayTotals": 24400,
-    "canonicalReportTotal": 24401
+    "report1_perPersonNets": 27601,
+    "report3_dayTotals": 27600,
+    "canonicalReportTotal": 27601
   },
   "allSumsMatch": true,
   "splitDayRoundingDelta": -1,
-  "perPersonRederivedFromDays_matchesCanonical": true,
-  "discrepancies": [],
   "countedReports": 27,
   "rejectedReports": 7,
   "pendingOrReviewRows": 3,
   "amountAtStake": 700,
   "teamZeroed": false,
   "unrecoveredLosses": 1,
-  "penaltyApplied": false
+  "penaltyApplied": false,
+  "remainingDroneGateFlags": [
+    "2026-07-30 Любомир: no own drone-count submission"
+  ]
 }

@@ -158,7 +158,7 @@ export async function computeVerdicts(
     const flew = row.airborneMinutes > 0 || !row.airborneReported;
     const missingOwners =
       flew && submitters !== undefined
-        ? eff.roster.filter((name) => owesDroneSubmission(name, submitters, correction?.eligibility))
+        ? eff.roster.filter((name) => owesDroneSubmission(name, submitters, date, correction?.eligibility))
         : [];
     return {
       ...resolved,

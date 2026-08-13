@@ -1,52 +1,52 @@
 person,date,report,outcome,pay,early,weekend,reason
 Андріан,2026-07-01,1782912665.697519,paid,900,true,false,
-Андріан,2026-07-03,,paid,700,false,false,
-Андріан,2026-07-04,,excluded,0,,,Андріан: no own drone-count submission
-Андріан,2026-07-06,1783278315.759349,paid,900,true,false,
-Андріан,2026-07-09,,paid,700,false,false,
-Андріан,2026-07-10,,paid,700,false,false,
+Андріан,2026-07-03,1783091266.100199,paid,700,false,false,
+Андріан,2026-07-04,1783278496.608419,paid,667,false,true,
+Андріан,2026-07-06,1783278315.759349,paid,600,true,false,
+Андріан,2026-07-09,1783673394.184109,paid,700,false,false,
+Андріан,2026-07-10,1783699025.857829,paid,700,false,false,
 Андріан,2026-07-11,1783781338.320739,paid,1000,false,true,
 Андріан,2026-07-13,1783950308.045779,paid,900,true,false,
-Андріан,2026-07-15,,paid,900,true,false,
-Андріан,2026-07-16,,paid,700,false,false,
-Андріан,2026-07-18,,paid,1000,false,true,
-Андріан,2026-07-19,,rejected,0,,,flight reported but airborne time not recorded; deployment 140m is under 3h; no #datasets notice for the day
-Андріан,2026-07-20,,paid,900,true,false,
-Андріан,2026-07-21,,paid,900,true,false,
-Андріан,2026-07-23,,paid,900,true,false,
-Андріан,2026-07-24,,paid,900,true,false,
-Андріан,2026-07-28,,rejected,0,,,rejected (Oleksandr K): немає звіту по дронах за день
-Андріан,2026-07-29,,paid,900,true,false,
-Андріан,2026-07-30,,paid,700,false,false,
-Андріан,2026-07-31,,unsettled (PENDING),0,,,flight reported but airborne time not recorded
-Андріан,TOTAL,,,13600,,,
-Данило,2026-07-02,1783010663.251799,paid,700,false,false,
-Данило,2026-07-04,,paid,1000,false,true,
-Данило,2026-07-06,1783278315.759349,paid,900,true,false,
-Данило,2026-07-08,,paid,466.66666666666663,false,false,
-Данило,TOTAL,,,3067,,,
-Сергій,2026-07-04,,paid,1000,false,true,
-Сергій,2026-07-11,1783781338.320739,paid,1000,false,true,
-Сергій,TOTAL,,,2000,,,
-Тарас,2026-07-03,,paid,700,false,false,
-Тарас,2026-07-08,,paid,466.66666666666663,false,false,
-Тарас,2026-07-10,,paid,700,false,false,
-Тарас,TOTAL,,,1867,,,
-Надія,2026-07-01,1782912665.697519,paid,900,true,false,
-Надія,2026-07-01,1782927922.936129,rejected,0,,,deployment 110m is under 3h
-Надія,2026-07-07,1783432773.877059,paid,900,true,false,
-Надія,TOTAL,,,1800,,,
-Любомир,2026-07-06,1783278315.759349,excluded,0,,,Любомир: no own drone-count submission
-Любомир,2026-07-07,1783432773.877059,paid,900,true,false,
-Любомир,2026-07-08,,paid,466.66666666666663,false,false,
-Любомир,2026-07-24,,excluded,0,,,Любомир: no own drone-count submission
-Любомир,2026-07-30,,excluded,0,,,Любомир: no own drone-count submission
-Любомир,TOTAL,,,1367,,,
-Влад,2026-07-01,1782927922.936129,rejected,0,,,deployment 110m is under 3h
+Андріан,2026-07-15,1784125368.173149,paid,900,true,false,
+Андріан,2026-07-16,1784214156.012469,paid,700,false,false,
+Андріан,2026-07-18,1784391753.600099,paid,1000,false,true,
+Андріан,2026-07-20,1784557400.770399,paid,900,true,false,
+Андріан,2026-07-21,1784638050.553199,paid,900,true,false,
+Андріан,2026-07-23,1784826789.770939,paid,900,true,false,
+Андріан,2026-07-24,1784896277.873329,paid,900,true,false,
+Андріан,2026-07-29,1785336282.980809,paid,900,true,false,
+Андріан,2026-07-30,1785427354.903439,paid,700,false,false,
+Андріан,2026-07-19,1784485367.512739,rejected,0,,,flight reported but airborne time not recorded; deployment 140m is under 3h; no #datasets notice for the day
+Андріан,2026-07-28,1785247773.226359,rejected,0,,,rejected (Oleksandr K): немає звіту по дронах за день
+Андріан,2026-07-31,1785517037.083039,pending,0,,,flight reported but airborne time not recorded
+Андріан,TOTAL,,,13967,,,
 Влад,2026-07-02,1783010663.251799,paid,700,false,false,
-Влад,2026-07-08,,excluded,0,,,Влад: no own drone-count submission
-Влад,2026-07-13,1783964997.679149,excluded,0,,,Влад: no own drone-count submission
-Влад,2026-07-16,,excluded,0,,,Влад: no own drone-count submission
-Влад,2026-07-19,,rejected,0,,,flight reported but airborne time not recorded; deployment 140m is under 3h; no #datasets notice for the day
-Влад,2026-07-23,,excluded,0,,,Влад: no own drone-count submission
-Влад,TOTAL,,,700,,,
+Влад,2026-07-08,,paid,350,false,false,
+Влад,2026-07-13,1783964997.679149,paid,700,false,false,
+Влад,2026-07-16,1784214156.012469,paid,700,false,false,
+Влад,2026-07-23,1784826789.770939,paid,900,true,false,
+Влад,2026-07-01,1782927922.936129,rejected,0,,,deployment 110m is under 3h
+Влад,2026-07-19,1784485367.512739,rejected,0,,,flight reported but airborne time not recorded; deployment 140m is under 3h; no #datasets notice for the day
+Влад,TOTAL,,,3350,,,
+Данило,2026-07-02,1783010663.251799,paid,700,false,false,
+Данило,2026-07-04,1783278496.608419,paid,667,false,true,
+Данило,2026-07-06,1783278315.759349,paid,600,true,false,
+Данило,2026-07-08,,paid,350,false,false,
+Данило,TOTAL,,,2317,,,
+Любомир,2026-07-06,1783278315.759349,paid,600,true,false,
+Любомир,2026-07-07,1783432773.877059,paid,900,true,false,
+Любомир,2026-07-08,,paid,350,false,false,
+Любомир,2026-07-24,1784896277.873329,paid,900,true,false,
+Любомир,2026-07-30,1785427354.903439,excluded,0,,,Любомир: no own drone-count submission
+Любомир,TOTAL,,,2750,,,
+Надія,2026-07-01,1782912665.697519,paid,900,true,false,
+Надія,2026-07-07,1783432773.877059,paid,900,true,false,
+Надія,2026-07-01,1782927922.936129,rejected,0,,,deployment 110m is under 3h
+Надія,TOTAL,,,1800,,,
+Сергій,2026-07-04,1783278496.608419,paid,667,false,true,
+Сергій,2026-07-11,1783781338.320739,paid,1000,false,true,
+Сергій,TOTAL,,,1667,,,
+Тарас,2026-07-03,1783091266.100199,paid,700,false,false,
+Тарас,2026-07-08,,paid,350,false,false,
+Тарас,2026-07-10,1783699025.857829,paid,700,false,false,
+Тарас,TOTAL,,,1750,,,

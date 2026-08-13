@@ -164,6 +164,17 @@ describe("per-person drone-count gate (2026-07-28)", () => {
     expect(r.flags).toEqual([]);
   });
 
+  it("does not unpay an owner for a report predating the rule's effective date", () => {
+    // Before 2026-07-28 counts were submitted collectively (someone else's
+    // message carried everyone's tally), so author attribution must not unpay.
+    const r = computeBonuses({
+      period: { start: "2026-07-01", end: "2026-07-31" }, losses: [],
+      days: [day({ date: "2026-07-13", droneSubmitters: ["U09AAVAEE6L"] })],
+    });
+    expect(r.people.map((p) => p.name).sort()).toEqual(["Влад", "Тарас"]);
+    expect(r.flags).toEqual([]);
+  });
+
   it("the split factor is derived from the drone-gated paid roster", () => {
     // 3 counted people would split 2/3; gating one owner out leaves 2 → no split.
     const r = computeBonuses({

@@ -5,7 +5,8 @@
  * airborne), a #datasets notice); this module is money math only, PLUS the
  * per-person drone-count gate (2026-07-28): a drone owner on a counted report
  * is paid only if they submitted their own drone count for the date
- * (applyDroneGate). Adds early (arrival <= 12:30) and weekend (Sat/Sun) bonuses, then
+ * (applyDroneGate) — and only for dates on/after DRONE_GATE_EFFECTIVE_DATE, so
+ * the rule never unpays retroactively. Adds early (arrival <= 12:30) and weekend (Sat/Sun) bonuses, then
  * the drone-loss multiplier per flight group over 12 consecutive trips, and
  * the team-wide >3-loss cutoff. No DB/Next imports — unit-tested in isolation.
  */
@@ -78,10 +79,11 @@ function startMin(start: string | null): number | null {
 /**
  * The per-person drone-count gate (2026-07-28): a drone owner on a counted
  * report is paid only if they submitted their OWN drone count for the date
- * (author-based — see lib/droneOwners). An approver `eligibility: "counted"`
- * correction outranks the gate; unknown attribution (undefined submitters)
- * skips it — never unpay on missing data. Excluded people are flagged
- * `no_drone_count`. Pure.
+ * (author-based — see lib/droneOwners). Dates before DRONE_GATE_EFFECTIVE_DATE
+ * are exempt (counts were posted collectively then, so authorship carries no
+ * signal). An approver `eligibility: "counted"` correction outranks the gate;
+ * unknown attribution (undefined submitters) skips it — never unpay on missing
+ * data. Excluded people are flagged `no_drone_count`. Pure.
  */
 function applyDroneGate(
   perPerson: { name: string; counted: boolean }[],
@@ -92,7 +94,7 @@ function applyDroneGate(
 ): { name: string; counted: boolean }[] {
   if (submitters === undefined) return perPerson;
   return perPerson.map((p) => {
-    if (!p.counted || !owesDroneSubmission(p.name, submitters, correction?.eligibility)) return p;
+    if (!p.counted || !owesDroneSubmission(p.name, submitters, date, correction?.eligibility)) return p;
     flags.push({ kind: "no_drone_count", date, detail: `${p.name}: no own drone-count submission` });
     return { ...p, counted: false };
   });

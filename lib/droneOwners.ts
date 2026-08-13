@@ -33,17 +33,30 @@ export function droneOwnerForRosterName(name: string): DroneOwner | undefined {
 }
 
 /**
+ * The Kyiv date the per-person rule took effect — before 2026-07-28 pilots
+ * submitted drone counts COLLECTIVELY (one crew member posted everyone's
+ * tally), so author-based attribution carries no signal there and the gate must
+ * not bind: it would unpay people for not following a rule that did not yet
+ * exist. Dates compare lexicographically (both are `YYYY-MM-DD`).
+ */
+export const DRONE_GATE_EFFECTIVE_DATE = "2026-07-28";
+
+/**
  * THE per-person drone-count predicate — the single definition both the pay
  * gate (lib/fieldBonus) and the display surfaces (verdict «без звіту», the
  * reminder) use, so they cannot diverge: a crew member owes a submission iff
- * they are a drone owner, are not among the date's submitters, and no approver
- * `eligibility: "counted"` correction explicitly counts them. Pure.
+ * the flight date is on/after DRONE_GATE_EFFECTIVE_DATE, they are a drone
+ * owner, they are not among the date's submitters, and no approver
+ * `eligibility: "counted"` correction explicitly counts them. `date` is
+ * required so no caller can silently skip the effective-date cutoff. Pure.
  */
 export function owesDroneSubmission(
   name: string,
   submitters: readonly string[],
+  date: string,
   eligibility?: Record<string, "counted" | "not_counted">,
 ): boolean {
+  if (date < DRONE_GATE_EFFECTIVE_DATE) return false;
   const owner = droneOwnerForRosterName(name);
   if (!owner || submitters.includes(owner.userId)) return false;
   return eligibility?.[name] !== "counted";

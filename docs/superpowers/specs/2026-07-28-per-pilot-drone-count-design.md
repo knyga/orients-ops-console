@@ -41,6 +41,38 @@ Drone owners (hardcoded, auditable — like `lib/approvers.ts`):
    own-authored submissions lose their share unless an approver eligibility
    correction re-includes them. Mitigation: dry-run `field-bonus` diff before
    the first publish, `field-instructions` corrections where unfair.
+   **SUPERSEDED 2026-08-13 — see the amendment below.**
+
+## Amendment 2026-08-13 — the gate is no longer retroactive
+
+Decision 5's per-date correction mitigation did not hold. Before 2026-07-28
+pilots submitted drone counts **collectively** — one crew member posted the
+whole team's tally — so author-based attribution carries no signal for those
+dates: the gate unpaid people for breaking a rule that did not yet exist. In
+July it silently cost Влад 4 of his 5 qualifying Звіт (700 ₴ of 3 350 ₴ paid)
+and Любомир 2; only 2 of the 6 cases got a manual eligibility correction, each
+carrying a note that says exactly this ("правило особистих звітів діє з 28.07").
+Two of the uncorrected days (07-13 в.2, 07-16) had the pilot's own counts
+printed inside a teammate's message — the data existed, only the authorship
+did not.
+
+**The gate binds only from `DRONE_GATE_EFFECTIVE_DATE` (`lib/droneOwners.ts`,
+2026-07-28) onward.** Earlier dates are exempt for every owner. The date is a
+required parameter of `owesDroneSubmission`, so neither the pay gate
+(`lib/fieldBonus`) nor the display line (`lib/computeVerdicts` «без звіту») can
+skip the cutoff or drift from each other. The two manual July corrections stay
+in place — they are now redundant but harmless (an `eligibility: "counted"`
+override is idempotent).
+
+Recompute effect on July 2026: total 24 401 ₴ → **27 601 ₴**. Влад 700 →
+3 350, Любомир 1 367 → 2 750, Андріан 13 600 → 13 967. Данило (3 067 →
+2 317), Сергій (2 000 → 1 667) and Тарас (1 867 → 1 750) go **down**, because
+re-including a previously gated crew member re-divides that Звіт's
+2-person-sized pot among more people (the `splitFactor` rule). No July bonus
+figure had been sent to anyone — `outbound_messages` carries no `bonus` row for
+the period — so nothing already promised was withdrawn. The only surviving July
+`no_drone_count` flag is Любомир on 07-30, which is on/after the effective date
+and genuinely his own missing submission.
 
 ## Bugs fixed by this work
 
