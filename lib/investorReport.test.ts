@@ -23,7 +23,7 @@ const DATA: InvestorWeekData = {
     noteworthy: [{ key: "ATP-101", summary: "Автопілот: утримання висоти" }],
   },
   sprint: { name: "ATP 42", rate: 80, completed: 8, committed: 10 },
-  field: { reports: 3, accepted: 2, flagged: 1, fieldHours: 14.5, airHours: 6.2, flightDays: 3 },
+  field: { reports: 3, accepted: 2, flagged: 1, fieldHours: 14.5, airHours: 6.2, flightDays: 3, activeDays: 4 },
   video: { count: 9, minutes: 187 },
   datasets: { noticeDays: 2 },
 };
@@ -128,6 +128,7 @@ describe("buildWeekData", () => {
       fieldHours: 14.5, // (480+240+150)/60
       airHours: 6.2,    // (120+252)/60
       flightDays: 2,
+      activeDays: 2,    // 07-21, 07-22 (flew ∪ Звіт dates)
     });
     expect(data.video).toEqual({ count: 2, minutes: 15 });
     expect(data.datasets.noticeDays).toBe(2); // 07-21 and 07-22, per-date dedupe
@@ -149,7 +150,31 @@ describe("buildWeekData", () => {
     expect(data.field.reports).toBe(1);      // hasZvit false excluded
     expect(data.field.flagged).toBe(1);      // PENDING counts as flagged
     expect(data.field.fieldHours).toBe(0);   // null deployMin contributes nothing
+    expect(data.field.activeDays).toBe(1);   // Звіт date 07-22 only — no flew days
     expect(data.datasets.noticeDays).toBe(0);
+  });
+
+  it("counts a telemetry-only flight day (no Звіт) into activeDays", () => {
+    // The Aug 3–9 failure mode: real flights with no Звіт posted must still
+    // show up as field activity instead of silently collapsing to «1 виїзд».
+    const data = buildWeekData({
+      window,
+      jiraTotals: { totalResolved: 0, totalStoryPoints: 0 },
+      noteworthy: [],
+      sprint: null,
+      fieldQaDays: [
+        { date: "2026-07-20", airborneMinutes: 56, flew: true },   // flew, no Звіт
+        { date: "2026-07-24", airborneMinutes: 36, flew: true },   // flew, no Звіт
+      ],
+      verdictDays: [
+        // Звіт day with zero telemetry (e.g. influx off) — still a field day.
+        { date: "2026-07-21", reportTs: "1.1", status: "ACCEPTED_EXCEPTION", datasetStatus: "MISSING", deployMin: 180, hasZvit: true },
+      ],
+      videos: [],
+    });
+    expect(data.field.reports).toBe(1);
+    expect(data.field.flightDays).toBe(2);
+    expect(data.field.activeDays).toBe(3);   // {07-20, 07-24} ∪ {07-21}
   });
 });
 
@@ -191,7 +216,8 @@ describe("fallbackSummary / buildInvestorPrompt / normalizeSummaryBullets", () =
     const lines = fallbackSummary(DATA).split("\n");
     expect(lines).toHaveLength(3);
     lines.forEach((l, i) => expect(l.startsWith(`${i + 1}. `)).toBe(true));
-    expect(lines[0]).toContain("3");
+    expect(lines[0]).toContain("4 польових дні");   // activeDays is the headline count
+    expect(lines[0]).toContain("3");                 // formal Звіт trips still shown
     expect(lines[1]).toContain("187");
     expect(fallbackSummary(DATA)).not.toContain("задач розробки");
   });
@@ -206,6 +232,13 @@ describe("fallbackSummary / buildInvestorPrompt / normalizeSummaryBullets", () =
     expect(p).not.toContain('"resolved"');
     expect(p).not.toContain("completedIssues");
     expect(p).not.toContain('"storyPoints"');
+  });
+  it("prompt headlines activeDays as fieldDays and omits the trips counter", () => {
+    const p = buildInvestorPrompt(DATA);
+    expect(p).toContain('"fieldDays": 4');
+    // trips (Звіт count) can undercount real field days — never shown to the
+    // model, so the bullets cannot contradict fieldDays.
+    expect(p).not.toContain('"trips"');
   });
   it("normalizeSummaryBullets keeps only item lines, renumbers any marker style, caps at 5", () => {
     const raw = "Вступ, який треба відкинути\n- перший пункт\n* другий пункт\n• третій\n4) четвертий\n5. п'ятий\n6. шостий зайвий";
@@ -223,8 +256,8 @@ describe("toInvestorCsv", () => {
     const lines = toInvestorCsv(DATA).trim().split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe(
-      "start,end,jira_resolved,jira_story_points,sprint_rate,field_reports,field_accepted,field_flagged,field_hours,air_hours,video_count,video_minutes,dataset_days",
+      "start,end,jira_resolved,jira_story_points,sprint_rate,field_reports,field_active_days,field_accepted,field_flagged,field_hours,air_hours,video_count,video_minutes,dataset_days",
     );
-    expect(lines[1]).toBe("2026-07-20,2026-07-26,12,34,80,3,2,1,14.5,6.2,9,187,2");
+    expect(lines[1]).toBe("2026-07-20,2026-07-26,12,34,80,3,4,2,1,14.5,6.2,9,187,2");
   });
 });

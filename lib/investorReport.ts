@@ -59,6 +59,12 @@ export interface InvestorWeekData {
     fieldHours: number;
     airHours: number;
     flightDays: number;
+    /**
+     * Distinct dates with any field activity: telemetry-flew days ∪ real-Звіт
+     * days. Never below either count alone — a flight day whose Звіт was not
+     * posted (or not parsed) still registers as field activity.
+     */
+    activeDays: number;
   };
   video: { count: number; minutes: number };
   datasets: { noticeDays: number };
@@ -115,6 +121,14 @@ export function buildWeekData(input: BuildInput): InvestorWeekData {
     reports.reduce((s, d) => s + (typeof d.deployMin === "number" ? d.deployMin : 0), 0) / 60,
   );
 
+  // Telemetry and Звіти each miss days the other catches (flights without a
+  // posted Звіт; a Звіт day with telemetry off) — the union is the honest
+  // field-day count.
+  const activeDays = new Set([
+    ...qaDays.filter((d) => d.flew).map((d) => d.date),
+    ...reports.map((d) => d.date),
+  ]).size;
+
   // Dataset axis is day-shared — dedupe per date across a day's reports.
   const noticeDates = new Set(
     input.verdictDays
@@ -132,7 +146,7 @@ export function buildWeekData(input: BuildInput): InvestorWeekData {
       noteworthy: input.noteworthy.slice(0, 15),
     },
     sprint: input.sprint,
-    field: { reports: reports.length, accepted, flagged, fieldHours, airHours, flightDays },
+    field: { reports: reports.length, accepted, flagged, fieldHours, airHours, flightDays, activeDays },
     video: { count: input.videos.length, minutes: videoMinutes },
     datasets: { noticeDays: noticeDates.size },
   };
@@ -205,10 +219,19 @@ export function formatInvestorMessage(summary: string, data: InvestorWeekData): 
   ].join("\n");
 }
 
+/** «день/дні/днів» for a count (2–4 → дні, 1/х1 → день, rest → днів). */
+function daysWord(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "день";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "дні";
+  return "днів";
+}
+
 /** Deterministic numbered key-result items used when the Claude summary call fails. */
 export function fallbackSummary(data: InvestorWeekData): string {
   return [
-    `1. ${data.field.reports} польових виїздів: ${data.field.airHours} год у повітрі, ${data.field.fieldHours} год у полі.`,
+    `1. ${data.field.activeDays} польових ${daysWord(data.field.activeDays)} (${data.field.reports} зі звітами): ${data.field.airHours} год у повітрі, ${data.field.fieldHours} год у полі.`,
     `2. Записано ${data.video.count} відео (${data.video.minutes} хв) для навчання моделей.`,
     `3. Розробка тривала за планом тижня — деталі у внутрішньому дашборді.`,
   ].join("\n");
@@ -247,20 +270,21 @@ export function buildInvestorPrompt(data: InvestorWeekData): string {
     "Внутрішні чи вузькотехнічні терміни (golden dataset, назви підсистем, кодові назви гіпотез тощо) при першій згадці поясни в дужках у 3–5 словах — напр. «golden-датасет (еталонний набір для перевірки)». ВИНЯТОК: власні назви наших продуктів (Вартовий тощо) НЕ пояснюй — інвестори їх знають.",
     "Поверни РІВНО 3–5 ПРОНУМЕРОВАНИХ пунктів українською (кожен рядок починається з «1. », «2. » тощо), кожен до 50 слів.",
     "Кожен пункт — КОНКРЕТНИЙ КЛЮЧОВИЙ РЕЗУЛЬТАТ тижня по суті: що саме зроблено, як перевірено, який ефект чи наступний крок (спирайся на resolvedIssueTitles та польові результати).",
-    "Ключові цифри тижня (виїзди, години нальоту/у полі, відео) вплети у відповідні пункти — окремого блоку цифр у звіті немає.",
+    "Ключові цифри тижня (польові дні, години нальоту/у полі, відео) вплети у відповідні пункти — окремого блоку цифр у звіті немає.",
     "Уникай порожніх загальних фраз на кшталт «точніша класифікація цілей» — замість цього скажи, ЩО порівняли/змінили і ЩО це показало.",
     "ЗАБОРОНЕНО: кількість задач, відсотки спринту, внутрішні статуси приймання — це нікого не цікавить.",
-    "Числа (години, відео, виїзди) бери ЛИШЕ з наведених нижче даних — нічого не вигадуй.",
+    "Числа (години, відео, польові дні) бери ЛИШЕ з наведених нижче даних — нічого не вигадуй.",
     "Відповідай лише рядками-пунктами, без заголовків, вступу чи абзаців.",
     "",
     "Дані тижня (JSON):",
     JSON.stringify(
       {
         period: formatWeekLabel(data.window.start, data.window.end),
-        // No flightDays here: it can exceed trips (flights without a formal
-        // Звіт) and would read as a contradiction in the bullets.
+        // fieldDays (telemetry ∪ Звіт dates) is the single field-day count the
+        // model sees; the Звіт-only trips counter can undercount real field
+        // days and is deliberately withheld so the bullets cannot contradict.
         field: {
-          trips: data.field.reports,
+          fieldDays: data.field.activeDays,
           airHours: data.field.airHours,
           fieldHours: data.field.fieldHours,
         },
@@ -278,7 +302,7 @@ export function buildInvestorPrompt(data: InvestorWeekData): string {
 /** Flat one-row CSV (human/spreadsheet record; intentionally lossy). */
 export function toInvestorCsv(data: InvestorWeekData): string {
   const header =
-    "start,end,jira_resolved,jira_story_points,sprint_rate,field_reports,field_accepted,field_flagged,field_hours,air_hours,video_count,video_minutes,dataset_days";
+    "start,end,jira_resolved,jira_story_points,sprint_rate,field_reports,field_active_days,field_accepted,field_flagged,field_hours,air_hours,video_count,video_minutes,dataset_days";
   const row = [
     data.window.start,
     data.window.end,
@@ -286,6 +310,7 @@ export function toInvestorCsv(data: InvestorWeekData): string {
     data.jira.storyPoints,
     data.sprint ? data.sprint.rate : "",
     data.field.reports,
+    data.field.activeDays,
     data.field.accepted,
     data.field.flagged,
     data.field.fieldHours,

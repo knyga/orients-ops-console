@@ -81,7 +81,8 @@ export default function InvestorPage() {
             <tbody>
               <tr><td className="pr-4 py-0.5 text-gray-500">Jira resolved / SP</td><td>{record.data.jira.resolved} / {record.data.jira.storyPoints}</td></tr>
               <tr><td className="pr-4 py-0.5 text-gray-500">Sprint</td><td>{record.data.sprint ? `${record.data.sprint.name}: ${record.data.sprint.rate}% (${record.data.sprint.completed}/${record.data.sprint.committed})` : "—"}</td></tr>
-              <tr><td className="pr-4 py-0.5 text-gray-500">Виїзди (accepted / flagged)</td><td>{record.data.field.reports} ({record.data.field.accepted} / {record.data.field.flagged})</td></tr>
+              <tr><td className="pr-4 py-0.5 text-gray-500">Польові дні (телеметрія ∪ Звіти)</td><td>{record.data.field.activeDays ?? "—"}</td></tr>
+              <tr><td className="pr-4 py-0.5 text-gray-500">Виїзди-Звіти (accepted / flagged)</td><td>{record.data.field.reports} ({record.data.field.accepted} / {record.data.field.flagged})</td></tr>
               <tr><td className="pr-4 py-0.5 text-gray-500">Field / air hours</td><td>{record.data.field.fieldHours} / {record.data.field.airHours}</td></tr>
               <tr><td className="pr-4 py-0.5 text-gray-500">Video</td><td>{record.data.video.count} videos, {record.data.video.minutes} min</td></tr>
               <tr><td className="pr-4 py-0.5 text-gray-500">Dataset days</td><td>{record.data.datasets.noticeDays}</td></tr>
