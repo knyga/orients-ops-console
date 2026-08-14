@@ -1,6 +1,12 @@
 {
   "sources": [
     {
+      "id": "operational-policies",
+      "url": "https://docs.google.com/document/d/18pbzeGs5TSJwc8R0eMmGkBKrJaf91dTi4A6c9DD-5pA/edit",
+      "type": "doc",
+      "dest": "docs/drive/operational-policies.md"
+    },
+    {
       "id": "field-ops-crew",
       "url": "https://docs.google.com/spreadsheets/d/17xiqiAX9sjevoXR9eJhSeugpqel7h4_QyIgC89nRkK8/edit?gid=99809516",
       "type": "sheet",

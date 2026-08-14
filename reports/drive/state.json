@@ -3,5 +3,10 @@
     "modifiedTime": "2026-07-01T15:47:58.643Z",
     "pulledAt": "2026-07-01T15:56:53.915Z",
     "dest": "reports/drive/field-ops-crew.csv"
+  },
+  "operational-policies": {
+    "modifiedTime": "2026-08-14T15:05:07.046Z",
+    "pulledAt": "2026-08-14T15:09:39.675Z",
+    "dest": "docs/drive/operational-policies.md"
   }
 }
