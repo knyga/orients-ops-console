@@ -11,7 +11,11 @@ import { runInvestor } from "@/lib/runInvestor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// 300 (the current plan-default ceiling, up from the old 60s Hobby cap): the
+// run now fetches the week's merged-PR contexts (repos + PRs + diffs,
+// sequential) AND gives the Opus summary call up to 240s to digest the
+// ~120k-char git grounding — 60s starves that call into the fallback.
+export const maxDuration = 300;
 
 export async function GET(req: Request): Promise<Response> {
   if (!isAuthorizedCron(req)) return new Response("unauthorized", { status: 401 });

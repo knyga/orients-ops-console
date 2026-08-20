@@ -233,6 +233,17 @@ describe("fallbackSummary / buildInvestorPrompt / normalizeSummaryBullets", () =
     expect(p).not.toContain("completedIssues");
     expect(p).not.toContain('"storyPoints"');
   });
+  it("prompt appends the GitHub grounding block only when grounding is given", () => {
+    const grounding = "### autopilot#42: Stabilize takeoff pitch (vlad, merged 2026-07-21)";
+    const withIt = buildInvestorPrompt(DATA, grounding);
+    expect(withIt).toContain("Контекст з GitHub");
+    expect(withIt).toContain("autopilot#42");
+    // Grounding is facts-for-detail, numbers stay data-block-only.
+    expect(withIt.indexOf("Дані тижня")).toBeLessThan(withIt.indexOf("Контекст з GitHub"));
+    const without = buildInvestorPrompt(DATA);
+    expect(without).not.toContain("Контекст з GitHub");
+    expect(buildInvestorPrompt(DATA, "")).not.toContain("Контекст з GitHub");
+  });
   it("prompt headlines activeDays as fieldDays and omits the trips counter", () => {
     const p = buildInvestorPrompt(DATA);
     expect(p).toContain('"fieldDays": 4');

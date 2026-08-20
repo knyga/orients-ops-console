@@ -25,9 +25,12 @@ import {
   type InvestorRecord,
   type SprintPick,
 } from "./investorReport";
+import { ORG } from "./github";
+import { fetchMergedPrContexts } from "./githubPrContext";
 import { writeInvestor } from "./investorStore";
 import { generateSummary } from "./investorSummary";
 import { fetchResolvedIssues } from "./jira";
+import { buildPrGroundingText, DEFAULT_GROUNDING_CAPS } from "./prGrounding";
 import { aggregateByUser } from "./jiraStats";
 import { investorKey, type SendTrigger } from "./outboundKeys";
 import { readReportJson } from "./reports";
@@ -53,6 +56,7 @@ export type InvestorResult =
       message: string;
       posted: boolean;
       summarySource: "claude" | "fallback";
+      gitContext: InvestorRecord["gitContext"];
     }
   | {
       status: "failed";
@@ -160,6 +164,41 @@ export async function runInvestor(opts: RunInvestorOptions): Promise<InvestorRes
     return fail("vimeo", e);
   }
 
+  // 4b. Git grounding (SOFT-fail by design): the week's merged PRs across all
+  //     org repos — description, comments, diff — fed to the summary call as a
+  //     source of facts. Any failure (missing GH_ACCESS_TOKEN, API error) only
+  //     drops the grounding; the report still posts, narrated as before. Only
+  //     metadata is stored — raw diffs never hit the record.
+  let gitGrounding: string | undefined;
+  let gitContext: InvestorRecord["gitContext"];
+  const ghToken = process.env.GH_ACCESS_TOKEN;
+  if (ghToken) {
+    try {
+      const prs = await fetchMergedPrContexts({
+        token: ghToken,
+        org: ORG,
+        start: window.start,
+        end: window.end,
+        maxPrs: DEFAULT_GROUNDING_CAPS.maxPrs,
+      });
+      const grounding = buildPrGroundingText(prs);
+      gitGrounding = grounding.text || undefined;
+      gitContext = grounding.meta;
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      console.error("runInvestor: git grounding failed (soft, report posts without it):", reason);
+      gitContext = { prCount: 0, included: [], totalChars: 0, truncated: false, error: reason };
+    }
+  } else {
+    gitContext = {
+      prCount: 0,
+      included: [],
+      totalChars: 0,
+      truncated: false,
+      error: "GH_ACCESS_TOKEN is not set",
+    };
+  }
+
   const data = buildWeekData({
     window,
     jiraTotals,
@@ -171,7 +210,7 @@ export async function runInvestor(opts: RunInvestorOptions): Promise<InvestorRes
   });
 
   // 5. Summary (soft-fail → deterministic fallback inside generateSummary).
-  const summary = await generateSummary(data);
+  const summary = await generateSummary(data, gitGrounding);
   const message = formatInvestorMessage(summary.text, data);
 
   const record: InvestorRecord = {
@@ -180,6 +219,7 @@ export async function runInvestor(opts: RunInvestorOptions): Promise<InvestorRes
     summarySource: summary.source,
     message,
     generatedAt: new Date().toISOString(),
+    gitContext,
   };
 
   // 6. Store (both dry-run and publish — the web tab renders the latest record).
@@ -207,5 +247,12 @@ export async function runInvestor(opts: RunInvestorOptions): Promise<InvestorRes
     posted = true;
   }
 
-  return { status: "ok", key: window.key, message, posted, summarySource: summary.source };
+  return {
+    status: "ok",
+    key: window.key,
+    message,
+    posted,
+    summarySource: summary.source,
+    gitContext,
+  };
 }

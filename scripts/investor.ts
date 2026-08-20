@@ -70,7 +70,14 @@ async function main(): Promise<void> {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
   }
-  process.stdout.write(`--- week ${result.key} (summary: ${result.summarySource}) ---\n\n`);
+  const git = result.gitContext
+    ? result.gitContext.error
+      ? `git: unavailable (${result.gitContext.error})`
+      : `git: ${result.gitContext.included.length} PRs, ${Math.round(result.gitContext.totalChars / 1000)}k chars${result.gitContext.truncated ? ", truncated" : ""}`
+    : "git: —";
+  process.stdout.write(
+    `--- week ${result.key} (summary: ${result.summarySource}; ${git}) ---\n\n`,
+  );
   process.stdout.write(`${result.message}\n\n`);
   process.stdout.write(
     result.posted ? "POSTED.\n" : "DRY-RUN — nothing posted (use --publish --channel <name>).\n",

@@ -71,6 +71,14 @@ export default function InvestorPage() {
           <p className="text-xs text-gray-500 mb-2">
             Generated {record.generatedAt.slice(0, 16).replace("T", " ")} · summary:{" "}
             {record.summarySource}
+            {record.gitContext && (
+              <>
+                {" · git grounding: "}
+                {record.gitContext.error
+                  ? `unavailable (${record.gitContext.error})`
+                  : `${record.gitContext.included.length} PRs, ${Math.round(record.gitContext.totalChars / 1000)}k chars${record.gitContext.truncated ? ", truncated" : ""}`}
+              </>
+            )}
           </p>
           <pre className="whitespace-pre-wrap rounded border bg-gray-50 p-4 text-sm leading-relaxed">
             {record.message}

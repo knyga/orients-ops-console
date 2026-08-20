@@ -87,11 +87,11 @@ export interface FetchOrgActivityOptions {
   end: string;
 }
 
-function actorIsBot(typename: string | undefined, login: string | null): boolean {
+export function actorIsBot(typename: string | undefined, login: string | null): boolean {
   return typename === "Bot" || (!!login && login.endsWith("[bot]"));
 }
 
-async function graphql<T>(
+export async function graphql<T>(
   token: string,
   query: string,
   variables: Record<string, unknown>,
@@ -167,7 +167,7 @@ query($org: String!, $cursor: String) {
   }
 }`;
 
-async function fetchRepos(token: string, org: string): Promise<RepoRecord[]> {
+export async function fetchRepos(token: string, org: string): Promise<RepoRecord[]> {
   const repos: RepoRecord[] = [];
   let cursor: string | null = null;
   do {

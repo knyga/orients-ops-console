@@ -70,6 +70,19 @@ export interface InvestorWeekData {
   datasets: { noticeDays: number };
 }
 
+/**
+ * Metadata about the git grounding fed to the summary call (never the raw
+ * diffs — those would bloat the stored record). `error` set = the soft-failed
+ * fetch; the report still posted, narrated without git context.
+ */
+export interface InvestorGitContext {
+  prCount: number;
+  included: { repo: string; number: number; title: string }[];
+  totalChars: number;
+  truncated: boolean;
+  error?: string;
+}
+
 /** The stored record (feature `investor` in the reports table) = the web's render source. */
 export interface InvestorRecord {
   data: InvestorWeekData;
@@ -77,6 +90,8 @@ export interface InvestorRecord {
   summarySource: "claude" | "fallback";
   message: string;
   generatedAt: string; // ISO
+  /** Absent on records predating the git-grounding feature (2026-08-20). */
+  gitContext?: InvestorGitContext;
 }
 
 // Narrow structural inputs — keeps this module free of server-adjacent imports.
@@ -263,7 +278,7 @@ export function normalizeSummaryBullets(text: string): string | null {
  * задач» bullets impossible). Numbers that ARE passed (hours, videos, flights)
  * may be used but never invented. Output contract: 3–5 «• » bullets, ≤50 words each.
  */
-export function buildInvestorPrompt(data: InvestorWeekData): string {
+export function buildInvestorPrompt(data: InvestorWeekData, gitGrounding?: string): string {
   return [
     "Ти пишеш короткий тижневий звіт для ангел-інвесторів української оборонної компанії, що розробляє автопілот для FPV-дронів.",
     "Інвестори добре розуміють бойове застосування; пиши ПОМІРНО ТЕХНІЧНО: називай конкретні підсистеми, моделі й механізми (напр. YOLOv8M/N, стабілізація зльоту, наведення камери), але без глибоких нюансів імплементації.",
@@ -294,6 +309,13 @@ export function buildInvestorPrompt(data: InvestorWeekData): string {
       null,
       2,
     ),
+    ...(gitGrounding
+      ? [
+          "",
+          "Контекст з GitHub — merged PR-и тижня (опис, коментарі, дифи). Використовуй як ДЖЕРЕЛО ФАКТІВ для конкретики пунктів (що саме змінили і як); нічого поза ним не вигадуй:",
+          gitGrounding,
+        ]
+      : []),
   ].join("\n");
 }
 
