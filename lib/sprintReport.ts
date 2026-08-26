@@ -18,6 +18,7 @@
 
 import { mention } from "./mention";
 import { personForJiraAccountId } from "./people";
+import { byteLength, chunkForSlack, SLACK_MSG_MAX_BYTES } from "./slackChunk";
 
 export interface SprintIssue {
   key: string;
@@ -244,17 +245,150 @@ export function computeCompletion(frozen: SprintIssue[], live: SprintIssue[]): C
   return { committed, completed, rate, assignees, stuck };
 }
 
-/**
- * The Monday "Committed" #general post: grouped by assignee, then by status.
- * Jira keys + summaries verbatim; labels Ukrainian.
- */
-export function formatCommittedMessage(snapshot: SprintSnapshot): string {
-  const lines: string[] = [];
-  lines.push(`📋 Спринт *${snapshot.sprintName}* — взято в роботу: ${snapshot.issues.length} задач`);
+/** One logical section of the thread detail: a header plus its item lines. */
+interface DetailBlock {
+  header: string;
+  /** Header to repeat when the block spills into a following message. */
+  contHeader: string;
+  lines: string[];
+}
 
-  for (const group of groupByAssignee(snapshot.issues)) {
-    lines.push("");
-    lines.push(`*${assigneeLabel(group)}*`);
+const renderBlock = (header: string, lines: string[]): string => [header, ...lines].join("\n");
+
+/**
+ * Split one block that cannot fit a single message into header-repeating parts,
+ * at LINE boundaries, so a spilled section never reads as an orphan tail. A single
+ * line longer than the cap is hard-split by chunkForSlack (pathological only).
+ */
+function splitBlock(block: DetailBlock, maxBytes: number): string[] {
+  const out: string[] = [];
+  let header = block.header;
+  let lines: string[] = [];
+  const flush = () => {
+    if (lines.length === 0) return;
+    out.push(renderBlock(header, lines));
+    header = block.contHeader;
+    lines = [];
+  };
+  for (const line of block.lines) {
+    if (lines.length > 0 && byteLength(renderBlock(header, [...lines, line])) > maxBytes) flush();
+    if (byteLength(renderBlock(header, [line])) > maxBytes) {
+      // One item longer than a whole message (pathological — Jira summaries are
+      // capped at 255 chars). Hard-split the LINE and give every piece a header,
+      // so no message is a header alone or a headerless fragment.
+      flush();
+      const room = Math.max(1, maxBytes - byteLength(`${block.contHeader}\n`));
+      for (const piece of chunkForSlack(line, room)) {
+        out.push(renderBlock(header, [piece]));
+        header = block.contHeader;
+      }
+      continue;
+    }
+    lines.push(line);
+  }
+  flush();
+  return out;
+}
+
+/**
+ * Pack the detail blocks (one per assignee, plus the stuck list) into as few Slack
+ * messages as fit under the per-message byte cap. Slack's chat.postMessage
+ * SILENTLY splits a text over ~4000 chars into consecutive messages (observed
+ * 2026-08-23 on the ATP-47 completed report: one send, two channel messages, and
+ * the recorded ts pointed at the tail) — so we own the split instead: a short
+ * anchor post plus these detail messages as its thread replies.
+ */
+function packBlocks(blocks: DetailBlock[], maxBytes: number = SLACK_MSG_MAX_BYTES): string[] {
+  const out: string[] = [];
+  let current = "";
+  for (const block of blocks) {
+    const rendered = renderBlock(block.header, block.lines);
+    const candidate = current ? `${current}\n\n${rendered}` : rendered;
+    if (byteLength(candidate) <= maxBytes) {
+      current = candidate;
+      continue;
+    }
+    if (current) {
+      out.push(current);
+      current = "";
+    }
+    if (byteLength(rendered) > maxBytes) {
+      const pieces = splitBlock(block, maxBytes);
+      out.push(...pieces.slice(0, -1));
+      current = pieces[pieces.length - 1] ?? "";
+    } else {
+      current = rendered;
+    }
+  }
+  if (current) out.push(current);
+  return out;
+}
+
+const THREAD_HINT_COMMITTED = "🧵 Повний список — у треді.";
+const THREAD_HINT_COMPLETED = "🧵 Деталі — у треді.";
+const ROSTER_HEADER_COMMITTED = "👥 Розподіл задач:";
+const ROSTER_HEADER_COMPLETED = "👥 Прогрес по людях:";
+
+/** One sprint Slack post: a short channel ANCHOR plus its thread replies. */
+export interface SprintPost {
+  /** The single channel message. Always within SLACK_MSG_MAX_BYTES. */
+  anchor: string;
+  /** Detail messages to post as replies in the anchor's thread (may be empty). */
+  details: string[];
+}
+
+/**
+ * Assemble the anchor + thread messages, keeping the ANCHOR within one Slack
+ * message. The per-assignee roster is the only unbounded part of an anchor, so an
+ * anchor that would exceed the cap sheds the roster into the FIRST thread block
+ * instead — never letting Slack do the splitting for us (that is the whole bug
+ * this shape exists to fix; an anchor Slack splits itself leaves the recorded ts
+ * on the tail message and threads every reply under it).
+ */
+function assemblePost(
+  headLines: string[],
+  roster: string[],
+  tailLines: string[],
+  hint: string,
+  rosterHeader: string,
+  blocks: DetailBlock[],
+  maxBytes: number = SLACK_MSG_MAX_BYTES,
+): SprintPost {
+  const anchorLines = (withRoster: boolean, hasThread: boolean): string[] => {
+    const lines = [...headLines];
+    if (withRoster && roster.length > 0) lines.push("", ...roster);
+    lines.push(...tailLines);
+    // Only promise a thread when there actually is one.
+    if (hasThread) lines.push("", hint);
+    return lines;
+  };
+
+  let allBlocks = blocks;
+  let anchor = anchorLines(true, blocks.length > 0).join("\n");
+  if (byteLength(anchor) > maxBytes) {
+    allBlocks = [
+      { header: rosterHeader, contHeader: `${rosterHeader} _(продовження)_`, lines: roster },
+      ...blocks,
+    ];
+    anchor = anchorLines(false, true).join("\n");
+  }
+  return { anchor, details: packBlocks(allBlocks, maxBytes) };
+}
+
+/**
+ * The Tuesday "Committed" post: an anchor with the headline count + one line per
+ * assignee, and the per-issue list (grouped by assignee → status, Jira keys and
+ * summaries verbatim) as thread replies.
+ */
+export function buildCommittedPost(
+  snapshot: SprintSnapshot,
+  maxBytes: number = SLACK_MSG_MAX_BYTES,
+): SprintPost {
+  const groups = groupByAssignee(snapshot.issues);
+  const blocks: DetailBlock[] = [];
+  for (const group of groups) {
+    const header = `*${assigneeLabel(group)}*`;
+    const lines: string[] = [];
     // Within an assignee, order by status name for a stable, readable grouping.
     const byStatus = new Map<string, SprintIssue[]>();
     for (const issue of group.issues) {
@@ -268,30 +402,36 @@ export function formatCommittedMessage(snapshot: SprintSnapshot): string {
         lines.push(`    • ${issue.key} — ${issue.summary}`);
       }
     }
+    blocks.push({ header, contHeader: `${header} _(продовження)_`, lines });
   }
-  return lines.join("\n");
+
+  return assemblePost(
+    [`📋 Спринт *${snapshot.sprintName}* — взято в роботу: ${snapshot.issues.length} задач`],
+    groups.map((g) => `• ${assigneeLabel(g)} — ${g.issues.length}`),
+    [],
+    THREAD_HINT_COMMITTED,
+    ROSTER_HEADER_COMMITTED,
+    blocks,
+    maxBytes,
+  );
 }
 
 /**
- * The Sunday "Completed" #general post: overall rate, then EVERY committed
- * assignee with their per-person rate and buckets (done by status name,
- * transitions since the freeze, no progress), and the stuck highlight.
- * Section headers are English Jira status names verbatim; the rest Ukrainian.
+ * The Monday "Completed" post: an anchor with the overall rate, one line per
+ * committed assignee, and the stuck COUNT; the thread carries every assignee's
+ * buckets (done by status name, transitions since the freeze, no progress) and
+ * the full stuck list. Bucket headers are English Jira status names verbatim;
+ * the rest Ukrainian.
  */
-export function formatCompletedMessage(sprintName: string, result: CompletionResult): string {
-  const lines: string[] = [];
-  lines.push(
-    `✅ Спринт *${sprintName}* — виконано ${result.completed}/${result.committed} (${result.rate}%)`,
-  );
-
-  if (result.completed === 0) {
-    lines.push("");
-    lines.push("_Жодної задачі не завершено._");
-  }
-
+export function buildCompletedPost(
+  sprintName: string,
+  result: CompletionResult,
+  maxBytes: number = SLACK_MSG_MAX_BYTES,
+): SprintPost {
+  const blocks: DetailBlock[] = [];
   for (const a of result.assignees) {
-    lines.push("");
-    lines.push(`*${assigneeLabel(a)}* — ${a.done}/${a.committed} (${a.rate}%)`);
+    const header = `*${assigneeLabel(a)}* — ${a.done}/${a.committed} (${a.rate}%)`;
+    const lines: string[] = [];
     for (const bucket of a.doneByStatus) {
       lines.push(`  ${bucket.status}:`);
       for (const i of bucket.issues) lines.push(`    • ${i.key} — ${i.summary}`);
@@ -304,16 +444,32 @@ export function formatCompletedMessage(sprintName: string, result: CompletionRes
       lines.push("  No progress:");
       for (const i of a.noProgress) lines.push(`    • ${i.status} - ${i.key} — ${i.summary}`);
     }
+    blocks.push({ header, contHeader: `${header} _(продовження)_`, lines });
   }
 
   if (result.stuck.length > 0) {
-    lines.push("");
-    lines.push("⚠️ Зависли (кілька спринтів):");
-    for (const s of result.stuck) {
-      lines.push(
-        `  • ${s.statusName} - ${s.displayName} - ${s.key} — ${s.summary} (${pluralizeSprints(s.sprintCount)})`,
-      );
-    }
+    blocks.push({
+      header: "⚠️ Зависли (кілька спринтів):",
+      contHeader: "⚠️ Зависли (кілька спринтів) _(продовження)_:",
+      lines: result.stuck.map(
+        (s) =>
+          `  • ${s.statusName} - ${s.displayName} - ${s.key} — ${s.summary} (${pluralizeSprints(s.sprintCount)})`,
+      ),
+    });
   }
-  return lines.join("\n");
+
+  const head = [
+    `✅ Спринт *${sprintName}* — виконано ${result.completed}/${result.committed} (${result.rate}%)`,
+  ];
+  if (result.completed === 0) head.push("", "_Жодної задачі не завершено._");
+
+  return assemblePost(
+    head,
+    result.assignees.map((a) => `• ${assigneeLabel(a)} — ${a.done}/${a.committed} (${a.rate}%)`),
+    result.stuck.length > 0 ? ["", `⚠️ Зависли (кілька спринтів): ${result.stuck.length}`] : [],
+    THREAD_HINT_COMPLETED,
+    ROSTER_HEADER_COMPLETED,
+    blocks,
+    maxBytes,
+  );
 }

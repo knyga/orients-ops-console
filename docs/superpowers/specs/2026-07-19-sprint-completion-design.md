@@ -175,3 +175,70 @@ Pure `lib/sprintReport.test.ts`:
   measured strictly against the frozen baseline).
 - No story-point metric (count only).
 - No changelog-reconstruction fallback for the baseline.
+
+## Amendment (2026-08-26): anchor post + threaded detail
+
+**Problem.** The ATP-47 completed report (2026-08-23 23:00 Kyiv) landed in #general as
+TWO messages from a single `postMessage` call: `chat.postMessage` silently splits a
+`text` over ~4000 chars into consecutive channel messages (unlike `chat.update`, which
+errors `msg_too_long` — the case `lib/slackChunk.ts` was written for). The stored
+`outbound_messages` row (5655 chars) recorded the ts of the SECOND message, so any
+later edit/refresh of a sprint post would have rewritten only its tail.
+
+**Change.** Both subcommands now own the split:
+
+- **Anchor** (one channel post): headline (`взято в роботу: N задач` /
+  `виконано X/Y (Z%)`), one line per assignee (count, or `done/committed (rate%)`), the
+  stuck COUNT, and a `🧵 … у треді.` pointer. No issue keys — it stays well under the
+  cap by construction.
+- **Detail** (thread replies under the anchor): the previous per-assignee blocks
+  verbatim (done-by-status → transitions → No progress) plus the full stuck list,
+  packed greedily into ≤`SLACK_MSG_MAX_BYTES` (3800) messages. A section too big for one
+  message is split at LINE boundaries with its header repeated as
+  `… _(продовження)_`, so a spilled block never reads as an orphan tail.
+
+**Keys.** Anchor keeps `sprint-committed:<slug>` / `sprint-completed:<slug>`; each reply
+is `…:<slug>:t<N>` (1-based). A cron re-fire dedups everything; a run that died
+mid-thread re-sends only the replies that never landed (the anchor's ts comes back from
+the losing reserve, so the thread stays intact).
+
+**Surfaces.** `formatCommittedMessage`/`formatCompletedMessage` are replaced by
+`formatCommittedAnchor`/`formatCommittedDetails` and
+`formatCompletedAnchor`/`formatCompletedDetails`; `runSprint`'s results carry
+`anchor: string` + `details: string[]` instead of `message`. The CLI prints the anchor
+then each reply under a `--- thread N/M ---` separator. The Sprint web tab renders the
+structured record and is unaffected.
+
+### Amendment follow-up (2026-08-26): review fixes
+
+Parallel reviews (Fable 5 agent + `codex exec`) on the anchor+thread change found four
+real defects, all fixed before landing:
+
+1. **Repack drift across retries (issue loss/duplication).** Reply keys are positional
+   (`:t<N>`) but `report` re-fetches Jira live per attempt, so a retry after a partial
+   send repacks different text into the same positions — `t1` dedups to the old content
+   while `t2` sends the repacked one, dropping or duplicating the boundary issues. Fixed
+   by freezing the exact anchor+detail texts in the sprint record (`published[]`, per
+   (kind, channel) — `lib/sprintPublish.ts`) before the first send and replaying them
+   verbatim on every retry.
+2. **Silent chunk loss on a wedged key.** `decideReserve` reclaims only `failed` rows, so
+   a hard-killed run (Vercel timeout/OOM never reaches `markFailed`) leaves a `pending`
+   row; `sendTracked` then returns an EMPTY ts and the reply never reaches Slack while
+   the run reports success. Both the anchor and every reply now throw on an empty ts,
+   naming the key to clear. (The generic staleness reclaim in `decideReserve` is a
+   cross-feature change and stays out of scope.)
+3. **Unbounded anchor.** Neither anchor enforced the byte cap, so a long enough assignee
+   roster would let Slack split the anchor itself — reintroducing the exact bug (recorded
+   ts on the tail, every reply threaded under it). `assemblePost` now sheds the roster
+   into the first thread block when the anchor would exceed the cap.
+4. **Foreign `thread_ts` across channels.** Keys carried no channel, so after a partial
+   publish to a test channel the #general cron would reuse the test channel's anchor ts
+   as `thread_ts` (`thread_not_found`). Keys are now channel-scoped, and `v2` separates
+   them from the pre-2026-08-26 single-post keys so a re-run for an old-format sprint
+   cannot thread new replies under that old oversized message.
+
+Also fixed: the empty-sprint anchor promised a thread that does not exist; a
+pathologically long line produced a header-only message plus headerless fragments; and
+the packing tests asserted key PRESENCE (a duplicating implementation passed) with no
+orchestration coverage at all — now exact-count assertions plus `lib/runSprint.test.ts`
+covering thread_ts, key shape, plan replay, and the empty-ts failures.

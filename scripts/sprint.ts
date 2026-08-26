@@ -9,6 +9,9 @@
  *   npm run sprint -- report --publish --channel general      # ACTUALLY POST
  *   npm run sprint -- commit --sprint 42                      # override the auto-picked active sprint by id
  *
+ * Output: the short ANCHOR post first, then each thread reply (the per-issue
+ * detail) under a `--- thread N/M ---` separator — exactly what gets posted.
+ *
  * Safety:
  *  - Dry-run is the default; a real post requires the explicit `--publish` flag.
  *  - `--publish` REQUIRES `--channel <name>` (a tracked channel) — no default target.
@@ -41,6 +44,15 @@ function parseArgs(argv: string[]): Args {
     else if (a === "--sprint") args.sprintId = Number(argv[++i]);
   }
   return args;
+}
+
+/** Print the anchor post, then each threaded detail message, as posted. */
+function printPost(anchor: string, details: string[]): void {
+  console.log(anchor);
+  details.forEach((text, i) => {
+    console.log(`\n--- thread ${i + 1}/${details.length} ---`);
+    console.log(text);
+  });
 }
 
 async function main(): Promise<void> {
@@ -77,7 +89,7 @@ async function main(): Promise<void> {
     process.stderr.write(
       `sprint commit: ${r.sprintName} — froze ${r.count} issue(s)${r.posted ? ` and posted to #${args.channel}` : " (dry-run, nothing posted)"}.\n`,
     );
-    console.log(r.message);
+    printPost(r.anchor, r.details);
     return;
   }
 
@@ -95,7 +107,7 @@ async function main(): Promise<void> {
   process.stderr.write(
     `sprint report: ${r.sprintName} — ${r.completed}/${r.committed} (${r.rate}%), ${r.stuck} stuck${r.posted ? ` — posted to #${args.channel}` : " (dry-run, nothing posted)"}.\n`,
   );
-  console.log(r.message);
+  printPost(r.anchor, r.details);
 }
 
 main().catch((error: unknown) => {

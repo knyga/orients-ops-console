@@ -5,21 +5,29 @@
  * completion, and (when publishing) posts to #general via the lib/slack.ts
  * reserve-then-send chokepoint.
  *
+ * SHAPE: one short ANCHOR post (headline + per-assignee counts) plus the per-issue
+ * detail as THREAD REPLIES under it. Slack's chat.postMessage silently splits any
+ * text over ~4000 chars into consecutive channel messages (observed 2026-08-23:
+ * the ATP-47 completed report landed as two #general posts from a single send, and
+ * the recorded ts pointed at the tail), so the split is ours to own.
+ *
  * DRY-RUN aware: with `publish:false` it computes everything and returns the exact
- * message text without posting.
+ * anchor + thread texts without posting.
  */
 import { boardIdFromEnv, fetchIssuesByKeys, fetchSprintIssues, listSprints, type Sprint } from "./jira";
 import { postMessage } from "./slack";
 import { TRACKED_CHANNELS } from "./slackChannels";
-import { sprintCommittedKey, sprintCompletedKey, type SendTrigger } from "./outboundKeys";
+import { sprintAnchorKey, sprintThreadKey, type SendTrigger } from "./outboundKeys";
 import { readSprint, writeSprint, type SprintRecord } from "./sprintStore";
 import {
+  buildCommittedPost,
+  buildCompletedPost,
   computeCompletion,
-  formatCommittedMessage,
-  formatCompletedMessage,
   slugifySprint,
+  type SprintPost,
   type SprintSnapshot,
 } from "./sprintReport";
+import { resolvePlan, upsertPlan, type SprintPostKind } from "./sprintPublish";
 
 export interface RunSprintOptions {
   publish: boolean;
@@ -37,7 +45,10 @@ export type CommitResult =
       slug: string;
       sprintName: string;
       count: number;
-      message: string;
+      /** The short #general post. */
+      anchor: string;
+      /** Detail messages posted as replies in the anchor's thread. */
+      details: string[];
       posted: boolean;
     };
 
@@ -52,7 +63,10 @@ export type ReportResult =
       completed: number;
       rate: number;
       stuck: number;
-      message: string;
+      /** The short #general post. */
+      anchor: string;
+      /** Detail messages posted as replies in the anchor's thread. */
+      details: string[];
       posted: boolean;
     };
 
@@ -81,7 +95,61 @@ function channelIdByName(name: string): string {
   return found.id;
 }
 
-/** Monday job: freeze the active sprint's issue set + post the Committed list. */
+/**
+ * Publish one sprint post: freeze the exact texts in the sprint record, post the
+ * anchor, then each detail message as a reply in ITS thread. Every send goes
+ * through the deduping chokepoint, so a cron re-fire — or a retry after a run that
+ * died mid-thread — re-sends only what never landed, and replays the frozen texts
+ * so the positional reply keys still describe the same content.
+ *
+ * A send whose key is held by a stuck `pending` row comes back with an EMPTY ts
+ * (lib/sendTracked.ts returns the existing ts, which is null there). That must be
+ * loud: silently continuing would drop that chunk's issues while still reporting a
+ * successful publish. `decideReserve` only reclaims `failed` rows, so a hard-killed
+ * run (Vercel timeout/OOM, which never reaches `markFailed`) needs the pending row
+ * cleared before the retry can go through.
+ */
+async function publishPost(
+  slug: string,
+  kind: SprintPostKind,
+  channelName: string,
+  fresh: SprintPost,
+  record: SprintRecord,
+  trigger: SendTrigger,
+): Promise<{ anchorTs: string; post: SprintPost }> {
+  const channelId = channelIdByName(channelName);
+  const { plan, replayed } = resolvePlan(
+    record.published,
+    kind,
+    channelName,
+    fresh,
+    new Date().toISOString(),
+  );
+  if (!replayed) {
+    await writeSprint(slug, { ...record, published: upsertPlan(record.published, plan) });
+  }
+
+  const meta = { feature: "sprint" as const, channel: channelName, trigger };
+  const anchorKey = sprintAnchorKey(kind, slug, channelName);
+  const anchorTs = await postMessage(channelId, plan.anchor, { ...meta, key: anchorKey });
+  if (!anchorTs) {
+    throw new Error(
+      `sprint: no ts for the anchor post (key ${anchorKey}) — a stuck pending row holds the key; clear it before retrying.`,
+    );
+  }
+  for (const [i, text] of plan.details.entries()) {
+    const key = sprintThreadKey(kind, slug, channelName, i + 1);
+    const ts = await postMessage(channelId, text, { ...meta, key }, anchorTs);
+    if (!ts) {
+      throw new Error(
+        `sprint: detail reply ${i + 1}/${plan.details.length} was skipped with no ts (key ${key}) — a stuck pending row holds the key; clear it before retrying.`,
+      );
+    }
+  }
+  return { anchorTs, post: { anchor: plan.anchor, details: plan.details } };
+}
+
+/** Tuesday job: freeze the active sprint's issue set + post the Committed list. */
 export async function runSprintCommit(opts: RunSprintOptions): Promise<CommitResult> {
   const boardId = boardIdFromEnv();
   const sprint = await resolveSprint(boardId, opts.sprintId);
@@ -96,35 +164,40 @@ export async function runSprintCommit(opts: RunSprintOptions): Promise<CommitRes
     issues,
   };
 
-  // Freeze the baseline. A fresh Monday snapshot for this sprint drops any stale
-  // completed result (re-earned on Sunday); same-day re-fire just re-freezes.
-  const record: SprintRecord = { committed: snapshot };
+  // Freeze the baseline. A fresh Tuesday snapshot for this sprint drops any stale
+  // completed result (re-earned by the Monday report); same-day re-fire re-freezes.
+  // Already-published plans survive, so a re-fire replays them instead of repacking.
+  const prior = await readSprint(snapshot.slug);
+  const record: SprintRecord = { committed: snapshot, published: prior?.published };
   await writeSprint(snapshot.slug, record);
 
-  const message = formatCommittedMessage(snapshot);
+  let post = buildCommittedPost(snapshot);
   let posted = false;
   if (opts.publish) {
-    const channelName = opts.channelName ?? "general";
-    await postMessage(channelIdByName(channelName), message, {
-      key: sprintCommittedKey(snapshot.slug),
-      feature: "sprint",
-      channel: channelName,
-      trigger: opts.trigger ?? "unknown",
-    });
+    ({ post } = await publishPost(
+      snapshot.slug,
+      "committed",
+      opts.channelName ?? "general",
+      post,
+      record,
+      opts.trigger ?? "unknown",
+    ));
     posted = true;
   }
+  const { anchor, details } = post;
 
   return {
     status: "ok",
     slug: snapshot.slug,
     sprintName: snapshot.sprintName,
     count: issues.length,
-    message,
+    anchor,
+    details,
     posted,
   };
 }
 
-/** Sunday job: measure the frozen baseline's completion + post the Completed report. */
+/** Monday job: measure the frozen baseline's completion + post the Completed report. */
 export async function runSprintReport(opts: RunSprintOptions): Promise<ReportResult> {
   const boardId = boardIdFromEnv();
   const sprint = await resolveSprint(boardId, opts.sprintId);
@@ -138,23 +211,27 @@ export async function runSprintReport(opts: RunSprintOptions): Promise<ReportRes
   const live = await fetchIssuesByKeys(frozen.map((i) => i.key));
   const result = computeCompletion(frozen, live);
 
-  await writeSprint(slug, {
+  const stored: SprintRecord = {
     committed: record.committed,
     completed: { computedAt: new Date().toISOString(), result },
-  });
+    published: record.published,
+  };
+  await writeSprint(slug, stored);
 
-  const message = formatCompletedMessage(sprint.name, result);
+  let post = buildCompletedPost(sprint.name, result);
   let posted = false;
   if (opts.publish) {
-    const channelName = opts.channelName ?? "general";
-    await postMessage(channelIdByName(channelName), message, {
-      key: sprintCompletedKey(slug),
-      feature: "sprint",
-      channel: channelName,
-      trigger: opts.trigger ?? "unknown",
-    });
+    ({ post } = await publishPost(
+      slug,
+      "completed",
+      opts.channelName ?? "general",
+      post,
+      stored,
+      opts.trigger ?? "unknown",
+    ));
     posted = true;
   }
+  const { anchor, details } = post;
 
   return {
     status: "ok",
@@ -164,7 +241,8 @@ export async function runSprintReport(opts: RunSprintOptions): Promise<ReportRes
     completed: result.completed,
     rate: result.rate,
     stuck: result.stuck.length,
-    message,
+    anchor,
+    details,
     posted,
   };
 }

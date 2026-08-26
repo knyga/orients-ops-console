@@ -69,10 +69,29 @@ export const backfillEditKey = (date: string, rev: string): string =>
 export const instructionAckKey = (date: string, axis: string, rev: string): string =>
   `instruction-ack:${date}:${axis}:${rev}`;
 
-/** Sprint completion posts to #general, keyed by sprint slug so the weekly cron's
- *  ±59-min re-fire dedups to one post while a new sprint (new slug) reposts. */
-export const sprintCommittedKey = (slug: string): string => `sprint-committed:${slug}`;
-export const sprintCompletedKey = (slug: string): string => `sprint-completed:${slug}`;
+/**
+ * Sprint posts: the ANCHOR channel message and its numbered THREAD replies. Keyed
+ * by sprint slug so the weekly cron's ±59-min re-fire dedups to one publication
+ * while a new sprint (new slug) reposts, and by CHANNEL so a test-channel dry
+ * publish can never hand the #general run a foreign `thread_ts`. The `v2` segment
+ * separates this anchor+thread shape from the pre-2026-08-26 single-post keys, so a
+ * re-run for a sprint posted in the old format cannot thread new detail replies
+ * under that old oversized message.
+ */
+export const sprintAnchorKey = (
+  kind: "committed" | "completed",
+  slug: string,
+  channel: string,
+): string => `sprint-${kind}:v2:${channel}:${slug}`;
+/** One detail message under the anchor; `index` is 1-based. Positional keys are
+ *  safe because the published texts are frozen in the sprint record and replayed
+ *  verbatim on a retry (see lib/sprintPublish.ts). */
+export const sprintThreadKey = (
+  kind: "committed" | "completed",
+  slug: string,
+  channel: string,
+  index: number,
+): string => `${sprintAnchorKey(kind, slug, channel)}:t${index}`;
 
 /** Weekly investor report post, keyed by the explicit Mon_Sun week key. */
 export const investorKey = (periodKey: string): string => `investor:${periodKey}`;

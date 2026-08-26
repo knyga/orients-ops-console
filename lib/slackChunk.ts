@@ -12,7 +12,8 @@
 export const SLACK_MSG_MAX_BYTES = 3800; // headroom under Slack's ~4000-byte msg_too_long cutoff
 
 const encoder = new TextEncoder();
-const byteLength = (s: string): number => encoder.encode(s).length;
+/** UTF-8 byte length — the unit Slack's message cap is actually measured in. */
+export const byteLength = (s: string): number => encoder.encode(s).length;
 
 /** Hard-split one oversized segment at code-point boundaries. */
 function splitByBytes(segment: string, maxBytes: number): string[] {

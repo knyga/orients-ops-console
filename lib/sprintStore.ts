@@ -10,6 +10,7 @@
  */
 import { and, desc, eq } from "drizzle-orm";
 import { db, schema } from "./db";
+import type { PublishedPlan } from "./sprintPublish";
 import type { CompletionResult, SprintSnapshot } from "./sprintReport";
 
 const FEATURE = "sprint";
@@ -22,6 +23,13 @@ export interface SprintRecord {
     /** Legacy rows (pre-v2) may hold the old result shape (`byAssignee`, no `assignees`). */
     result: CompletionResult;
   };
+  /**
+   * Slack publications frozen at their first publish attempt, per (kind, channel).
+   * A retry replays these exact texts so the positional thread-reply dedup keys
+   * keep describing the same content (see lib/sprintPublish.ts). Absent until the
+   * first `--publish` run.
+   */
+  published?: PublishedPlan[];
 }
 
 /** Read one sprint's record by slug, or null when absent. */

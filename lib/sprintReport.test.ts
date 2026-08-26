@@ -3,13 +3,14 @@ import {
   slugifySprint,
   isDone,
   computeCompletion,
-  formatCommittedMessage,
-  formatCompletedMessage,
+  buildCommittedPost,
+  buildCompletedPost,
   pluralizeSprints,
   type SprintIssue,
   type SprintSnapshot,
 } from "./sprintReport";
 import { mention } from "./mention";
+import { byteLength, SLACK_MSG_MAX_BYTES } from "./slackChunk";
 import { personForJiraAccountId } from "./people";
 
 function issue(partial: Partial<SprintIssue> & { key: string }): SprintIssue {
@@ -21,6 +22,20 @@ function issue(partial: Partial<SprintIssue> & { key: string }): SprintIssue {
     statusCategory: partial.statusCategory ?? "To Do",
     sprintCount: partial.sprintCount ?? 1,
   };
+}
+
+/** How many times each issue key appears as a bullet across the thread messages. */
+function issueKeyCounts(parts: string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const m of parts.join("\n").matchAll(/• (?:[^•\n]*? - )?(ATP-\d+) —/g)) {
+    counts[m[1]] = (counts[m[1]] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** Every key ATP-1..ATP-n exactly once. */
+function expectedCounts(n: number): Record<string, number> {
+  return Object.fromEntries(Array.from({ length: n }, (_, i) => [`ATP-${i + 1}`, 1]));
 }
 
 const A = { accountId: "a1", displayName: "Taras" };
@@ -235,7 +250,7 @@ describe("computeCompletion", () => {
   });
 });
 
-describe("formatCommittedMessage", () => {
+describe("buildCommittedPost", () => {
   const snapshot: SprintSnapshot = {
     sprintId: 10,
     sprintName: "ATP 42",
@@ -248,22 +263,30 @@ describe("formatCommittedMessage", () => {
     ],
   };
 
-  it("renders a Ukrainian committed message grouped by assignee then status", () => {
-    const text = formatCommittedMessage(snapshot);
-    expect(text).toContain("ATP 42");
-    expect(text).toContain("3"); // count
-    expect(text).toContain("Taras");
-    expect(text).toContain("In Progress");
-    expect(text).toContain("ATP-1");
-    expect(text).toContain("Login");
-    expect(text).toContain("Не призначено");
-    // Assignee header appears once, statuses nested under it.
-    expect(text.match(/Taras/g)?.length).toBe(1);
+  it("keeps the anchor to headline + per-assignee counts, no issue keys", () => {
+    const text = buildCommittedPost(snapshot).anchor;
+    expect(text).toContain("📋 Спринт *ATP 42* — взято в роботу: 3 задач");
+    expect(text).toContain("• Taras — 2");
+    expect(text).toContain("• Не призначено — 1");
+    expect(text).not.toContain("ATP-1");
+    expect(text).not.toContain("Login");
   });
 
-  it("mentions a known assignee in the committed message", () => {
+  it("renders the details as thread messages grouped by assignee then status", () => {
+    const parts = buildCommittedPost(snapshot).details;
+    expect(parts.length).toBe(1);
+    const text = parts[0];
+    expect(text).toContain("*Taras*");
+    expect(text).toContain("In Progress");
+    expect(text).toContain("    • ATP-1 — Login");
+    expect(text).toContain("*Не призначено*");
+    // Assignee header appears once, statuses nested under it.
+    expect(text.match(/\*Taras\*/g)?.length).toBe(1);
+  });
+
+  it("mentions a known assignee in both the anchor and the details", () => {
     const acc = "712020:2c9fa200-866c-4d8b-b00a-bd7d434220b0";
-    const snapshot: SprintSnapshot = {
+    const snap: SprintSnapshot = {
       sprintId: 11,
       sprintName: "ATP 43",
       slug: "ATP-43",
@@ -278,13 +301,33 @@ describe("formatCommittedMessage", () => {
         }),
       ],
     };
-    const msg = formatCommittedMessage(snapshot);
     const p = personForJiraAccountId(acc)!;
-    expect(msg).toContain(`*Volodymyr Pavliukevych (${mention(p)})*`);
+    expect(buildCommittedPost(snap).anchor).toContain(`• Volodymyr Pavliukevych (${mention(p)}) — 1`);
+    expect(buildCommittedPost(snap).details[0]).toContain(`*Volodymyr Pavliukevych (${mention(p)})*`);
+  });
+
+  it("splits the details across messages that each fit Slack's byte cap", () => {
+    const many: SprintIssue[] = [];
+    for (let i = 1; i <= 120; i++) {
+      many.push(
+        issue({
+          key: `ATP-${i}`,
+          summary: "Дуже довгий опис задачі, який займає багато байтів у UTF-8",
+          assignee: { accountId: `a${i % 6}`, displayName: `Person ${i % 6}` },
+        }),
+      );
+    }
+    const snap: SprintSnapshot = { ...snapshot, issues: many };
+    const parts = buildCommittedPost(snap).details;
+    expect(parts.length).toBeGreaterThan(1);
+    for (const p of parts) expect(byteLength(p)).toBeLessThanOrEqual(SLACK_MSG_MAX_BYTES);
+    // Every issue appears EXACTLY once across the thread — nothing dropped at a
+    // packing boundary, nothing duplicated into the next message.
+    expect(issueKeyCounts(parts)).toEqual(expectedCounts(120));
   });
 });
 
-describe("formatCompletedMessage", () => {
+describe("buildCompletedPost", () => {
   const frozen: SprintIssue[] = [
     issue({ key: "ATP-1", summary: "Login", assignee: A, statusName: "In Progress", statusCategory: "In Progress" }),
     issue({ key: "ATP-2", summary: "Signup", assignee: A, statusName: "QA Blocked", statusCategory: "In Progress", sprintCount: 2 }),
@@ -298,11 +341,22 @@ describe("formatCompletedMessage", () => {
     issue({ key: "ATP-4", summary: "Legacy", assignee: A, statusName: "CANCELLED", statusCategory: "Done" }),
   ];
 
-  it("renders per-person buckets: done-by-status, transitions, no progress", () => {
-    const text = formatCompletedMessage("ATP 42", computeCompletion(frozen, live));
+  it("keeps the anchor to the rate, per-person rates and a stuck count", () => {
+    const text = buildCompletedPost("ATP 42", computeCompletion(frozen, live)).anchor;
     expect(text).toContain("✅ Спринт *ATP 42* — виконано 2/4 (50%)");
-    expect(text).toContain("*Taras* — 2/4 (50%)");
-    const lines = text.split("\n");
+    expect(text).toContain("• Taras — 2/4 (50%)");
+    expect(text).toContain("⚠️ Зависли (кілька спринтів): 1");
+    expect(text).toContain("🧵 Деталі — у треді.");
+    // No per-issue detail in the anchor.
+    expect(text).not.toContain("ATP-1");
+    expect(text).not.toContain("No progress");
+  });
+
+  it("renders per-person buckets in the details: done-by-status, transitions, no progress", () => {
+    const parts = buildCompletedPost("ATP 42", computeCompletion(frozen, live)).details;
+    expect(parts.length).toBe(1);
+    const lines = parts[0].split("\n");
+    expect(parts[0]).toContain("*Taras* — 2/4 (50%)");
     const iDone = lines.indexOf("  Done:");
     const iCancelled = lines.indexOf("  CANCELLED:");
     const iTransition = lines.indexOf("  QA Blocked -> Review:");
@@ -318,37 +372,173 @@ describe("formatCompletedMessage", () => {
     expect(lines[iNoProgress + 1]).toBe("    • To Do - ATP-3 — Cleanup");
   });
 
-  it("renders stuck lines as status - assignee - key — summary (N спринтів)", () => {
-    const text = formatCompletedMessage("ATP 42", computeCompletion(frozen, live));
+  it("renders stuck lines in the details as status - assignee - key — summary (N спринтів)", () => {
+    const text = buildCompletedPost("ATP 42", computeCompletion(frozen, live)).details.join("\n");
     expect(text).toContain("⚠️ Зависли (кілька спринтів):");
     expect(text).toContain("  • Review - Taras - ATP-2 — Signup (2 спринти)");
   });
 
-  it("labels a known assignee as Name (<@ID>) in the completed message", () => {
+  it("labels a known assignee as Name (<@ID>) in the anchor and the details", () => {
     const acc = "712020:2c9fa200-866c-4d8b-b00a-bd7d434220b0";
     const person = personForJiraAccountId(acc)!;
     const who = { accountId: acc, displayName: "Volodymyr Pavliukevych" };
     const fr = [issue({ key: "ATP-1", assignee: who })];
     const lv = [issue({ key: "ATP-1", assignee: who, statusName: "Done", statusCategory: "Done" })];
-    const text = formatCompletedMessage("ATP 43", computeCompletion(fr, lv));
-    expect(text).toContain(`*Volodymyr Pavliukevych (${mention(person)})* — 1/1 (100%)`);
+    const result = computeCompletion(fr, lv);
+    expect(buildCompletedPost("ATP 43", result).anchor).toContain(
+      `• Volodymyr Pavliukevych (${mention(person)}) — 1/1 (100%)`,
+    );
+    expect(buildCompletedPost("ATP 42", result).details[0]).toContain(
+      `*Volodymyr Pavliukevych (${mention(person)})* — 1/1 (100%)`,
+    );
   });
 
-  it("keeps the zero-done line and still lists the per-person blocks", () => {
+  it("keeps the zero-done line in the anchor and still details the per-person blocks", () => {
     const fr = [issue({ key: "ATP-1", assignee: A, statusName: "To Do" })];
     const lv = [issue({ key: "ATP-1", assignee: A, statusName: "To Do" })];
-    const text = formatCompletedMessage("ATP 42", computeCompletion(fr, lv));
-    expect(text).toContain("_Жодної задачі не завершено._");
-    expect(text).toContain("*Taras* — 0/1 (0%)");
-    expect(text).toContain("  No progress:");
+    const result = computeCompletion(fr, lv);
+    expect(buildCompletedPost("ATP 42", result).anchor).toContain("_Жодної задачі не завершено._");
+    expect(buildCompletedPost("ATP 42", result).anchor).toContain("• Taras — 0/1 (0%)");
+    const details = buildCompletedPost("ATP 42", result).details[0];
+    expect(details).toContain("*Taras* — 0/1 (0%)");
+    expect(details).toContain("  No progress:");
   });
 
-  it("omits the stuck section when nothing is stuck", () => {
+  it("omits the stuck section from both surfaces when nothing is stuck", () => {
     const fr: SprintIssue[] = [issue({ key: "ATP-1", assignee: A, sprintCount: 1 })];
     const lv: SprintIssue[] = [
       issue({ key: "ATP-1", assignee: A, statusName: "Done", statusCategory: "Done", sprintCount: 1 }),
     ];
-    const text = formatCompletedMessage("ATP 42", computeCompletion(fr, lv));
-    expect(text).not.toContain("Зависли");
+    const result = computeCompletion(fr, lv);
+    expect(buildCompletedPost("ATP 42", result).anchor).not.toContain("Зависли");
+    expect(buildCompletedPost("ATP 42", result).details.join("\n")).not.toContain("Зависли");
+  });
+
+  it("repeats the header on a section that spills into the next message", () => {
+    const fr: SprintIssue[] = [];
+    const lv: SprintIssue[] = [];
+    for (let i = 1; i <= 90; i++) {
+      const summary = "Дуже довгий опис задачі, яка зависла на кілька спринтів підряд, багато байтів";
+      fr.push(issue({ key: `ATP-${i}`, summary, assignee: A, statusName: "To Do", sprintCount: 2 }));
+      lv.push(issue({ key: `ATP-${i}`, summary, assignee: A, statusName: "To Do", sprintCount: 2 }));
+    }
+    const parts = buildCompletedPost("ATP 42", computeCompletion(fr, lv)).details;
+    const stuckParts = parts.filter((p) => p.includes("Зависли"));
+    expect(stuckParts.length).toBeGreaterThan(1);
+    // Every spilled message opens with the continuation header, never an orphan line.
+    for (const p of stuckParts.slice(1)) {
+      expect(p.split("\n")[0]).toBe("⚠️ Зависли (кілька спринтів) _(продовження)_:");
+    }
+  });
+
+  it("splits the details across messages that each fit Slack's byte cap", () => {
+    const fr: SprintIssue[] = [];
+    const lv: SprintIssue[] = [];
+    for (let i = 1; i <= 120; i++) {
+      const who = { accountId: `a${i % 6}`, displayName: `Person ${i % 6}` };
+      const summary = "Дуже довгий опис задачі, який займає багато байтів у UTF-8";
+      fr.push(issue({ key: `ATP-${i}`, summary, assignee: who, statusName: "To Do" }));
+      lv.push(issue({ key: `ATP-${i}`, summary, assignee: who, statusName: "To Do" }));
+    }
+    const parts = buildCompletedPost("ATP 42", computeCompletion(fr, lv)).details;
+    expect(parts.length).toBeGreaterThan(1);
+    for (const p of parts) expect(byteLength(p)).toBeLessThanOrEqual(SLACK_MSG_MAX_BYTES);
+    // Exactly once each: no boundary loss, no duplication.
+    expect(issueKeyCounts(parts)).toEqual(expectedCounts(120));
+  });
+});
+
+describe("anchor byte cap", () => {
+  /** Many assignees, each with a long Cyrillic name → an unbounded roster. */
+  function bigRoster(count: number): SprintIssue[] {
+    return Array.from({ length: count }, (_, i) =>
+      issue({
+        key: `ATP-${i + 1}`,
+        summary: "Задача",
+        assignee: {
+          accountId: `acc-${i}`,
+          displayName: `Володимир Павлюкевич-Форостяний ${i}`,
+        },
+      }),
+    );
+  }
+
+  it("keeps the committed anchor within the cap by shedding the roster into the thread", () => {
+    const snapshot: SprintSnapshot = {
+      sprintId: 1,
+      sprintName: "ATP 99",
+      slug: "ATP-99",
+      capturedAt: "2026-08-26T06:00:00.000Z",
+      issues: bigRoster(120),
+    };
+    const post = buildCommittedPost(snapshot);
+    expect(byteLength(post.anchor)).toBeLessThanOrEqual(SLACK_MSG_MAX_BYTES);
+    // The roster moved to the FIRST thread message, headline stayed in the anchor.
+    expect(post.anchor).toContain("взято в роботу: 120 задач");
+    expect(post.anchor).not.toContain("• Володимир");
+    expect(post.details[0]).toContain("👥 Розподіл задач:");
+    expect(post.details[0]).toContain("• Володимир Павлюкевич-Форостяний 0 — 1");
+  });
+
+  it("keeps the completed anchor within the cap by shedding the roster into the thread", () => {
+    const many = bigRoster(120);
+    const post = buildCompletedPost("ATP 99", computeCompletion(many, many));
+    expect(byteLength(post.anchor)).toBeLessThanOrEqual(SLACK_MSG_MAX_BYTES);
+    expect(post.anchor).toContain("виконано 0/120 (0%)");
+    expect(post.anchor).not.toContain("• Володимир");
+    expect(post.details[0]).toContain("👥 Прогрес по людях:");
+  });
+
+  it("keeps the roster in the anchor when it fits", () => {
+    const snapshot: SprintSnapshot = {
+      sprintId: 1,
+      sprintName: "ATP 99",
+      slug: "ATP-99",
+      capturedAt: "2026-08-26T06:00:00.000Z",
+      issues: [issue({ key: "ATP-1", assignee: A })],
+    };
+    const post = buildCommittedPost(snapshot);
+    expect(post.anchor).toContain("• Taras — 1");
+    expect(post.details[0]).not.toContain("👥");
+  });
+
+  it("promises a thread only when there is one", () => {
+    const empty: SprintSnapshot = {
+      sprintId: 1,
+      sprintName: "ATP 99",
+      slug: "ATP-99",
+      capturedAt: "2026-08-26T06:00:00.000Z",
+      issues: [],
+    };
+    const post = buildCommittedPost(empty);
+    expect(post.details).toEqual([]);
+    expect(post.anchor).not.toContain("🧵");
+    const completed = buildCompletedPost("ATP 99", computeCompletion([], []));
+    expect(completed.details).toEqual([]);
+    expect(completed.anchor).not.toContain("🧵");
+    // A populated post still points at its thread.
+    expect(buildCommittedPost({ ...empty, issues: [issue({ key: "ATP-1", assignee: A })] }).anchor)
+      .toContain("🧵");
+  });
+
+  it("gives every piece of a pathologically long line its own header", () => {
+    const long = issue({ key: "ATP-1", summary: "я".repeat(4000), assignee: A });
+    const parts = buildCommittedPost({
+      sprintId: 1,
+      sprintName: "ATP 99",
+      slug: "ATP-99",
+      capturedAt: "2026-08-26T06:00:00.000Z",
+      issues: [long],
+    }).details;
+    expect(parts.length).toBeGreaterThan(1);
+    for (const p of parts) {
+      expect(byteLength(p)).toBeLessThanOrEqual(SLACK_MSG_MAX_BYTES);
+      // Never a header-only message, never a headerless fragment.
+      expect(p.split("\n")[0]).toMatch(/^\*Taras\*/);
+      expect(p.split("\n").length).toBeGreaterThan(1);
+    }
+    // Lossless: the summary survives concatenation of the pieces.
+    const body = parts.map((p) => p.split("\n").slice(1).join("\n")).join("");
+    expect(body).toContain("я".repeat(4000));
   });
 });
