@@ -1,9 +1,9 @@
 /**
- * Vercel Cron: Monday ~21:00 Kyiv — freeze the active sprint's committed baseline
+ * Vercel Cron: Tuesday ~09:00 Kyiv — freeze the active sprint's committed baseline
  * and post the "Committed" list to #general. Guarded by CRON_SECRET. Scheduled in
- * vercel.json as `0 18 * * 1` (18:00 UTC ≈ 21:00 Kyiv EEST; the cron pins the
- * weekday, DST only shifts the hour within Monday). Idempotent: the Slack send is
- * deduped by sprint slug, so a ±59-min re-fire posts once.
+ * vercel.json as `0 6 * * 2` (06:00 UTC ≈ 09:00 Kyiv EEST / 08:00 EET; the cron
+ * pins the weekday, DST only shifts the hour within Tuesday). Idempotent: the
+ * Slack send is deduped by sprint slug, so a ±59-min re-fire posts once.
  */
 import { isAuthorizedCron } from "@/lib/cronAuth";
 import { runSprintCommit } from "@/lib/runSprint";

@@ -1,7 +1,7 @@
 /**
  * Committed-artifact store for sprint completion, on top of the shared `reports`
  * table (feature = "sprint", period = the sprint slug). One row per sprint holds
- * the frozen COMMITTED baseline and, once the Sunday job runs, the COMPLETED
+ * the frozen COMMITTED baseline and, once the Monday report job runs, the COMPLETED
  * result — "freeze then enrich".
  *
  * Deliberately NOT `server-only`: no secrets, imported by both the API routes and

@@ -71,6 +71,31 @@ needed.
 - **Sunday timing** is set to `0 20 * * 0` (20:00 UTC = 23:00 Kyiv EEST) rather than
   23:59, so that even a +59 min slip stays **before** Sunday midnight Kyiv.
 
+### Amendment 2026-08-26 — both jobs move to the morning
+
+The evening slots were replaced by morning ones (the team reads #general in the
+morning, and the investor draft needs the completion record on Monday):
+
+```
+Mon  0 6 * * 1 UTC (≈09:00 Kyiv EEST / 08:00 EET)  → sprint-report  (was Sun 0 20 * * 0)
+Tue  0 6 * * 2 UTC (≈09:00 Kyiv EEST / 08:00 EET)  → sprint-commit  (was Mon 0 18 * * 1)
+Mon  0 7 * * 1 UTC (≈10:00 Kyiv EEST / 09:00 EET)  → investor-report (was Tue 0 6 * * 2)
+```
+
+Consequences:
+
+- **The report now runs after the sprint's calendar end**, and `runSprintReport`
+  resolves the board's **active** sprint. The finished sprint must therefore still
+  be *open* in Jira on Monday morning — if it is completed in Jira before 09:00, the
+  next sprint becomes active, has no frozen baseline, and the report **skips**
+  (`status: "no-baseline"`). Complete the sprint in Jira only after the Monday post.
+- **The baseline freezes a day later** (Tue 09:00 instead of Mon 21:00), so a full
+  extra day of Monday/Tuesday-morning scope changes is baked into the denominator.
+- `pickSprintCompletion` still matches: `computedAt` = window.end + 1 day, inside the
+  existing +2-day tolerance.
+- Ordering on Monday is deliberate: sprint-report 06:00 UTC → investor-report 07:00
+  UTC, so the investor draft reads the completion record written an hour earlier.
+
 ## Components (isolation & purity)
 
 - **`lib/sprintReport.ts` — PURE, unit-tested.** No React/Next/node imports. The

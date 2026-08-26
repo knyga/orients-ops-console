@@ -11,7 +11,7 @@ Format: a short narrative **summary paragraph first**, then deterministic **bull
 
 ## Decisions (from brainstorm)
 
-- **Window:** the previous **Mon–Sun Kyiv calendar week** (aligns with the sprint cycle: commit Monday, report Sunday — sprint numbers are final by Tuesday).
+- **Window:** the previous **Mon–Sun Kyiv calendar week** (aligns with the sprint cycle: since 2026-08-26 the sprint report posts Monday 09:00 and the next baseline commits Tuesday 09:00 — sprint numbers are final an hour before this report runs).
 - **Publishing:** fully automatic post to #general (internal draft; humans edit before investors see it).
 - **Summary:** one Claude call turns the gathered numbers into a 3–5 sentence Ukrainian investor-toned summary (battlefield-value framing, no tech jargon, **never invents figures** — all numbers passed in the prompt). On Claude failure, fall back to a deterministic one-paragraph template and **still post**.
 - **Content blocks:** Jira delivery (+ sprint completion %), field ops core (виїзди, time in field, time in air, accepted/flagged days), video/datasets. Drone losses deliberately excluded.
@@ -28,7 +28,7 @@ Clone the proven sprint-report pattern (`lib/runSprint.ts`): shared orchestratio
 | Orchestration | `lib/runInvestor.ts` | Gather → summarize → store → post. DRY-RUN aware (`publish: false` returns the exact message, posts nothing). Mirrors `runSprint.ts`. |
 | Store | `lib/investorStore.ts` | Thin wrapper on the shared `reports` table, feature `investor`, period = canonical `periodKey` `YYYY-MM-DD_YYYY-MM-DD` (Mon_Sun). Mirrors `sprintStore.ts`. |
 | CLI | `scripts/investor.ts` → `npm run investor -- [--publish --channel general] [--today YYYY-MM-DD] [--format table]` | **DRY-RUN by default** (prints the exact Ukrainian post, sends nothing); `--publish` requires `--channel <name>` (a tracked channel). `--today` overrides "now" for testing/backfill. |
-| Cron | `app/api/cron/investor-report/route.ts`, `vercel.json` `0 6 * * 2` | ≈ 09:00 Kyiv summer / 08:00 winter — same fixed-UTC compromise as every other cron. `CRON_SECRET` auth. |
+| Cron | `app/api/cron/investor-report/route.ts`, `vercel.json` `0 7 * * 1` (2026-08-26; was `0 6 * * 2`) | ≈ Mon 10:00 Kyiv summer / 09:00 winter — same fixed-UTC compromise as every other cron; one hour after the Monday 09:00 sprint report, whose completion record it reads. `CRON_SECRET` auth. |
 | Web | `GET /api/investor` (`?periods=1` list, `?period=<key>` fetch) + **Investor** tab `app/(dashboard)/investor/page.tsx` | Renders the stored JSON: summary, bullets, raw numbers. Committed-only (no live refresh — the cron/CLI is the writer). |
 
 ### Data gathering (all sources read-only)

@@ -1,6 +1,7 @@
 /**
- * Vercel Cron: Tuesday 06:00 UTC (≈09:00 Kyiv summer / 08:00 winter — the same
- * fixed-UTC compromise as the other crons) — draft the weekly investor report
+ * Vercel Cron: Monday 07:00 UTC (≈10:00 Kyiv summer / 09:00 winter — the same
+ * fixed-UTC compromise as the other crons; an hour after the Monday sprint
+ * report, whose completion record it reads) — draft the weekly investor report
  * for the previous Mon–Sun week and post it to #general. The post is an
  * INTERNAL DRAFT the team edits before forwarding to investors. Guarded by
  * CRON_SECRET. Any data-stage failure skips the post and DMs the operator;

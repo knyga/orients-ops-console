@@ -178,9 +178,9 @@ export interface SprintPick {
 }
 
 /**
- * The completed sprint report belonging to this week: computedAt (the Sunday
- * cron) falls inside the window, with +2 days of tolerance for late/manual
- * re-runs. Candidates arrive newest-first; the first match wins.
+ * The completed sprint report belonging to this week: computedAt (the Monday
+ * ~09:00 cron, i.e. window.end + 1) falls inside the window, with +2 days of
+ * tolerance for late/manual re-runs. Candidates arrive newest-first; first wins.
  */
 export function pickSprintCompletion(
   records: SprintPick[],
