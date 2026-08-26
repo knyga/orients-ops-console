@@ -15,3 +15,18 @@ describe("gateProposalApply", () => {
     if (!r.ok) expect(r.refusalUk).toContain("затверджувач");
   });
 });
+
+describe("gateProposalApply — sprint_plan_build", () => {
+  it("passes for an approver and injects their name", () => {
+    const r = gateProposalApply("sprint_plan_build", "U08G4HZQTTR");
+    expect(r).toEqual({ ok: true, extraParams: { by: "Bohdan Forostianyi" } });
+  });
+  it("refuses a non-approver with the sprint-specific Ukrainian refusal", () => {
+    const r = gateProposalApply("sprint_plan_build", "U_RANDOM");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.refusalUk).toContain("план спринту");
+      expect(r.refusalUk).toContain("затверджувач");
+    }
+  });
+});

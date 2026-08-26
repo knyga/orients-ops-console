@@ -13,7 +13,7 @@ const SLACK_MAX_ITERS = 6;
 export async function runSlackTurn(
   text: string,
   history: Turn[],
-  opts: { sourceUrl?: string } = {},
+  opts: { sourceUrl?: string; channelId?: string; threadTs?: string } = {},
 ): Promise<AgentResult> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set on the server.");
@@ -21,5 +21,11 @@ export async function runSlackTurn(
   // No `tools:` override — this picks up runAgent's default FULL tool set
   // (jiraTools + fieldLossTools + calendarTools), keeping Slack in sync with
   // the loop default permanently.
-  return runAgent(text, { maxIters: SLACK_MAX_ITERS, history, sourceUrl: opts.sourceUrl });
+  return runAgent(text, {
+    maxIters: SLACK_MAX_ITERS,
+    history,
+    sourceUrl: opts.sourceUrl,
+    channelId: opts.channelId,
+    threadTs: opts.threadTs,
+  });
 }

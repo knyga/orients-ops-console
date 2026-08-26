@@ -93,6 +93,26 @@ export const sprintThreadKey = (
   index: number,
 ): string => `${sprintAnchorKey(kind, slug, channel)}:t${index}`;
 
+/**
+ * Sprint-plan FALLBACK anchor: posted by the Tuesday commit job when the board
+ * has no active sprint (the plan cannot be built yet). Keyed on the run's Kyiv
+ * calendar day, so a ±59-min cron re-fire dedups to one post while a genuinely
+ * missed following week (new day) posts a fresh anchor. Channel-scoped like
+ * `sprintAnchorKey`: a fallback sent to a test channel must never suppress the
+ * same day's real #general fallback.
+ */
+export const sprintPlanPendingKey = (day: string, channel: string): string =>
+  `sprint-plan-pending:${channel}:${day}`;
+/**
+ * The mention-driven fill-in's EDIT of that anchor into the real Committed post.
+ * Namespaced apart from `sprintAnchorKey` so the edit never collides with a
+ * reservation that would skip it (same reasoning as `backfillEditKey`), and
+ * channel-scoped for the same reason as the pending key. The slug is the LAST
+ * segment — the fill-in guard (lib/proposalExecutor) parses it back out.
+ */
+export const sprintPlanFilledKey = (slug: string, channel: string): string =>
+  `sprint-plan-filled:${channel}:${slug}`;
+
 /** Weekly investor report post, keyed by the explicit Mon_Sun week key. */
 export const investorKey = (periodKey: string): string => `investor:${periodKey}`;
 
@@ -106,6 +126,13 @@ export const rosterAckKey = (date: string, rev: string): string =>
  * Decide the reserve outcome. We win (and should send) when our INSERT landed,
  * OR when the only existing row is a prior FAILED attempt (retry). We lose (skip
  * the send) when a sent/pending/skipped row already holds the key.
+ *
+ * Losing to a PENDING row surfaces NO ts: that send never landed (the row is a
+ * stuck reservation from a hard-killed run). This matters for EDITS, whose
+ * reservation row carries the known target ts up-front — returning it would let
+ * a skipped edit masquerade as a message that carries the content (bit the
+ * sprint-plan fill-in, 2026-08-26: a stuck `sprint-plan-filled:` row made the
+ * retry look successful while the anchor still showed the fallback text).
  */
 export function decideReserve(
   inserted: { ts: string | null } | null,
@@ -113,5 +140,6 @@ export function decideReserve(
 ): { won: boolean; existingTs: string | null } {
   if (inserted) return { won: true, existingTs: inserted.ts };
   if (existing && existing.status === "failed") return { won: true, existingTs: existing.ts };
+  if (existing && existing.status === "pending") return { won: false, existingTs: null };
   return { won: false, existingTs: existing?.ts ?? null };
 }

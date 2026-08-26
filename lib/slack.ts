@@ -490,14 +490,17 @@ async function rawUpdate(channelId: string, ts: string, text: string): Promise<v
 /**
  * Edit one of the bot's own messages. SERVER-ONLY; needs `chat:write`. Recorded +
  * deduped via sendTracked (kind "edit"); the row's ts is the edited message's ts.
+ * Returns that ts when the edit landed (now or in a prior sent run), or "" when
+ * the send was SKIPPED by a stuck pending row — a caller for whom the edit is
+ * load-bearing (the sprint fill-in) must treat "" as a failure, not a success.
  */
 export async function updateMessage(
   channelId: string,
   ts: string,
   text: string,
   meta: SendMeta,
-): Promise<void> {
-  await sendTracked(
+): Promise<string> {
+  return sendTracked(
     { channelId, text, kind: "edit", threadTs: null, ts, meta },
     async () => {
       await rawUpdate(channelId, ts, text);

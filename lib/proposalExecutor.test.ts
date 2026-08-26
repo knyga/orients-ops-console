@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   upsertLossRecord: vi.fn(),
   readPublished: vi.fn(),
   postMessage: vi.fn(),
+  findSentByTs: vi.fn(),
+  fillSprintPlan: vi.fn(),
 }));
 vi.mock("@/lib/lossStore", () => ({ upsertLossRecord: mocks.upsertLossRecord }));
 vi.mock("@/lib/published", async (orig) => {
@@ -33,11 +35,15 @@ vi.mock("@/lib/published", async (orig) => {
   return { ...actual, readPublished: mocks.readPublished };
 });
 vi.mock("@/lib/slack", () => ({ postMessage: mocks.postMessage }));
+vi.mock("@/lib/outbound", () => ({ findSentByTs: mocks.findSentByTs }));
+vi.mock("@/lib/runSprint", () => ({ fillSprintPlan: mocks.fillSprintPlan }));
 
 beforeEach(() => {
   mocks.upsertLossRecord.mockReset().mockResolvedValue(true);
   mocks.readPublished.mockReset().mockResolvedValue({});
   mocks.postMessage.mockReset().mockResolvedValue("1782900000.000200");
+  mocks.findSentByTs.mockReset().mockResolvedValue([]);
+  mocks.fillSprintPlan.mockReset().mockResolvedValue({ slug: "ATP-49", sprintName: "ATP 49", count: 12 });
 });
 
 describe("applyProposal", () => {
@@ -222,5 +228,63 @@ describe("applyProposal field_loss_set", () => {
 
   it("field_loss_set rejects an invalid state", async () => {
     await expect(applyProposal("field_loss_set", { date: "2026-07-06", state: "maybe" })).rejects.toThrow(/state/);
+  });
+});
+
+describe("applyProposal sprint_plan_build", () => {
+  const PARAMS = {
+    channelId: "C08GX9DE54P",
+    anchorTs: "1782899951.295969",
+    sprintId: 1487,
+    sprintName: "ATP 49",
+  };
+  const pendingRow = { key: "sprint-plan-pending:general:2026-08-25", kind: "post" };
+
+  it("fills a pending anchor via fillSprintPlan and reports the count", async () => {
+    mocks.findSentByTs.mockResolvedValue([pendingRow]);
+    const out = await applyProposal("sprint_plan_build", PARAMS);
+    expect(mocks.fillSprintPlan).toHaveBeenCalledWith({
+      channelId: "C08GX9DE54P",
+      anchorTs: "1782899951.295969",
+      sprintId: 1487,
+      trigger: "webhook",
+    });
+    expect(out).toContain("ATP 49");
+    expect(out).toContain("12 задач");
+  });
+
+  it("refuses a message that is not the pending-plan anchor, before any side effect", async () => {
+    mocks.findSentByTs.mockResolvedValue([{ key: "verdict:2026-08:2026-08-25", kind: "post" }]);
+    await expect(applyProposal("sprint_plan_build", PARAMS)).rejects.toThrow(/не є заглушкою/);
+    expect(mocks.fillSprintPlan).not.toHaveBeenCalled();
+  });
+
+  it("allows a SAME-slug re-apply (the partial-failure retry path)", async () => {
+    mocks.findSentByTs.mockResolvedValue([
+      pendingRow,
+      { key: "sprint-plan-filled:general:ATP-49", kind: "edit", status: "sent" },
+    ]);
+    await expect(applyProposal("sprint_plan_build", PARAMS)).resolves.toContain("ATP 49");
+    expect(mocks.fillSprintPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses to rewrite an anchor already filled (SENT) with a DIFFERENT sprint", async () => {
+    mocks.findSentByTs.mockResolvedValue([
+      pendingRow,
+      { key: "sprint-plan-filled:general:ATP-48", kind: "edit", status: "sent" },
+    ]);
+    await expect(applyProposal("sprint_plan_build", PARAMS)).rejects.toThrow(/вже заповнено планом іншого спринту/);
+    expect(mocks.fillSprintPlan).not.toHaveBeenCalled();
+  });
+
+  it("a different-slug fill row that never LANDED (pending) does not block a new fill", async () => {
+    // ATP 48's fill died before the edit reached Slack: its pending row is a
+    // stuck reservation, not evidence of a fill — ATP 49 must still be able in.
+    mocks.findSentByTs.mockResolvedValue([
+      pendingRow,
+      { key: "sprint-plan-filled:general:ATP-48", kind: "edit", status: "pending" },
+    ]);
+    await expect(applyProposal("sprint_plan_build", PARAMS)).resolves.toContain("ATP 49");
+    expect(mocks.fillSprintPlan).toHaveBeenCalledTimes(1);
   });
 });

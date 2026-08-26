@@ -26,6 +26,11 @@ export interface Proposal {
  *  request came from, linked into a created ticket's description). */
 export interface ProposeContext {
   sourceUrl?: string;
+  /** Slack channel the turn came from — a write that edits a message in place
+   *  (sprint_plan_build) needs it resolved deterministically, never by the model. */
+  channelId?: string;
+  /** The thread's anchor ts (the message a thread-scoped write rewrites). */
+  threadTs?: string;
 }
 
 export interface Tool {

@@ -5,6 +5,7 @@ import {
   computeCompletion,
   buildCommittedPost,
   buildCompletedPost,
+  formatNoSprintAnchor,
   pluralizeSprints,
   type SprintIssue,
   type SprintSnapshot,
@@ -540,5 +541,18 @@ describe("anchor byte cap", () => {
     // Lossless: the summary survives concatenation of the pieces.
     const body = parts.map((p) => p.split("\n").slice(1).join("\n")).join("");
     expect(body).toContain("я".repeat(4000));
+  });
+});
+
+describe("formatNoSprintAnchor", () => {
+  it("renders the Ukrainian fallback with the Kyiv day and the mention instruction", () => {
+    const text = formatNoSprintAnchor("2026-08-25");
+    expect(text).toContain("📋 План спринту не складено");
+    expect(text).toContain("немає активного спринту");
+    expect(text).toContain("(2026-08-25)");
+    // The fill-in path: an approver mentions the bot in THIS anchor's thread.
+    expect(text).toContain("згадайте мене");
+    expect(text).toContain("у цьому треді");
+    expect(text).toContain("оновлю це повідомлення");
   });
 });

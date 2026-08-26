@@ -473,3 +473,19 @@ export function buildCompletedPost(
     maxBytes,
   );
 }
+
+/**
+ * The FALLBACK anchor the Tuesday commit job posts when the board has no active
+ * sprint (rollover is a human action whose time varies — see
+ * docs/superpowers/specs/2026-08-26-sprint-plan-fallback-design.md). The miss is
+ * made visible in the same place the plan would have been, and the text tells an
+ * approver how to trigger the mention-driven fill-in that rewrites THIS message
+ * into the real Committed post. Pure like its buildCommittedPost sibling: no
+ * Jira, no Slack, no clock — the caller supplies the Kyiv day.
+ */
+export function formatNoSprintAnchor(dayKyiv: string): string {
+  return [
+    `📋 План спринту не складено — на дошці немає активного спринту (${dayKyiv}).`,
+    "Створіть спринт у Jira і згадайте мене (@bot) у цьому треді — складу план і оновлю це повідомлення.",
+  ].join("\n");
+}

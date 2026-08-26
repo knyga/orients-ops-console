@@ -23,6 +23,9 @@ import { readPublished } from "@/lib/published";
 import { parsePeriodKey } from "@/lib/period";
 import { TRACKED_CHANNELS } from "@/lib/slackChannels";
 import { postMessage } from "@/lib/slack";
+import { fillSprintPlan } from "@/lib/runSprint";
+import { slugifySprint } from "@/lib/sprintReport";
+import { findSentByTs } from "@/lib/outbound";
 import { contentRev, instructionAckKey } from "@/lib/outboundKeys";
 import { reportKey } from "@/lib/fieldDayVerdict";
 import { APPROVERS } from "@/lib/approvers";
@@ -35,7 +38,8 @@ export type ProposalKind =
   | "jira_update"
   | "jira_move_to_sprint"
   | "calendar_create_event"
-  | "field_loss_set";
+  | "field_loss_set"
+  | "sprint_plan_build";
 
 function str(params: Record<string, unknown>, key: string): string {
   const v = params[key];
@@ -189,6 +193,36 @@ export async function applyProposal(kind: ProposalKind, params: Record<string, u
       return state === "found"
         ? `🛸 Зафіксовано: борт знайдено — втрату за ${date} знято.`
         : `🛸 Зафіксовано: борт за ${date} втрачено (не знайдено).`;
+    }
+    case "sprint_plan_build": {
+      const channelId = str(params, "channelId");
+      const anchorTs = str(params, "anchorTs");
+      const sprintId = typeof params.sprintId === "number" ? params.sprintId : Number(params.sprintId);
+      if (!Number.isFinite(sprintId)) throw new Error(`sprint_plan_build: bad sprintId "${params.sprintId}"`);
+      // GUARDS — before any side effect. (1) The message being rewritten must
+      // be OUR pending-plan anchor: without this, a mention in any other
+      // thread would rewrite an unrelated bot message into a sprint plan.
+      const rows = await findSentByTs(anchorTs);
+      if (!rows.some((r) => r.key.startsWith("sprint-plan-pending:"))) {
+        throw new Error("це повідомлення не є заглушкою плану спринту.");
+      }
+      // (2) An anchor already FILLED (a `sprint-plan-filled:` edit row shares
+      // its ts; the slug is the key's last segment) may only be re-applied for
+      // the SAME sprint — that is the partial-failure retry path, and its
+      // deduped sends make it safe. A different sprint must refuse: it would
+      // rewrite the anchor over a thread still holding the first sprint's
+      // details. Only a SENT row is evidence of a completed fill — a pending/
+      // failed row means the edit never changed Slack, and blocking a
+      // legitimate different-sprint fill on it would strand the anchor.
+      const targetSlug = slugifySprint(str(params, "sprintName"));
+      const filled = rows.find(
+        (r) => r.key.startsWith("sprint-plan-filled:") && r.status === "sent",
+      );
+      if (filled && filled.key.split(":").pop() !== targetSlug) {
+        throw new Error("цю заглушку вже заповнено планом іншого спринту — переписати її не можна.");
+      }
+      const r = await fillSprintPlan({ channelId, anchorTs, sprintId, trigger: "webhook" });
+      return `✅ План спринту ${r.sprintName} складено: ${r.count} задач. Повідомлення вище оновлено.`;
     }
     default:
       throw new Error(`Unknown proposal kind: ${kind}`);

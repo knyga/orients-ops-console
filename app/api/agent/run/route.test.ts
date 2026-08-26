@@ -175,7 +175,11 @@ describe("POST /api/agent/run", () => {
     expect(h.runSlackTurn).toHaveBeenCalledWith(
       "Контекст треду (Slack):\n[Oleksandr K]: bug details\n\nствори тікет з цього треду",
       [],
-      { sourceUrl: "https://orientsai.slack.com/archives/C-issue-log/p111222" },
+      {
+        sourceUrl: "https://orientsai.slack.com/archives/C-issue-log/p111222",
+        channelId: "C-issue-log",
+        threadTs: "111.222",
+      },
     );
     // memory stores the ORIGINAL question, not the augmented one
     expect(h.appendTurn).toHaveBeenCalledWith("111.222", "створи тікет з цього треду", "answer");
@@ -185,7 +189,7 @@ describe("POST /api/agent/run", () => {
     h.runSlackTurn.mockResolvedValue({ kind: "text", text: "answer" });
     await POST(req(base));
     expect(h.fetchThreadContext).not.toHaveBeenCalled();
-    expect(h.runSlackTurn).toHaveBeenCalledWith("q", [], { sourceUrl: undefined });
+    expect(h.runSlackTurn).toHaveBeenCalledWith("q", [], { sourceUrl: undefined, channelId: "C1", threadTs: undefined });
   });
 
   it("thread-context fetch failure → turn still runs on the bare question", async () => {
@@ -196,6 +200,8 @@ describe("POST /api/agent/run", () => {
     // context degraded, but the source link still rides along
     expect(h.runSlackTurn).toHaveBeenCalledWith("q", [], {
       sourceUrl: "https://orientsai.slack.com/archives/C1/p111222",
+      channelId: "C1",
+      threadTs: "111.222",
     });
     expect(h.updateMessage).toHaveBeenCalledWith("C1", "2", "answer", expect.anything());
   });

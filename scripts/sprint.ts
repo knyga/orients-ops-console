@@ -83,8 +83,14 @@ async function main(): Promise<void> {
   if (args.mode === "commit") {
     const r = await runSprintCommit(opts);
     if (r.status === "no-active-sprint") {
-      process.stderr.write("sprint: no active sprint on the board — nothing to freeze.\n");
-      process.exit(1);
+      // The rollover-gap fallback: the run posts (or dry-run prints) the
+      // Ukrainian anchor an approver later fills in via the agent's
+      // sprint_plan_build (@mention in the anchor's thread).
+      process.stderr.write(
+        `sprint commit: no active sprint on the board — fallback anchor${r.posted ? ` posted to #${args.channel}` : " (dry-run, nothing posted)"}.\n`,
+      );
+      console.log(r.anchor);
+      return;
     }
     process.stderr.write(
       `sprint commit: ${r.sprintName} — froze ${r.count} issue(s)${r.posted ? ` and posted to #${args.channel}` : " (dry-run, nothing posted)"}.\n`,

@@ -1,15 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { postMessage, listSprints, fetchSprintIssues, fetchIssuesByKeys, readSprint, writeSprint } =
-  vi.hoisted(() => ({
-    postMessage: vi.fn(),
-    listSprints: vi.fn(),
-    fetchSprintIssues: vi.fn(),
-    fetchIssuesByKeys: vi.fn(),
-    readSprint: vi.fn(),
-    writeSprint: vi.fn(),
-  }));
-vi.mock("./slack", () => ({ postMessage }));
+const {
+  postMessage,
+  updateMessage,
+  claimSentKey,
+  listSprints,
+  fetchSprintIssues,
+  fetchIssuesByKeys,
+  readSprint,
+  writeSprint,
+} = vi.hoisted(() => ({
+  postMessage: vi.fn(),
+  updateMessage: vi.fn(),
+  claimSentKey: vi.fn(),
+  listSprints: vi.fn(),
+  fetchSprintIssues: vi.fn(),
+  fetchIssuesByKeys: vi.fn(),
+  readSprint: vi.fn(),
+  writeSprint: vi.fn(),
+}));
+vi.mock("./slack", () => ({ postMessage, updateMessage }));
+vi.mock("./outbound", () => ({ claimSentKey }));
 vi.mock("./jira", () => ({
   listSprints,
   fetchSprintIssues,
@@ -18,7 +29,7 @@ vi.mock("./jira", () => ({
 }));
 vi.mock("./sprintStore", () => ({ readSprint, writeSprint }));
 
-import { runSprintCommit, runSprintReport } from "./runSprint";
+import { fillSprintPlan, runSprintCommit, runSprintReport } from "./runSprint";
 import type { SprintIssue, SprintSnapshot } from "./sprintReport";
 import type { PublishedPlan } from "./sprintPublish";
 
@@ -193,5 +204,179 @@ describe("runSprintReport publishing", () => {
     const result = await runSprintReport({ publish: true, channelName: "general" });
     expect(result.status).toBe("no-baseline");
     expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("runSprintCommit — no active sprint (fallback anchor)", () => {
+  beforeEach(() => {
+    listSprints.mockResolvedValue([]);
+  });
+
+  it("with publish posts exactly ONE fallback anchor (no details) under the pending key", async () => {
+    const r = await runSprintCommit({ publish: true, channelName: "general", trigger: "cron" });
+    expect(r.status).toBe("no-active-sprint");
+    if (r.status !== "no-active-sprint") return;
+    expect(r.posted).toBe(true);
+    expect(r.anchor).toContain("План спринту не складено");
+
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    const [channelId, text, meta, threadTs] = postMessage.mock.calls[0];
+    expect(channelId).toBe(GENERAL);
+    expect(text).toBe(r.anchor);
+    expect(meta.key).toMatch(/^sprint-plan-pending:general:\d{4}-\d{2}-\d{2}$/);
+    expect(meta.feature).toBe("sprint");
+    expect(threadTs).toBeUndefined(); // a top-level anchor, never a reply
+
+    // No baseline exists to freeze — the store must not be touched.
+    expect(writeSprint).not.toHaveBeenCalled();
+  });
+
+  it("dry-run returns the exact anchor text and posts nothing", async () => {
+    const r = await runSprintCommit({ publish: false });
+    expect(r.status).toBe("no-active-sprint");
+    if (r.status !== "no-active-sprint") return;
+    expect(r.posted).toBe(false);
+    expect(r.anchor).toContain("згадайте мене");
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("runSprintCommit — fallback anchor send skipped (stuck pending row)", () => {
+  it("throws loudly instead of reporting posted: true", async () => {
+    listSprints.mockResolvedValue([]);
+    postMessage.mockResolvedValue(""); // chokepoint skip → empty ts
+    await expect(
+      runSprintCommit({ publish: true, channelName: "general", trigger: "cron" }),
+    ).rejects.toThrow(/fallback anchor .*stuck pending row/);
+  });
+});
+
+describe("fillSprintPlan", () => {
+  const ANCHOR_TS = "1782899951.295969";
+
+  beforeEach(() => {
+    // resolveSprint(sprintId) matches among active + future.
+    listSprints.mockImplementation(async (_board: number, state: string) =>
+      state === "active" ? [SPRINT] : [],
+    );
+    fetchSprintIssues.mockResolvedValue(manyIssues(90));
+    updateMessage.mockImplementation(async (_channel: string, ts: string) => ts);
+    claimSentKey.mockResolvedValue(true);
+  });
+
+  it("edits the fallback anchor in place, claims the anchor key, threads the details", async () => {
+    const r = await fillSprintPlan({
+      channelId: GENERAL,
+      anchorTs: ANCHOR_TS,
+      sprintId: SPRINT.id,
+      trigger: "webhook",
+    });
+    expect(r).toEqual({ slug: "ATP-42", sprintName: "ATP 42", count: 90 });
+
+    // Baseline frozen + the publish plan frozen (published carried on the record).
+    expect(writeSprint).toHaveBeenCalled();
+    const lastRecord = writeSprint.mock.calls.at(-1)![1];
+    expect(lastRecord.published?.[0]).toMatchObject({ kind: "committed", channel: "general" });
+
+    // The anchor is an EDIT of the existing message, never a new post…
+    expect(updateMessage).toHaveBeenCalledTimes(1);
+    const [editChannel, editTs, editText, editMeta] = updateMessage.mock.calls[0];
+    expect(editChannel).toBe(GENERAL);
+    expect(editTs).toBe(ANCHOR_TS);
+    expect(editText).toBe(lastRecord.published[0].anchor);
+    expect(editMeta.key).toBe("sprint-plan-filled:general:ATP-42");
+
+    // …and the committed anchor key is CLAIMED against it, so the next cron
+    // re-fire dedups to this message instead of posting an orphan duplicate.
+    expect(claimSentKey).toHaveBeenCalledWith(
+      "sprint-committed:v2:general:ATP-42",
+      ANCHOR_TS,
+      expect.objectContaining({ kind: "post", channel: "general", channelId: GENERAL }),
+    );
+
+    // Details: replies under the ANCHOR ts, same positional keys as the cron path.
+    const details: string[] = lastRecord.published[0].details;
+    expect(details.length).toBeGreaterThan(1);
+    expect(postMessage).toHaveBeenCalledTimes(details.length);
+    postMessage.mock.calls.forEach(([channelId, text, meta, threadTs], i) => {
+      expect(channelId).toBe(GENERAL);
+      expect(text).toBe(details[i]);
+      expect(meta.key).toBe(`sprint-committed:v2:general:ATP-42:t${i + 1}`);
+      expect(threadTs).toBe(ANCHOR_TS);
+    });
+  });
+
+  it("a retry replays the FROZEN plan byte-identically, not a fresh Jira repack", async () => {
+    readSprint.mockResolvedValue({
+      committed: snapshot(manyIssues(5)),
+      published: [
+        {
+          kind: "committed",
+          channel: "general",
+          anchor: "FROZEN ANCHOR",
+          details: ["FROZEN DETAIL 1"],
+          plannedAt: "2026-08-26T07:00:00.000Z",
+        },
+      ],
+    });
+    fetchSprintIssues.mockResolvedValue(manyIssues(90)); // scope changed since the freeze
+
+    await fillSprintPlan({ channelId: GENERAL, anchorTs: ANCHOR_TS, sprintId: SPRINT.id });
+
+    expect(updateMessage.mock.calls[0][2]).toBe("FROZEN ANCHOR");
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage.mock.calls[0][1]).toBe("FROZEN DETAIL 1");
+  });
+
+  it("throws in Ukrainian when the sprint vanished between propose and confirm", async () => {
+    listSprints.mockResolvedValue([]);
+    await expect(
+      fillSprintPlan({ channelId: GENERAL, anchorTs: ANCHOR_TS, sprintId: 404 }),
+    ).rejects.toThrow(/зник/);
+  });
+
+  it("refuses an untracked channel id before touching anything", async () => {
+    await expect(
+      fillSprintPlan({ channelId: "C_UNKNOWN", anchorTs: ANCHOR_TS, sprintId: SPRINT.id }),
+    ).rejects.toThrow(/not a tracked channel/);
+    expect(writeSprint).not.toHaveBeenCalled();
+  });
+});
+
+describe("fillSprintPlan — the anchor edit is skipped (stuck pending row)", () => {
+  it("throws loudly and neither claims the anchor key nor threads details", async () => {
+    listSprints.mockImplementation(async (_board: number, state: string) =>
+      state === "active" ? [SPRINT] : [],
+    );
+    fetchSprintIssues.mockResolvedValue(manyIssues(10));
+    updateMessage.mockResolvedValue(""); // chokepoint skip → empty ts
+    claimSentKey.mockResolvedValue(true);
+
+    await expect(
+      fillSprintPlan({ channelId: GENERAL, anchorTs: "1.2", sprintId: SPRINT.id }),
+    ).rejects.toThrow(/fill-in edit was skipped .*stuck pending row/);
+    // The anchor in Slack still shows the fallback text: claiming the anchor
+    // key would suppress the recovering cron, and details would orphan.
+    expect(claimSentKey).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("runSprintCommit — explicit --sprint id that resolves to nothing", () => {
+  it("throws naming the id instead of posting the fallback (board HAS an active sprint)", async () => {
+    listSprints.mockImplementation(async (_board: number, state: string) =>
+      state === "active" ? [SPRINT] : [],
+    );
+    await expect(
+      runSprintCommit({ publish: true, channelName: "general", sprintId: 999, trigger: "cli" }),
+    ).rejects.toThrow(/sprint id 999 not found/);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it("throws even when the board has no active sprint — an explicit id never falls back", async () => {
+    listSprints.mockResolvedValue([]);
+    await expect(runSprintCommit({ publish: false, sprintId: 999 })).rejects.toThrow(
+      /sprint id 999 not found/,
+    );
   });
 });

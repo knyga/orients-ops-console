@@ -43,6 +43,19 @@ describe("sendTracked", () => {
     expect(markSent).toHaveBeenCalledWith("verdict:2026-06:2026-06-01", "999.88", expect.any(String));
   });
 
+  it("returns \"\" — never the edit's target ts — when an edit loses to a stuck pending row", async () => {
+    // decideReserve surfaces existingTs: null for a pending blocker; the target
+    // ts (args.ts) must not paper over it, or a skipped edit looks successful.
+    reserveSend.mockResolvedValue({ won: false, existingTs: null });
+    const rawSend = vi.fn();
+    const ts = await sendTracked(
+      { ...baseArgs, kind: "edit" as const, ts: "111.22" },
+      rawSend,
+    );
+    expect(ts).toBe("");
+    expect(rawSend).not.toHaveBeenCalled();
+  });
+
   it("marks failed and rethrows when the send throws", async () => {
     reserveSend.mockResolvedValue({ won: true, existingTs: null });
     const rawSend = vi.fn().mockRejectedValue(new Error("boom"));

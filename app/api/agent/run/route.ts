@@ -95,7 +95,13 @@ export async function POST(req: Request): Promise<Response> {
     // back to its source (attached to the proposal deterministically, not by
     // the model). Pure string build — works even when the context fetch failed.
     const sourceUrl = body.threadTs ? permalinkFor(body.channelId, body.threadTs) : undefined;
-    const result = await runSlackTurn(question, history, { sourceUrl });
+    // channelId + threadTs ride along so a thread-scoped write (sprint_plan_build)
+    // can target the thread's anchor deterministically.
+    const result = await runSlackTurn(question, history, {
+      sourceUrl,
+      channelId: body.channelId,
+      threadTs: body.threadTs,
+    });
     if (result.kind === "proposal" && result.proposal) {
       await deliver(result.proposal.echoUk);
       await insertPending({

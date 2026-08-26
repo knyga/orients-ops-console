@@ -48,7 +48,11 @@ export async function sendTracked(
     reservedAt,
   });
 
-  if (!won) return existingTs ?? args.ts ?? "";
+  // A lost reservation returns the ts of the message KNOWN to carry this
+  // content (a sent/skipped row), or "" when nothing does (a stuck pending
+  // row) — never args.ts, which for edits is the target ts and would mask a
+  // skipped edit as a success.
+  if (!won) return existingTs ?? "";
 
   try {
     const ts = await rawSend();

@@ -15,6 +15,7 @@ import { toAnthropicTools, findTool } from "./tools/registry";
 import { jiraTools } from "./tools/jira";
 import { fieldLossTools } from "./tools/fieldLoss";
 import { calendarTools } from "./tools/calendar";
+import { sprintTools } from "./tools/sprint";
 
 const MODEL = "claude-sonnet-5";
 const MAX_ITERS = 8;
@@ -41,6 +42,7 @@ const systemPrompt = (nowMs: number) => [
   "«Створи задачу … на наступний спринт» — це ОДНА дія: jira_create з addToNextSprint=true (одне підтвердження покриває і створення, і спринт). Не розбивай на два кроки і не обіцяй «після створення додам».",
   "Ніколи не пиши «Підтвердити? (так/ні)» звичайним текстом: підтвердження існує лише коли інструмент запису повернув пропозицію. Якщо користувач уточнив або змінив запит (виконавця, опис, посилання) — одразу виклич інструмент запису знову з оновленими полями; не переказуй план власним текстом і не проси підтвердження без виклику інструмента. Якщо інструмент повернув помилку — поясни її і не імітуй підтвердження.",
   "«Постав/створи зустріч» — це calendar_create_event: перетвори відносну дату в конкретний Europe/Kyiv ISO (напр. 2026-07-08T15:00); без явної тривалості бери 30 хв; учасники — імена з реєстру або email. Це теж запис із підтвердженням.",
+  "«Склади план спринту» у треді із заглушкою — це sprint_plan_build (запис із підтвердженням).",
 ].join("\n");
 
 export type AnthropicLike = {
@@ -61,6 +63,10 @@ export interface RunAgentOptions {
   /** Permalink of the Slack thread this turn came from — attached to write
    *  proposals deterministically (e.g. linked in a created ticket). */
   sourceUrl?: string;
+  /** Slack channel + thread anchor the turn came from — conversation-level facts
+   *  a thread-scoped write (sprint_plan_build) needs; the model never relays them. */
+  channelId?: string;
+  threadTs?: string;
 }
 
 interface ToolUseBlock { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
@@ -94,7 +100,7 @@ function toolUsesOf(content: unknown[]): ToolUseBlock[] {
 }
 
 export async function runAgent(userText: string, opts: RunAgentOptions = {}): Promise<AgentResult> {
-  const tools = opts.tools ?? [...jiraTools, ...fieldLossTools, ...calendarTools];
+  const tools = opts.tools ?? [...jiraTools, ...fieldLossTools, ...calendarTools, ...sprintTools];
   const client = (opts.client ?? new Anthropic()) as AnthropicLike;
   const maxIters = opts.maxIters ?? MAX_ITERS;
   const now = opts.now ?? (() => Date.now());
@@ -128,7 +134,11 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
     if (write) {
       const tool = findTool(tools, write.name)!;
       try {
-        const proposal = await tool.propose!(write.input, { sourceUrl: opts.sourceUrl });
+        const proposal = await tool.propose!(write.input, {
+          sourceUrl: opts.sourceUrl,
+          channelId: opts.channelId,
+          threadTs: opts.threadTs,
+        });
         return { kind: "proposal", text: proposal.echoUk, proposal };
       } catch (err) {
         // A propose failure (e.g. an unresolvable person) must not kill the

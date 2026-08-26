@@ -5,7 +5,7 @@
  */
 import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db";
-import { decideReserve, type OutboundStatus } from "./outboundKeys";
+import { decideReserve, detectOrigin, type OutboundStatus } from "./outboundKeys";
 import type { Period } from "./period";
 
 export type OutboundRow = typeof schema.outboundMessages.$inferSelect;
@@ -89,6 +89,60 @@ export async function reserveSend(
   }
 
   return decision;
+}
+
+/**
+ * Every outbound row sharing this Slack ts — the original "post" plus any later
+ * "edit"/claim rows (each records its own row, same ts, its own key). The sprint
+ * fill-in's safety guard (lib/proposalExecutor `sprint_plan_build`) inspects the
+ * full set: a `sprint-plan-pending:` row proves the target is OUR fallback
+ * anchor, and a `sprint-plan-filled:` row reveals a fill that already happened
+ * (its slug decides retry-vs-refuse).
+ */
+export async function findSentByTs(ts: string): Promise<OutboundRow[]> {
+  return db.select().from(schema.outboundMessages).where(eq(schema.outboundMessages.ts, ts));
+}
+
+/**
+ * Reserve `key` as already SATISFIED by an existing message — no send happens.
+ * The sprint fill-in EDITS the pending fallback anchor into the real Committed
+ * post, so the committed anchor's key (`sprintAnchorKey`) is never reserved by
+ * an actual send; without this claim the next cron re-fire (same sprint still
+ * active) would win that reservation and post a DUPLICATE anchor whose thread
+ * replies all dedup-skip into the original thread — an orphan anchor with
+ * nothing under it. ON CONFLICT DO NOTHING keeps it idempotent and means a real
+ * send's row is never clobbered. Returns whether THIS call claimed the key.
+ */
+export async function claimSentKey(
+  key: string,
+  ts: string,
+  meta: { feature: string; kind: string; channel: string; channelId: string; text: string; trigger: string },
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  const inserted = await db
+    .insert(schema.outboundMessages)
+    .values({
+      key,
+      feature: meta.feature,
+      kind: meta.kind,
+      channel: meta.channel,
+      channelId: meta.channelId,
+      text: meta.text,
+      threadTs: null,
+      ts,
+      status: "sent",
+      origin: detectOrigin(),
+      trigger: meta.trigger,
+      error: null,
+      // No send was attempted under THIS key — it points at a message that
+      // already exists (sent under a different key).
+      attempts: 0,
+      reservedAt: now,
+      sentAt: now,
+    })
+    .onConflictDoNothing()
+    .returning({ key: schema.outboundMessages.key });
+  return inserted.length > 0;
 }
 
 export async function markSent(key: string, ts: string, sentAt: string): Promise<void> {

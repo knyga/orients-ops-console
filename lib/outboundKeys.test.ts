@@ -14,6 +14,9 @@ import {
   investorKey,
   rosterAckKey,
   rosterEditKey,
+  sprintAnchorKey,
+  sprintPlanFilledKey,
+  sprintPlanPendingKey,
   verdictKey,
   webhookFailureKey,
 } from "./outboundKeys";
@@ -89,6 +92,14 @@ describe("decideReserve", () => {
       existingTs: null,
     });
   });
+  it("loses to a stuck pending EDIT row with NO ts — the edit never landed", () => {
+    // An edit's reservation row carries the target ts up-front; surfacing it
+    // would let a skipped edit masquerade as a message carrying the content.
+    expect(decideReserve(null, { status: "pending", ts: "5.5" })).toEqual({
+      won: false,
+      existingTs: null,
+    });
+  });
   it("loses to an existing skipped row and returns its ts", () => {
     expect(decideReserve(null, { status: "skipped", ts: "7.7" })).toEqual({
       won: false,
@@ -113,5 +124,34 @@ describe("roster outbound keys", () => {
 describe("investorKey", () => {
   it("namespaces the send by the explicit week key", () => {
     expect(investorKey("2026-07-20_2026-07-26")).toBe("investor:2026-07-20_2026-07-26");
+  });
+});
+
+describe("sprint-plan fallback keys", () => {
+  it("keys the pending anchor by channel + the run's Kyiv day", () => {
+    expect(sprintPlanPendingKey("2026-08-25", "general")).toBe(
+      "sprint-plan-pending:general:2026-08-25",
+    );
+  });
+  it("keys the fill-in edit by channel + sprint slug, slug last (the guard parses it)", () => {
+    expect(sprintPlanFilledKey("ATP-49", "general")).toBe("sprint-plan-filled:general:ATP-49");
+    expect(sprintPlanFilledKey("ATP-49", "general").split(":").pop()).toBe("ATP-49");
+  });
+  it("is channel-scoped: a test-channel send never suppresses the #general one", () => {
+    expect(sprintPlanPendingKey("2026-08-25", "general")).not.toBe(
+      sprintPlanPendingKey("2026-08-25", "bot-test"),
+    );
+    expect(sprintPlanFilledKey("ATP-49", "general")).not.toBe(
+      sprintPlanFilledKey("ATP-49", "bot-test"),
+    );
+  });
+  it("never collides with the committed anchor's post reservation", () => {
+    // The fill-in EDIT must not be skipped by a reservation held under the
+    // committed post's key (same reasoning as backfillEditKey).
+    const filled = sprintPlanFilledKey("ATP-49", "general");
+    const anchor = sprintAnchorKey("committed", "ATP-49", "general");
+    expect(filled).not.toBe(anchor);
+    expect(filled.startsWith("sprint-committed")).toBe(false);
+    expect(anchor.startsWith("sprint-plan")).toBe(false);
   });
 });
