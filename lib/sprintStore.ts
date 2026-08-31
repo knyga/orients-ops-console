@@ -11,7 +11,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db, schema } from "./db";
 import type { PublishedPlan } from "./sprintPublish";
-import type { CompletionResult, SprintSnapshot } from "./sprintReport";
+import type { CompletionResult, ScopeChanges, SprintSnapshot } from "./sprintReport";
 
 const FEATURE = "sprint";
 
@@ -22,6 +22,8 @@ export interface SprintRecord {
     computedAt: string;
     /** Legacy rows (pre-v2) may hold the old result shape (`byAssignee`, no `assignees`). */
     result: CompletionResult;
+    /** Added/removed/unplanned vs the frozen plan; absent on legacy rows and when the fetch soft-failed. */
+    scope?: ScopeChanges;
   };
   /**
    * Slack publications frozen at their first publish attempt, per (kind, channel).

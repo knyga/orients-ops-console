@@ -7,6 +7,7 @@ const {
   listSprints,
   fetchSprintIssues,
   fetchIssuesByKeys,
+  fetchResolvedIssues,
   readSprint,
   writeSprint,
 } = vi.hoisted(() => ({
@@ -16,6 +17,7 @@ const {
   listSprints: vi.fn(),
   fetchSprintIssues: vi.fn(),
   fetchIssuesByKeys: vi.fn(),
+  fetchResolvedIssues: vi.fn(),
   readSprint: vi.fn(),
   writeSprint: vi.fn(),
 }));
@@ -25,6 +27,7 @@ vi.mock("./jira", () => ({
   listSprints,
   fetchSprintIssues,
   fetchIssuesByKeys,
+  fetchResolvedIssues,
   boardIdFromEnv: () => 1,
 }));
 vi.mock("./sprintStore", () => ({ readSprint, writeSprint }));
@@ -204,6 +207,65 @@ describe("runSprintReport publishing", () => {
     const result = await runSprintReport({ publish: true, channelName: "general" });
     expect(result.status).toBe("no-baseline");
     expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("runSprintReport scope changes", () => {
+  const DATES = {
+    startDate: "2026-08-25T06:00:00.000Z",
+    endDate: "2026-08-31T18:00:00.000Z",
+  };
+  const frozen = manyIssues(10);
+  const hotfix = { key: "ATP-500", summary: "Hotfix", assignee: null, storyPoints: null, histories: [] };
+
+  beforeEach(() => {
+    readSprint.mockResolvedValue({ committed: snapshot(frozen) });
+    fetchIssuesByKeys.mockResolvedValue(frozen);
+    fetchResolvedIssues.mockResolvedValue([hotfix]);
+  });
+
+  it("reports added/removed/unplanned for an OPEN sprint", async () => {
+    listSprints.mockResolvedValue([{ ...SPRINT, ...DATES }]);
+    // Live membership: ATP-10 left the sprint, ATP-99 joined and is done.
+    fetchSprintIssues.mockResolvedValue([
+      ...frozen.slice(0, 9),
+      { ...frozen[0], key: "ATP-99", statusName: "Done", statusCategory: "Done" },
+    ]);
+
+    const result = await runSprintReport({ publish: false });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.anchor).toContain("➕ Додано після коміту: 1 (виконано 1)");
+    expect(result.anchor).toContain("➖ Знято зі спринту: 1");
+    expect(result.anchor).toContain("🔧 Виконано поза спринтом: 1");
+    expect(result.details.join("\n")).toContain("• ATP-500 — Hotfix");
+    // The scope diff is persisted alongside the completion result.
+    expect(writeSprint.mock.calls.at(-1)?.[1].completed.scope.removed[0].key).toBe("ATP-10");
+  });
+
+  it("keeps only the unplanned axis for a CLOSED sprint (membership diff would lie)", async () => {
+    listSprints.mockImplementation(async (_board: number, state: string) =>
+      state === "closed" ? [{ ...SPRINT, ...DATES, state: "closed", completeDate: DATES.endDate }] : [],
+    );
+
+    const result = await runSprintReport({ publish: false, sprintId: SPRINT.id });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(fetchSprintIssues).not.toHaveBeenCalled();
+    expect(result.anchor).not.toContain("➕");
+    expect(result.anchor).not.toContain("➖");
+    expect(result.anchor).toContain("🔧 Виконано поза спринтом: 1");
+  });
+
+  it("still posts when the scope stage fails (soft-fail)", async () => {
+    listSprints.mockResolvedValue([{ ...SPRINT, ...DATES }]);
+    fetchSprintIssues.mockRejectedValue(new Error("jira down"));
+
+    const result = await runSprintReport({ publish: false });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.anchor).toContain("виконано");
+    expect(result.anchor).not.toContain("🔧");
   });
 });
 

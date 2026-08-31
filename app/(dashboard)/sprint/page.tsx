@@ -44,9 +44,16 @@ interface CompletionResult {
   byAssignee?: AssigneeGroup[];
   stuck: StuckIssue[];
 }
+interface ScopeIssue { key: string; summary: string; displayName: string; statusName: string }
+interface ScopeChanges {
+  added: ScopeIssue[];
+  addedDone: number;
+  removed: ScopeIssue[];
+  unplanned: ScopeIssue[];
+}
 interface SprintRecord {
   committed: Snapshot;
-  completed?: { computedAt: string; result: CompletionResult };
+  completed?: { computedAt: string; result: CompletionResult; scope?: ScopeChanges };
 }
 
 const UNASSIGNED = "Не призначено";
@@ -67,6 +74,38 @@ function groupCommitted(issues: Issue[]): AssigneeGroup[] {
     if (b.accountId === null) return -1;
     return a.displayName.localeCompare(b.displayName);
   });
+}
+
+/** Issues of one scope group, grouped per assignee (server pre-sorts by owner). */
+function ScopeGroup({ title, issues }: { title: string; issues: ScopeIssue[] }) {
+  if (issues.length === 0) return null;
+  const byOwner: { owner: string; issues: ScopeIssue[] }[] = [];
+  for (const i of issues) {
+    const last = byOwner[byOwner.length - 1];
+    if (last && last.owner === i.displayName) last.issues.push(i);
+    else byOwner.push({ owner: i.displayName, issues: [i] });
+  }
+  return (
+    <div className="rounded-md border border-slate-200 p-3">
+      <div className="mb-1 text-sm font-semibold text-slate-700">{title}</div>
+      {byOwner.map((g) => (
+        <div key={g.owner} className="mb-1">
+          <div className="text-sm font-medium">{g.owner}</div>
+          <ul className="space-y-0.5 text-sm">
+            {g.issues.map((i) => (
+              <li key={i.key} className="flex items-baseline gap-2">
+                {i.statusName && (
+                  <span className="rounded bg-slate-100 px-1 text-xs text-slate-600">{i.statusName}</span>
+                )}
+                <span className="font-mono text-xs">{i.key}</span>
+                <span>{i.summary}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function SprintPage() {
@@ -162,6 +201,21 @@ export default function SprintPage() {
               </ul>
             </section>
           )}
+
+          {record.completed?.scope &&
+            (record.completed.scope.added.length > 0 ||
+              record.completed.scope.removed.length > 0 ||
+              record.completed.scope.unplanned.length > 0) && (
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-700">Зміни обсягу (вся реальна робота)</h3>
+                <ScopeGroup
+                  title={`➕ Додано після коміту (виконано ${record.completed.scope.addedDone}/${record.completed.scope.added.length})`}
+                  issues={record.completed.scope.added}
+                />
+                <ScopeGroup title="➖ Знято зі спринту" issues={record.completed.scope.removed} />
+                <ScopeGroup title="🔧 Виконано поза спринтом" issues={record.completed.scope.unplanned} />
+              </section>
+            )}
 
           {completed?.assignees && (
             <section className="space-y-3">

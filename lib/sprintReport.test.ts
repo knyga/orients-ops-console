@@ -3,10 +3,12 @@ import {
   slugifySprint,
   isDone,
   computeCompletion,
+  computeScopeChanges,
   buildCommittedPost,
   buildCompletedPost,
   formatNoSprintAnchor,
   pluralizeSprints,
+  type ScopeChanges,
   type SprintIssue,
   type SprintSnapshot,
 } from "./sprintReport";
@@ -554,5 +556,95 @@ describe("formatNoSprintAnchor", () => {
     expect(text).toContain("згадайте мене");
     expect(text).toContain("у цьому треді");
     expect(text).toContain("оновлю це повідомлення");
+  });
+});
+
+describe("computeScopeChanges", () => {
+  const frozen = [
+    issue({ key: "ATP-1", assignee: A, statusName: "To Do", statusCategory: "To Do" }),
+    issue({ key: "ATP-2", assignee: B, statusName: "In Progress", statusCategory: "In Progress" }),
+  ];
+  // ATP-2 left the sprint; ATP-3/ATP-4 joined after the freeze.
+  const membership = [
+    issue({ key: "ATP-1", assignee: A }),
+    issue({ key: "ATP-3", assignee: B, statusName: "Done", statusCategory: "Done" }),
+    issue({ key: "ATP-4", statusName: "To Do", statusCategory: "To Do" }),
+  ];
+  // Live re-fetch of the frozen keys: ATP-2 moved to Review after removal.
+  const live = [
+    issue({ key: "ATP-1", assignee: A }),
+    issue({ key: "ATP-2", assignee: B, statusName: "Review", statusCategory: "In Progress" }),
+  ];
+  const resolvedOutside = [
+    { key: "ATP-9", summary: "Hotfix", assignee: A },
+    { key: "ATP-3", summary: "Already counted as added", assignee: B },
+    { key: "ATP-1", summary: "Frozen, never unplanned", assignee: A },
+  ];
+
+  it("splits added / removed / unplanned around the frozen baseline", () => {
+    const scope = computeScopeChanges(frozen, live, membership, resolvedOutside);
+    expect(scope.added.map((i) => i.key)).toEqual(["ATP-3", "ATP-4"]);
+    expect(scope.addedDone).toBe(1);
+    expect(scope.removed.map((i) => i.key)).toEqual(["ATP-2"]);
+    // Removed issue carries its LIVE status, not the frozen one.
+    expect(scope.removed[0].statusName).toBe("Review");
+    expect(scope.unplanned.map((i) => i.key)).toEqual(["ATP-9"]);
+    expect(scope.unplanned[0].displayName).toBe("Taras");
+  });
+
+  it("is all-empty when nothing changed", () => {
+    const scope = computeScopeChanges(frozen, frozen, frozen, []);
+    expect(scope.added).toEqual([]);
+    expect(scope.removed).toEqual([]);
+    expect(scope.unplanned).toEqual([]);
+  });
+});
+
+describe("buildCompletedPost with scope changes", () => {
+  const frozen = [
+    issue({ key: "ATP-1", assignee: A, statusName: "Done", statusCategory: "Done" }),
+    issue({ key: "ATP-2", assignee: B }),
+  ];
+  const scope: ScopeChanges = {
+    added: [
+      { key: "ATP-3", summary: "Late add done", displayName: "Vlad", statusName: "Done" },
+      { key: "ATP-4", summary: "Late add open", displayName: "Не призначено", statusName: "To Do" },
+    ],
+    addedDone: 1,
+    removed: [{ key: "ATP-2", summary: "Dropped", displayName: "Vlad", statusName: "Review" }],
+    unplanned: [{ key: "ATP-9", summary: "Hotfix", displayName: "Taras", statusName: "" }],
+  };
+
+  it("adds scope lines to the anchor, only for non-empty groups", () => {
+    const result = computeCompletion(frozen, frozen);
+    const post = buildCompletedPost("ATP 48", result, scope);
+    expect(post.anchor).toContain("➕ Додано після коміту: 2 (виконано 1)");
+    expect(post.anchor).toContain("➖ Знято зі спринту: 1");
+    expect(post.anchor).toContain("🔧 Виконано поза спринтом: 1");
+    const none = buildCompletedPost("ATP 48", result, {
+      added: [], addedDone: 0, removed: [], unplanned: [],
+    });
+    expect(none.anchor).not.toContain("➕");
+    expect(none.anchor).not.toContain("➖");
+    expect(none.anchor).not.toContain("🔧");
+  });
+
+  it("groups every scope thread block per assignee", () => {
+    const post = buildCompletedPost("ATP 48", computeCompletion(frozen, frozen), scope);
+    const text = post.details.join("\n");
+    expect(text).toContain("➕ Додано після коміту (виконано 1/2):");
+    expect(text).toMatch(/Vlad:\n {4}• Done - ATP-3 — Late add done/);
+    expect(text).toMatch(/Не призначено:\n {4}• To Do - ATP-4 — Late add open/);
+    expect(text).toMatch(/➖ Знято зі спринту:\n {2}Vlad:\n {4}• Review - ATP-2 — Dropped/);
+    expect(text).toMatch(/🔧 Виконано поза спринтом:\n {2}Taras:\n {4}• ATP-9 — Hotfix/);
+  });
+
+  it("renders identically to the scopeless post when scope is absent or empty", () => {
+    const result = computeCompletion(frozen, frozen);
+    const bare = buildCompletedPost("ATP 48", result);
+    const empty = buildCompletedPost("ATP 48", result, {
+      added: [], addedDone: 0, removed: [], unplanned: [],
+    });
+    expect(empty).toEqual(bare);
   });
 });

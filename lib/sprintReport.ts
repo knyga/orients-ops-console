@@ -245,6 +245,83 @@ export function computeCompletion(frozen: SprintIssue[], live: SprintIssue[]): C
   return { committed, completed, rate, assignees, stuck };
 }
 
+/** An issue in a scope-change group, with its owner resolved to a display name. */
+export interface ScopeIssue {
+  key: string;
+  summary: string;
+  displayName: string;
+  /** Live status name; "" when unknown (unplanned issues are done by definition). */
+  statusName: string;
+}
+
+/**
+ * How the sprint's REAL scope diverged from the frozen plan (2026-09-01,
+ * «щоб бачити всю реальну роботу»). Purely additive visibility: the headline
+ * completion rate keeps the frozen denominator — a removed issue is still a
+ * planning miss, an added one never inflates the rate.
+ */
+export interface ScopeChanges {
+  /** In the sprint now but not in the frozen baseline. */
+  added: ScopeIssue[];
+  /** How many of `added` are already in the Done status category. */
+  addedDone: number;
+  /** Frozen issues no longer in the sprint (dragged back to backlog mid-week). */
+  removed: ScopeIssue[];
+  /** Resolved during the sprint window without ever entering the sprint. */
+  unplanned: ScopeIssue[];
+}
+
+const scopeIssue = (i: SprintIssue): ScopeIssue => ({
+  key: i.key,
+  summary: i.summary,
+  displayName: assigneeName(i),
+  statusName: i.statusName,
+});
+
+const byOwnerThenKey = (a: ScopeIssue, b: ScopeIssue): number =>
+  a.displayName.localeCompare(b.displayName) || a.key.localeCompare(b.key);
+
+/**
+ * Diff the sprint's live membership + the window's resolved issues against the
+ * frozen baseline. `live` is the frozen keys re-fetched (the same input
+ * computeCompletion gets), so a removed issue reports its CURRENT status.
+ * `resolvedOutside` may overlap the sprint sets — anything frozen or added is
+ * dropped, the remainder is the unplanned work.
+ */
+export function computeScopeChanges(
+  frozen: SprintIssue[],
+  live: SprintIssue[],
+  membership: SprintIssue[],
+  resolvedOutside: { key: string; summary: string; assignee: SprintIssue["assignee"] }[],
+): ScopeChanges {
+  const frozenKeys = new Set(frozen.map((i) => i.key));
+  const membershipKeys = new Set(membership.map((i) => i.key));
+  const liveByKey = new Map(live.map((i) => [i.key, i]));
+
+  const added = membership.filter((i) => !frozenKeys.has(i.key)).map(scopeIssue).sort(byOwnerThenKey);
+  const removed = frozen
+    .filter((i) => !membershipKeys.has(i.key))
+    .map((i) => scopeIssue(liveByKey.get(i.key) ?? i))
+    .sort(byOwnerThenKey);
+  const seen = new Set<string>();
+  const unplanned = resolvedOutside
+    .filter((i) => {
+      if (frozenKeys.has(i.key) || membershipKeys.has(i.key) || seen.has(i.key)) return false;
+      seen.add(i.key);
+      return true;
+    })
+    .map((i) => ({
+      key: i.key,
+      summary: i.summary,
+      displayName: i.assignee?.displayName ?? UNASSIGNED_LABEL,
+      statusName: "",
+    }))
+    .sort(byOwnerThenKey);
+
+  const doneAdded = membership.filter((i) => !frozenKeys.has(i.key) && isDone(i.statusCategory)).length;
+  return { added, addedDone: doneAdded, removed, unplanned };
+}
+
 /** One logical section of the thread detail: a header plus its item lines. */
 interface DetailBlock {
   header: string;
@@ -423,9 +500,24 @@ export function buildCommittedPost(
  * the full stuck list. Bucket headers are English Jira status names verbatim;
  * the rest Ukrainian.
  */
+/** A scope group as one thread block: issues grouped per assignee. */
+function scopeBlock(header: string, issues: ScopeIssue[]): DetailBlock {
+  const lines: string[] = [];
+  let owner: string | null = null;
+  for (const i of issues) {
+    if (i.displayName !== owner) {
+      owner = i.displayName;
+      lines.push(`  ${owner}:`);
+    }
+    lines.push(`    • ${i.statusName ? `${i.statusName} - ` : ""}${i.key} — ${i.summary}`);
+  }
+  return { header, contHeader: `${header.replace(/:$/, "")} _(продовження)_:`, lines };
+}
+
 export function buildCompletedPost(
   sprintName: string,
   result: CompletionResult,
+  scope?: ScopeChanges,
   maxBytes: number = SLACK_MSG_MAX_BYTES,
 ): SprintPost {
   const blocks: DetailBlock[] = [];
@@ -447,6 +539,22 @@ export function buildCompletedPost(
     blocks.push({ header, contHeader: `${header} _(продовження)_`, lines });
   }
 
+  const scopeAnchorLines: string[] = [];
+  if (scope) {
+    if (scope.added.length > 0) {
+      scopeAnchorLines.push(`➕ Додано після коміту: ${scope.added.length} (виконано ${scope.addedDone})`);
+      blocks.push(scopeBlock(`➕ Додано після коміту (виконано ${scope.addedDone}/${scope.added.length}):`, scope.added));
+    }
+    if (scope.removed.length > 0) {
+      scopeAnchorLines.push(`➖ Знято зі спринту: ${scope.removed.length}`);
+      blocks.push(scopeBlock("➖ Знято зі спринту:", scope.removed));
+    }
+    if (scope.unplanned.length > 0) {
+      scopeAnchorLines.push(`🔧 Виконано поза спринтом: ${scope.unplanned.length}`);
+      blocks.push(scopeBlock("🔧 Виконано поза спринтом:", scope.unplanned));
+    }
+  }
+
   if (result.stuck.length > 0) {
     blocks.push({
       header: "⚠️ Зависли (кілька спринтів):",
@@ -463,10 +571,14 @@ export function buildCompletedPost(
   ];
   if (result.completed === 0) head.push("", "_Жодної задачі не завершено._");
 
+  const tail: string[] = [];
+  if (scopeAnchorLines.length > 0) tail.push("", ...scopeAnchorLines);
+  if (result.stuck.length > 0) tail.push("", `⚠️ Зависли (кілька спринтів): ${result.stuck.length}`);
+
   return assemblePost(
     head,
     result.assignees.map((a) => `• ${assigneeLabel(a)} — ${a.done}/${a.committed} (${a.rate}%)`),
-    result.stuck.length > 0 ? ["", `⚠️ Зависли (кілька спринтів): ${result.stuck.length}`] : [],
+    tail,
     THREAD_HINT_COMPLETED,
     ROSTER_HEADER_COMPLETED,
     blocks,

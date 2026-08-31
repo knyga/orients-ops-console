@@ -273,6 +273,10 @@ export interface Sprint {
   id: number;
   name: string;
   state: string;
+  /** ISO timestamps from Jira; absent on sprints never started/planned. */
+  startDate?: string;
+  endDate?: string;
+  completeDate?: string;
 }
 
 export async function listSprints(
@@ -298,7 +302,15 @@ export async function listSprints(
     }
     const page = (await res.json()) as { isLast?: boolean; values?: Sprint[] };
     const values = page.values ?? [];
-    for (const s of values) sprints.push({ id: s.id, name: s.name, state: s.state });
+    for (const s of values)
+      sprints.push({
+        id: s.id,
+        name: s.name,
+        state: s.state,
+        startDate: s.startDate,
+        endDate: s.endDate,
+        completeDate: s.completeDate,
+      });
     isLast = page.isLast !== false;
     startAt += values.length;
   }

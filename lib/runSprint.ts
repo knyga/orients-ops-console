@@ -14,7 +14,14 @@
  * DRY-RUN aware: with `publish:false` it computes everything and returns the exact
  * anchor + thread texts without posting.
  */
-import { boardIdFromEnv, fetchIssuesByKeys, fetchSprintIssues, listSprints, type Sprint } from "./jira";
+import {
+  boardIdFromEnv,
+  fetchIssuesByKeys,
+  fetchResolvedIssues,
+  fetchSprintIssues,
+  listSprints,
+  type Sprint,
+} from "./jira";
 import { postMessage, updateMessage } from "./slack";
 import { claimSentKey } from "./outbound";
 import { TRACKED_CHANNELS } from "./slackChannels";
@@ -30,8 +37,10 @@ import {
   buildCommittedPost,
   buildCompletedPost,
   computeCompletion,
+  computeScopeChanges,
   formatNoSprintAnchor,
   slugifySprint,
+  type ScopeChanges,
   type SprintPost,
   type SprintSnapshot,
 } from "./sprintReport";
@@ -84,15 +93,17 @@ export type ReportResult =
       posted: boolean;
     };
 
-/** Resolve the sprint to act on: an explicit id (among active+future), else the
- *  single active sprint. Null when the board has no active sprint and no override. */
+/** Resolve the sprint to act on: an explicit id (any state — an operator override
+ *  must reach a sprint already closed in Jira, e.g. a late Completed report), else
+ *  the single active sprint. Null when the board has no active sprint and no override. */
 async function resolveSprint(boardId: number, sprintId?: number): Promise<Sprint | null> {
   if (sprintId !== undefined) {
-    const [active, future] = await Promise.all([
+    const [active, future, closed] = await Promise.all([
       listSprints(boardId, "active"),
       listSprints(boardId, "future"),
+      listSprints(boardId, "closed"),
     ]);
-    return [...active, ...future].find((s) => s.id === sprintId) ?? null;
+    return [...active, ...future, ...closed].find((s) => s.id === sprintId) ?? null;
   }
   const active = await listSprints(boardId, "active");
   return active[0] ?? null;
@@ -281,9 +292,14 @@ export async function fillSprintPlan(args: {
   return { slug: snapshot.slug, sprintName: snapshot.sprintName, count: snapshot.issues.length };
 }
 
+/** A moment's Kyiv calendar day (YYYY-MM-DD). */
+function kyivDay(at: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(at);
+}
+
 /** Today's Kyiv calendar day (YYYY-MM-DD) — keys the fallback anchor's dedup. */
 function kyivToday(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+  return kyivDay(new Date());
 }
 
 /** Tuesday job: freeze the active sprint's issue set + post the Committed list. */
@@ -297,7 +313,7 @@ export async function runSprintCommit(opts: RunSprintOptions): Promise<CommitRes
     // to prevent. Fail loudly instead.
     if (opts.sprintId !== undefined) {
       throw new Error(
-        `sprint: sprint id ${opts.sprintId} not found among active or future sprints on board ${boardId}.`,
+        `sprint: sprint id ${opts.sprintId} not found among the sprints on board ${boardId}.`,
       );
     }
     // FALLBACK: the cron fired inside the rollover gap (previous sprint closed,
@@ -374,14 +390,38 @@ export async function runSprintReport(opts: RunSprintOptions): Promise<ReportRes
   const live = await fetchIssuesByKeys(frozen.map((i) => i.key));
   const result = computeCompletion(frozen, live);
 
+  // Scope changes (added / removed / unplanned — «вся реальна робота») are pure
+  // visibility on top of the frozen metric; a Jira hiccup here must never block
+  // the Monday post, so the whole stage soft-fails to undefined.
+  //
+  // The added/removed diff needs the LIVE membership, which is only truthful
+  // while the sprint is open: completing a sprint strips the incomplete issues'
+  // association as they roll to the next one (observed on ATP 48: 31/45 frozen
+  // issues vanished from `sprint = 1454` after close — every one would read as
+  // «знято»). A closed sprint therefore keeps only the unplanned axis, passing
+  // the frozen set as membership so added/removed collapse to empty.
+  let scope: ScopeChanges | undefined;
+  try {
+    const isOpen = sprint.state === "active";
+    const windowStart = sprint.startDate ? kyivDay(new Date(sprint.startDate)) : undefined;
+    const windowEnd = kyivDay(new Date(sprint.completeDate ?? sprint.endDate ?? Date.now()));
+    const [membership, resolved] = await Promise.all([
+      isOpen ? fetchSprintIssues(sprint.id) : Promise.resolve(frozen),
+      windowStart ? fetchResolvedIssues(windowStart, windowEnd) : Promise.resolve([]),
+    ]);
+    scope = computeScopeChanges(frozen, live, membership, resolved);
+  } catch {
+    scope = undefined;
+  }
+
   const stored: SprintRecord = {
     committed: record.committed,
-    completed: { computedAt: new Date().toISOString(), result },
+    completed: { computedAt: new Date().toISOString(), result, scope },
     published: record.published,
   };
   await writeSprint(slug, stored);
 
-  let post = buildCompletedPost(sprint.name, result);
+  let post = buildCompletedPost(sprint.name, result, scope);
   let posted = false;
   if (opts.publish) {
     ({ post } = await publishPost(

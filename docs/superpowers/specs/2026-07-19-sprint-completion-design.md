@@ -242,3 +242,42 @@ pathologically long line produced a header-only message plus headerless fragment
 the packing tests asserted key PRESENCE (a duplicating implementation passed) with no
 orchestration coverage at all — now exact-count assertions plus `lib/runSprint.test.ts`
 covering thread_ts, key shape, plan replay, and the empty-ts failures.
+
+## Amendment (2026-09-01): scope changes — «вся реальна робота»
+
+The Completed report showed only the frozen plan's fate; work that entered or left the
+sprint after the Tuesday freeze — and work delivered entirely outside it — was invisible.
+The report now carries a purely additive **scope-changes** view; the headline completion
+rate keeps the frozen denominator (a removed issue is still a planning miss, an added one
+never inflates the rate).
+
+Three groups, computed at report time by the pure `computeScopeChanges` in
+`lib/sprintReport.ts`:
+
+- **Added** (`➕ Додано після коміту`): live sprint membership (`fetchSprintIssues`)
+  minus the frozen keys, with the count of already-done ones.
+- **Removed** (`➖ Знято зі спринту`): frozen keys absent from the live membership —
+  an issue dragged back to the backlog mid-week. Reports its LIVE status (from the
+  same by-keys re-fetch `computeCompletion` uses).
+- **Unplanned** (`🔧 Виконано поза спринтом`): issues resolved during the sprint's
+  Kyiv window (`fetchResolvedIssues` over the sprint's start/complete dates, now
+  mapped onto `Sprint`) that never touched the sprint (not frozen, not in membership).
+
+Rendering: one anchor line per non-empty group; one thread block per group with the
+issues grouped **per assignee**, placed before the stuck block. The diff is persisted
+as `SprintRecord.completed.scope` and rendered on the Sprint web tab («Зміни обсягу»).
+
+Two constraints discovered live on ATP 48:
+
+1. **The membership diff lies once the sprint is closed.** Completing a sprint strips
+   the incomplete issues' sprint association as they roll to the next sprint (31/45
+   frozen issues vanished from `sprint = 1454` after close — each would have read as
+   «знято»). Added/removed are therefore computed only while the sprint is still
+   `active` (the normal Monday-cron case); a closed sprint keeps only the unplanned
+   axis, passing the frozen set as membership so added/removed collapse to empty.
+2. **The whole scope stage is soft-fail**: any Jira error drops `scope` to undefined
+   and the Monday post still goes out — scope is visibility, never a gate.
+
+Relatedly, an explicit `--sprint <id>` override now also matches **closed** sprints
+(`resolveSprint`), so a late Completed report can be run after the board rolled over —
+that path is what surfaced constraint 1.
