@@ -11,7 +11,15 @@
  * the JIRA and Slack credentials, so a CLI-side identity check would be
  * theatre, not security.
  */
-import { approverFor } from "./approvers";
+import { approverFor, isApprover } from "./approvers";
+
+/**
+ * Who may drive (confirm/cancel/supersede) a pending proposal outside a DM:
+ * its requester, or any authorized approver. Everyone else is a bystander.
+ */
+export function canDriveProposal(proposedBy: string, userId: string): boolean {
+  return userId === proposedBy || isApprover(userId);
+}
 
 /** kind → the Ukrainian refusal a non-approver gets. */
 const APPROVER_GATED_KINDS = new Map<string, string>([

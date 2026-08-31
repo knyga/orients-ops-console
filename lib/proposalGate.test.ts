@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { gateProposalApply } from "./proposalGate";
+import { canDriveProposal, gateProposalApply } from "./proposalGate";
+
+describe("canDriveProposal", () => {
+  it("lets the requester drive their own proposal", () => {
+    expect(canDriveProposal("U_REQ", "U_REQ")).toBe(true);
+  });
+  it("lets an approver drive someone else's proposal", () => {
+    expect(canDriveProposal("U_REQ", "U08G4EC244X")).toBe(true);
+    expect(canDriveProposal("U_REQ", "U08G4HZQTTR")).toBe(true);
+  });
+  it("refuses a non-requester non-approver", () => {
+    expect(canDriveProposal("U_REQ", "U_OTHER")).toBe(false);
+  });
+});
 
 describe("gateProposalApply", () => {
   it("passes non-gated kinds for anyone", () => {

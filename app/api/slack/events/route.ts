@@ -25,8 +25,11 @@
  * inline in `handleAgentConversation` without deferring. Outside a DM the agent
  * is MENTION-ONLY (since 2026-07-07): a plain thread reply in a known agent
  * thread can only confirm/cancel a pending proposal, and only when it comes from
- * the original proposer (requester-gating) — any other plain reply is silently
- * ignored, and a new request needs an @mention.
+ * the original proposer or an authorized approver (driver-gating, widened from
+ * requester-only 2026-08-31) — any other plain reply is silently ignored, and a
+ * new request needs an @mention. An allowed user who @mentions the bot while a
+ * proposal they can't drive is pending gets a visible «⏳ чекаю…» notice
+ * instead of silence.
  *
  * The 200 response carries a small diagnostic body (handled / applied / error).
  * Slack only checks the 2xx status and ignores the body; it lets an operator
@@ -47,7 +50,7 @@ import { isAllowedSlackUser, AGENT_REFUSAL_UK } from "@/lib/agent/access";
 import { classifyDmReply } from "@/lib/agentDm";
 import { readPendingProposal, claimApply, setState } from "@/lib/agentProposals";
 import { applyProposal } from "@/lib/proposalExecutor";
-import { gateProposalApply } from "@/lib/proposalGate";
+import { canDriveProposal, gateProposalApply } from "@/lib/proposalGate";
 import { selfOrigin } from "@/lib/selfOrigin";
 import { contentRev, dmHelpKey, agentReplyKey, webhookFailureKey } from "@/lib/outboundKeys";
 import { parseSlackEvent, stripBotMention, hasLeadingMention, type SlackEventBody } from "@/lib/slackEventParse";
@@ -201,7 +204,8 @@ interface AgentTurnInput {
  */
 async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promise<Response> {
   // Mention-only outside DMs (2026-07-07): a plain, unmentioned reply in an agent
-  // thread can only CONFIRM or CANCEL a pending proposal by its requester — it can
+  // thread can only CONFIRM or CANCEL a pending proposal, and only from someone
+  // who can drive it — the requester or an approver (canDriveProposal) — it can
   // never start a new agent turn (new requests need an @mention; DMs are exempt).
   // Gated BEFORE the event claim and the allowlist refusal so an ignored bystander
   // message leaves no trace — no slack_events_seen row, no refusal post. The
@@ -210,7 +214,7 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
   if (inp.surface === "thread") {
     const pending = await readPendingProposal(inp.conversationKey);
     if (!pending) return ack({ handled: "agent", ignored: "mention-required" });
-    if (pending.proposedBy !== inp.userId) {
+    if (!canDriveProposal(pending.proposedBy, inp.userId)) {
       return ack({ handled: "agent", ignored: "not-requester", user: inp.userId });
     }
     if (classifyDmReply(inp.text.trim()) === "other") {
@@ -244,15 +248,30 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
   const q = inp.text.trim();
   const pending = await readPendingProposal(inp.conversationKey);
   if (pending) {
-    // Requester-gating: in a channel/thread, only the proposer drives the pending write.
-    if (inp.surface !== "dm" && pending.proposedBy !== inp.userId) {
-      return ack({ handled: "agent", ignored: "not-requester", user: inp.userId });
+    // Driver-gating (2026-08-31, was requester-only): in a channel/thread the
+    // pending write is driven by its requester OR any approver. An allowed user
+    // who can't drive it gets a visible waiting notice instead of silence —
+    // only the mention surface reaches here (thread-surface non-drivers are
+    // already ignored by the gate at the top of this function).
+    if (inp.surface !== "dm" && !canDriveProposal(pending.proposedBy, inp.userId)) {
+      try {
+        await postMessage(
+          inp.channelId,
+          `⏳ Є незавершена пропозиція від <@${pending.proposedBy}>. Підтвердити («так») чи скасувати («ні») може її автор або затверджувач; нове звернення в цьому треді — після вирішення.`,
+          { key: agentReplyKey(inp.userId, `${inp.incomingTs}:wait`), feature: "agent", channel: inp.surface, trigger: "webhook" },
+          inp.threadTs,
+        );
+      } catch (err) {
+        console.error("slack events: waiting-notice post failed:", err);
+      }
+      return ack({ handled: "agent", ignored: "not-authorized-for-pending", user: inp.userId });
     }
     const decision = classifyDmReply(q);
     if (decision === "confirm") {
-      // Money-affecting kinds apply only for authorized approvers; the gate also
-      // resolves the approver's display name as the write's `by`.
-      const gate = gateProposalApply(pending.kind, pending.proposedBy);
+      // Money-affecting kinds apply only for authorized approvers, resolved
+      // against the CONFIRMER (who may be an approver driving someone else's
+      // proposal); the gate also resolves their display name as the write's `by`.
+      const gate = gateProposalApply(pending.kind, inp.userId);
       if (!gate.ok) {
         await setState(pending.id, "CANCELLED");
         await postMessage(

@@ -76,3 +76,23 @@ confirm — unchanged.
 - Route header comment + branch comments updated.
 - CLAUDE.md Phase C.2 paragraphs updated (drop "plain thread follow-up starts a
   turn"; plain replies are confirm/cancel-only).
+
+## Amendment (2026-08-31): driver-gating replaces requester-gating
+
+Requester-only gating silently swallowed an approver's «@bot так» on another
+user's pending proposal (hit in #issue-log: Bohdan's `jira_create` proposal,
+Oleksandr's confirm ignored with no feedback). Fundamental fix:
+
+- **Who can drive a pending proposal outside a DM:** its requester OR any
+  `lib/approvers.ts` approver — `canDriveProposal(proposedBy, userId)` in
+  `lib/proposalGate.ts` (pure, tested). Applies to both the plain-thread-reply
+  confirm path and the mention path's pending-proposal state machine.
+- **No more silence for allowed users:** an allowed user whose @mention can't
+  drive the pending proposal gets an in-thread «⏳ Є незавершена пропозиція від
+  <@requester>…» notice (keyed `agent:<user>:<ts>:wait`) instead of a silent
+  ack (`ignored: "not-authorized-for-pending"`). Plain unmentioned bystander
+  replies stay silent (no bot noise on thread chatter).
+- **Apply-time approver gate evaluates the confirmer:** `gateProposalApply`
+  is called with the confirming user's id (was the requester's), so an approver
+  confirming someone else's money-affecting proposal passes the gate and their
+  own name is injected as `by`.

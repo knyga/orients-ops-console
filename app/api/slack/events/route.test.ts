@@ -647,9 +647,10 @@ describe("POST /api/slack/events — plain thread-reply agent branch + requester
     expect(global.fetch).toHaveBeenCalledTimes(1); // the deferred new turn
   });
 
-  it("thread reply by a non-requester is ignored while a proposal is pending", async () => {
+  it("thread reply by a non-requester NON-APPROVER is ignored while a proposal is pending", async () => {
     h.agentThreadExists.mockResolvedValue(true);
     h.readPendingProposal.mockResolvedValue(pending);
+    h.isApprover.mockReturnValue(false);
 
     const res = await POST(req(actionableEvent({ threadTs: "T1", user: "U2", text: "так", channel: "C1" })));
     expect(res.status).toBe(200);
@@ -659,6 +660,74 @@ describe("POST /api/slack/events — plain thread-reply agent branch + requester
     expect(h.claimApply).not.toHaveBeenCalled();
     expect(h.setState).not.toHaveBeenCalled();
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("thread reply 'так' by a non-requester APPROVER applies the pending proposal", async () => {
+    h.agentThreadExists.mockResolvedValue(true);
+    h.readPendingProposal.mockResolvedValue(pending);
+    h.isApprover.mockReturnValue(true);
+    h.classifyDmReply.mockReturnValue("confirm");
+    h.claimApply.mockResolvedValue(true);
+    h.applyProposal.mockResolvedValue("✅ Створено ATP-1: url");
+
+    const res = await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U_APPROVER", text: "так", channel: "C1", replyTs: "300.222" })),
+    );
+    expect(res.status).toBe(200);
+
+    expect(h.claimApply).toHaveBeenCalledWith("p1");
+    expect(h.applyProposal).toHaveBeenCalled();
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "C1",
+      "✅ Створено ATP-1: url",
+      expect.objectContaining({ key: "agent:U_APPROVER:300.222:apply" }),
+      "T1",
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("@mention by an allowed non-requester non-approver while a proposal is pending → waiting notice, proposal untouched", async () => {
+    h.readPendingProposal.mockResolvedValue(pending);
+    h.isApprover.mockReturnValue(false);
+
+    const res = await POST(
+      req(mentionEvent({ ts: "300.333", threadTs: "T1", user: "U2", channel: "C1", text: "<@U0BOT> так" })),
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ignored).toBe("not-authorized-for-pending");
+
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "C1",
+      expect.stringContaining("<@U1>"),
+      expect.objectContaining({ key: "agent:U2:300.333:wait" }),
+      "T1",
+    );
+    expect(h.claimApply).not.toHaveBeenCalled();
+    expect(h.setState).not.toHaveBeenCalled(); // stays PENDING
+    expect(global.fetch).not.toHaveBeenCalled(); // no new turn
+  });
+
+  it("confirm gates the approver-gated kind on the CONFIRMER, not the requester", async () => {
+    const gatedPending = { ...pending, kind: "field_loss_set" as const, proposedBy: "U_REQ" };
+    h.agentThreadExists.mockResolvedValue(true);
+    h.readPendingProposal.mockResolvedValue(gatedPending);
+    h.isApprover.mockReturnValue(true);
+    h.approverFor.mockImplementation((id: string) =>
+      id === "U_APPROVER" ? { userId: "U_APPROVER", name: "Oleksandr K", role: "CEO/CTO" } : undefined,
+    );
+    h.classifyDmReply.mockReturnValue("confirm");
+    h.claimApply.mockResolvedValue(true);
+    h.applyProposal.mockResolvedValue("✅ Записано");
+
+    const res = await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U_APPROVER", text: "так", channel: "C1", replyTs: "300.444" })),
+    );
+    expect(res.status).toBe(200);
+
+    // approverFor resolved against the confirmer's id → gate passes and `by` is theirs.
+    expect(h.approverFor).toHaveBeenCalledWith("U_APPROVER");
+    expect(h.applyProposal).toHaveBeenCalledWith("field_loss_set", expect.objectContaining({ by: "Oleksandr K" }));
   });
 
   it("skips the message sibling of an @mention in an agent thread", async () => {
