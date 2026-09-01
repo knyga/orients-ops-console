@@ -13,6 +13,7 @@
  */
 import { isAuthorizedCron } from "@/lib/cronAuth";
 import { runSprintReport } from "@/lib/runSprint";
+import { alertApprovers } from "@/lib/opsAlert";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,15 @@ export const maxDuration = 60;
 
 export async function GET(req: Request): Promise<Response> {
   if (!isAuthorizedCron(req)) return new Response("unauthorized", { status: 401 });
-  const result = await runSprintReport({ publish: true, channelName: "general", trigger: "cron" });
-  const ok = result.status === "ok";
-  return Response.json({ ok, ...result }, { status: 200 });
+  try {
+    const result = await runSprintReport({ publish: true, channelName: "general", trigger: "cron" });
+    const ok = result.status === "ok";
+    return Response.json({ ok, ...result }, { status: 200 });
+  } catch (error) {
+    // A hard failure (e.g. a dead Jira token) means no post AND no visible
+    // signal — DM the approvers instead of failing silently into the cron logs.
+    await alertApprovers(error, "cron-sprint-report", "cron");
+    const message = error instanceof Error ? error.message : String(error);
+    return Response.json({ ok: false, error: message }, { status: 500 });
+  }
 }

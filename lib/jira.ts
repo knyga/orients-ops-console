@@ -26,6 +26,24 @@ export class JiraError extends Error {
   }
 }
 
+/**
+ * Jira Cloud does NOT 401 a request with dead Basic-auth credentials — it
+ * silently degrades to ANONYMOUS access (200 + only anonymously-visible data,
+ * i.e. usually nothing) and flags the failure only in the X-Seraph-LoginReason
+ * response header. Bit us 2026-08-31: an expired token made every search
+ * return 0 issues and the agent confidently reported an empty month. Every
+ * Jira response must pass through this check, not just res.ok.
+ */
+function assertAuthenticated(res: Response): void {
+  const reason = res.headers.get("x-seraph-loginreason");
+  if (reason && reason.toUpperCase().includes("FAILED")) {
+    throw new JiraError(
+      `Jira authentication failed (X-Seraph-LoginReason: ${reason}) — the API token is invalid or expired; Jira served the request as ANONYMOUS.`,
+      401,
+    );
+  }
+}
+
 interface JiraConfig {
   baseUrl: string;
   email: string;
@@ -152,6 +170,7 @@ export async function fetchResolvedIssues(
       // Always hit Jira live; reporting must reflect current truth.
       cache: "no-store",
     });
+    assertAuthenticated(res);
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
@@ -213,6 +232,7 @@ async function jiraWrite(
     body: JSON.stringify(body),
     cache: "no-store",
   });
+  assertAuthenticated(res);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new JiraError(
@@ -293,6 +313,7 @@ export async function listSprints(
       headers: { Accept: API_VERSION, Authorization: authHeader(cfg) },
       cache: "no-store",
     });
+    assertAuthenticated(res);
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new JiraError(
@@ -410,6 +431,7 @@ async function fetchSprintScoped(jql: string): Promise<SprintIssue[]> {
       headers: { Accept: API_VERSION, Authorization: authHeader(cfg) },
       cache: "no-store",
     });
+    assertAuthenticated(res);
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new JiraError(
@@ -449,6 +471,7 @@ export async function searchIssues(jql: string, max = 20): Promise<SearchRow[]> 
     headers: { Accept: API_VERSION, Authorization: authHeader(cfg) },
     cache: "no-store",
   });
+  assertAuthenticated(res);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new JiraError(

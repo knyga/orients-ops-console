@@ -16,6 +16,7 @@ import { jiraTools } from "./tools/jira";
 import { fieldLossTools } from "./tools/fieldLoss";
 import { calendarTools } from "./tools/calendar";
 import { sprintTools } from "./tools/sprint";
+import { isAuthError, alertApprovers } from "../opsAlert";
 
 const MODEL = "claude-sonnet-5";
 const MAX_ITERS = 8;
@@ -145,6 +146,9 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
         // turn: feed it back as a tool_result so the model can recover or ask
         // the user, like the read-tool error path below. Every tool_use in the
         // response needs a result, so the skipped ones get a stub.
+        // A Jira 401/403 means the integration itself is broken (dead token) —
+        // the model can't recover from that, so alert the approvers too.
+        if (isAuthError(err)) await alertApprovers(err, "agent-tool");
         const message = err instanceof Error ? err.message : String(err);
         messages.push({ role: "assistant", content: resp.content });
         messages.push({
@@ -168,6 +172,7 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
         const r = tool?.run ? await tool.run(u.input) : { ok: false, content: `Unknown tool ${u.name}` };
         content = r.content;
       } catch (err) {
+        if (isAuthError(err)) await alertApprovers(err, "agent-tool");
         content = `Error: ${err instanceof Error ? err.message : String(err)}`;
       }
       results.push({ type: "tool_result", tool_use_id: u.id, content });

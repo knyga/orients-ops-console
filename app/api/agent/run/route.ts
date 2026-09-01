@@ -16,6 +16,7 @@ import { chunkForSlack } from "@/lib/slackChunk";
 import { agentReplyKey } from "@/lib/outboundKeys";
 import type { ProposalKind } from "@/lib/proposalExecutor";
 import { fetchThreadContext } from "@/lib/agent/threadContext";
+import { alertApprovers } from "@/lib/opsAlert";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,6 +123,10 @@ export async function POST(req: Request): Promise<Response> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("agent run failed:", err);
+    // The user only sees a generic «Сталася помилка» — the approvers need to
+    // know the bot is broken (e.g. a dead Jira token). Best-effort, deduped
+    // per error class per day inside alertApprovers.
+    await alertApprovers(err, "agent-run", "webhook");
     const uaError = /ANTHROPIC_API_KEY/.test(message)
       ? "Помилка: на сервері не налаштований ключ ANTHROPIC_API_KEY."
       : "Сталася помилка під час обробки запиту.";

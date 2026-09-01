@@ -7,6 +7,7 @@
  */
 import { isAuthorizedCron } from "@/lib/cronAuth";
 import { runDroneReminder } from "@/lib/droneReminder";
+import { alertApprovers } from "@/lib/opsAlert";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,8 @@ export async function GET(req: Request): Promise<Response> {
     const result = await runDroneReminder({ publish: true, trigger: "cron" });
     return Response.json({ ok: true, result });
   } catch (error) {
+    // A hard failure would otherwise only reach the cron logs — DM the approvers.
+    await alertApprovers(error, "cron-drone-reminder", "cron");
     const message = error instanceof Error ? error.message : String(error);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }

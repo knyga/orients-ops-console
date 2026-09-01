@@ -1,6 +1,23 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const opsAlertMocks = vi.hoisted(() => ({ alertApprovers: vi.fn(async () => {}) }));
+vi.mock("../opsAlert", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../opsAlert")>();
+  return { ...actual, alertApprovers: opsAlertMocks.alertApprovers };
+});
+
 import { runAgent } from "./loop";
 import type { Tool } from "./tools/types";
+
+class FakeJiraError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "JiraError";
+  }
+}
 
 // A fake Anthropic client scripted with a queue of responses.
 function fakeClient(responses: { stop_reason: string | null; content: unknown[] }[]) {
@@ -92,6 +109,58 @@ describe("runAgent", () => {
     const asString = JSON.stringify(secondBody.messages);
     expect(asString).toContain("tool_result");
     expect(asString).toContain("Unknown person");
+  });
+
+  describe("ops alerts on Jira auth failures", () => {
+    beforeEach(() => opsAlertMocks.alertApprovers.mockClear());
+
+    it("alerts the approvers when a read tool throws a Jira 401, and still feeds the error to the model", async () => {
+      const authFailingRead: Tool = {
+        ...readTool,
+        run: async () => {
+          throw new FakeJiraError("Jira search returned 401 Unauthorized", 401);
+        },
+      };
+      const client = fakeClient([
+        { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "demo_read", input: {} }] },
+        { stop_reason: "end_turn", content: [{ type: "text", text: "Не вдалося отримати дані з Jira." }] },
+      ]);
+      const res = await runAgent("що в джирі?", { client, tools: [authFailingRead] });
+      expect(res.kind).toBe("text");
+      expect(opsAlertMocks.alertApprovers).toHaveBeenCalledTimes(1);
+      const secondBody = client.messages.create.mock.calls[1][0] as { messages: unknown[] };
+      expect(JSON.stringify(secondBody.messages)).toContain("401");
+    });
+
+    it("alerts the approvers when a write propose throws a Jira 403", async () => {
+      const authFailingWrite: Tool = {
+        ...writeTool,
+        propose: async () => {
+          throw new FakeJiraError("forbidden", 403);
+        },
+      };
+      const client = fakeClient([
+        { stop_reason: "tool_use", content: [{ type: "tool_use", id: "w1", name: "demo_write", input: {} }] },
+        { stop_reason: "end_turn", content: [{ type: "text", text: "Помилка доступу до Jira." }] },
+      ]);
+      await runAgent("створи тікет", { client, tools: [authFailingWrite] });
+      expect(opsAlertMocks.alertApprovers).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT alert on a non-auth tool error", async () => {
+      const failingRead: Tool = {
+        ...readTool,
+        run: async () => {
+          throw new Error("boom");
+        },
+      };
+      const client = fakeClient([
+        { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "demo_read", input: {} }] },
+        { stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] },
+      ]);
+      await runAgent("q", { client, tools: [failingRead] });
+      expect(opsAlertMocks.alertApprovers).not.toHaveBeenCalled();
+    });
   });
 
   it("stops with an error text after exceeding maxIters", async () => {

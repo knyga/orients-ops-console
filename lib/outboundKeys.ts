@@ -113,6 +113,15 @@ export const sprintPlanPendingKey = (day: string, channel: string): string =>
 export const sprintPlanFilledKey = (slug: string, channel: string): string =>
   `sprint-plan-filled:${channel}:${slug}`;
 
+/**
+ * Ops-failure alert DM to one approver. Keyed per approver + Kyiv day + error
+ * class, so a broken integration (e.g. an expired Jira token failing every
+ * agent turn) alerts each approver once per day instead of per event, while a
+ * different error class the same day still alerts.
+ */
+export const opsAlertKey = (userId: string, day: string, errKey: string): string =>
+  `ops-alert:${userId}:${day}:${errKey}`;
+
 /** Weekly investor report post, keyed by the explicit Mon_Sun week key. */
 export const investorKey = (periodKey: string): string => `investor:${periodKey}`;
 

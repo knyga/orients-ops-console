@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { listSprints, createSprint, moveIssueToSprint, boardIdFromEnv, textToAdf } from "./jira";
+import { listSprints, createSprint, moveIssueToSprint, boardIdFromEnv, textToAdf, searchIssues, JiraError } from "./jira";
 
 const ENV = {
   JIRA_BASE_URL: "https://ex.atlassian.net",
@@ -99,6 +99,45 @@ describe("listSprints", () => {
   it("throws JiraError on a non-2xx response", async () => {
     mockFetch(403, { errorMessages: ["nope"] });
     await expect(listSprints(1, "active")).rejects.toThrow(/403/);
+  });
+});
+
+/**
+ * Jira Cloud does NOT 401 a search with a dead token — it falls back to
+ * ANONYMOUS access and returns 200 with only anonymously-visible issues
+ * (i.e. none), flagging the failure solely in the X-Seraph-LoginReason
+ * response header. Bit us 2026-08-31: an expired token made the agent
+ * confidently report «жодної задачі» for a month of real work. Every Jira
+ * response must therefore be checked for that header, not just res.ok.
+ */
+describe("anonymous-fallback detection (X-Seraph-LoginReason)", () => {
+  function mockAuthFailedFetch(json: unknown) {
+    return vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(json), {
+        status: 200,
+        headers: { "X-Seraph-LoginReason": "AUTHENTICATED_FAILED" },
+      }),
+    );
+  }
+
+  it("searchIssues throws JiraError 401 on a 200 that authenticated as anonymous", async () => {
+    mockAuthFailedFetch({ issues: [], isLast: true });
+    const err = await searchIssues("created >= 2026-08-01").catch((e) => e);
+    expect(err).toBeInstanceOf(JiraError);
+    expect((err as JiraError).status).toBe(401);
+    expect(String(err)).toMatch(/token/i);
+  });
+
+  it("listSprints throws JiraError 401 on a 200 that authenticated as anonymous", async () => {
+    mockAuthFailedFetch({ isLast: true, values: [] });
+    const err = await listSprints(1, "active").catch((e) => e);
+    expect(err).toBeInstanceOf(JiraError);
+    expect((err as JiraError).status).toBe(401);
+  });
+
+  it("a normal 200 without the header still works", async () => {
+    mockFetch(200, { issues: [], isLast: true });
+    await expect(searchIssues("created >= 2026-08-01")).resolves.toEqual([]);
   });
 });
 
