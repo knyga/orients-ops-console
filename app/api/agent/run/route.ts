@@ -116,7 +116,15 @@ export async function POST(req: Request): Promise<Response> {
       return Response.json({ ok: true, surface: body.surface, proposal: result.proposal.kind });
     }
     // The model writes GitHub markdown; Slack renders mrkdwn — convert at this boundary.
-    const answer = markdownToMrkdwn(result.text.trim()) || "Не маю відповіді на це.";
+    let answer = markdownToMrkdwn(result.text.trim()) || "Не маю відповіді на це.";
+    // A TEXT answer that reads like a confirmation ask is a hallucinated
+    // proposal — no PENDING row exists, so a «так» on it dies silently (bit us
+    // 2026-09-01 on ATP-1891). The prompt forbids it; prompts are not
+    // enforcement, so the surface stamps a deterministic warning on top.
+    if (/\(так\s*\/\s*ні\)|(продовжити|підтвердити|створити|додати)\s*\?\s*$/iu.test(answer)) {
+      answer +=
+        "\n\n⚠️ Це лише текст, не пропозиція: жодної дії не заплановано, «так» нічого не виконає. Згадайте мене із запитом ще раз.";
+    }
     await deliver(answer);
     await appendTurn(body.conversationKey, body.question, answer);
     return Response.json({ ok: true, surface: body.surface });

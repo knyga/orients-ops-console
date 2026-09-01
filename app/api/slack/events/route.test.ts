@@ -599,6 +599,49 @@ describe("POST /api/slack/events — plain thread-reply agent branch + requester
     expect(h.claimSlackEvent).not.toHaveBeenCalled();
   });
 
+  /**
+   * 2026-09-01 (ATP-1891): the model answered with TEXT that imitated a
+   * proposal («Продовжити? (так/ні)») — no PENDING row existed, so the user's
+   * «так» died in the silent mention-required branch and they thought the bot
+   * swallowed a real confirmation. A confirm/cancel word from an ALLOWED user
+   * with nothing pending must get a visible notice; bystanders stay silent.
+   */
+  it("thread 'так' from an allowed user with NO pending proposal → visible no-proposal notice", async () => {
+    h.agentThreadExists.mockResolvedValue(true);
+    h.readPendingProposal.mockResolvedValue(null);
+    h.classifyDmReply.mockReturnValue("confirm");
+
+    const res = await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U1", text: "так", channel: "C1", replyTs: "300.005" })),
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.noPending).toBe(true);
+
+    expect(h.claimSlackEvent).toHaveBeenCalled(); // deduped like any handled event
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "C1",
+      expect.stringContaining("Немає активної пропозиції"),
+      expect.objectContaining({ key: "agent:U1:300.005:no-pending" }),
+      "T1",
+    );
+    expect(global.fetch).not.toHaveBeenCalled(); // never starts a new turn
+  });
+
+  it("thread 'так' from a NON-allowed user with NO pending proposal stays silent", async () => {
+    h.agentThreadExists.mockResolvedValue(true);
+    h.readPendingProposal.mockResolvedValue(null);
+    h.classifyDmReply.mockReturnValue("confirm");
+    h.isAllowedSlackUser.mockReturnValue(false);
+
+    const res = await POST(
+      req(actionableEvent({ threadTs: "T1", user: "U9", text: "так", channel: "C1", replyTs: "300.006" })),
+    );
+    const json = await res.json();
+    expect(json.ignored).toBe("mention-required");
+    expect(h.postMessage).not.toHaveBeenCalled();
+  });
+
   it("plain thread reply that is not так/ні while a proposal is pending → ignored; proposal stays PENDING (no supersede)", async () => {
     h.agentThreadExists.mockResolvedValue(true);
     h.readPendingProposal.mockResolvedValue(pending);

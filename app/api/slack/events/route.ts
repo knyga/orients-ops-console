@@ -213,7 +213,33 @@ async function handleAgentConversation(req: Request, inp: AgentTurnInput): Promi
   // dm/mention flow (and its allowlist-before-state-machine order) untouched.
   if (inp.surface === "thread") {
     const pending = await readPendingProposal(inp.conversationKey);
-    if (!pending) return ack({ handled: "agent", ignored: "mention-required" });
+    if (!pending) {
+      // A «так»/«ні» from an ALLOWED user with nothing pending gets a visible
+      // notice — the model can answer with TEXT that imitates a proposal echo
+      // (never stored; bit us 2026-09-01 on ATP-1891), and the user's «так»
+      // would otherwise die in this silent branch looking like a swallowed
+      // confirmation. Everything else (bystanders included) stays traceless,
+      // per the mention-only rule.
+      const decision = classifyDmReply(inp.text.trim());
+      if ((decision === "confirm" || decision === "cancel") && isAllowedSlackUser(inp.userId)) {
+        if (inp.eventId) {
+          const fresh = await claimSlackEvent(inp.eventId, new Date().toISOString(), { eventType: "message" });
+          if (!fresh) return ack({ skipped: "duplicate-event", event_id: inp.eventId });
+        }
+        try {
+          await postMessage(
+            inp.channelId,
+            "⚠️ Немає активної пропозиції для підтвердження — попередній запит не створив дії. Згадайте мене (@) із запитом ще раз.",
+            { key: agentReplyKey(inp.userId, `${inp.incomingTs}:no-pending`), feature: "agent", channel: inp.surface, trigger: "webhook" },
+            inp.threadTs,
+          );
+        } catch (err) {
+          console.error("slack events: no-pending notice post failed:", err);
+        }
+        return ack({ handled: "agent", noPending: true });
+      }
+      return ack({ handled: "agent", ignored: "mention-required" });
+    }
     if (!canDriveProposal(pending.proposedBy, inp.userId)) {
       return ack({ handled: "agent", ignored: "not-requester", user: inp.userId });
     }

@@ -132,6 +132,34 @@ describe("POST /api/agent/run", () => {
     expect(h.updateMessage).toHaveBeenCalledWith("C-issue-log", "111.901", "echo", expect.anything());
   });
 
+  /**
+   * 2026-09-01 (ATP-1891): the model produced a TEXT answer imitating a
+   * proposal echo («Продовжити? (так/ні)») — nothing pending, so the user's
+   * «так» went nowhere. The prompt already forbids this; prompts are not
+   * enforcement. The surface appends a deterministic warning so a fake
+   * confirmation ask can never pass as a real one.
+   */
+  it("text answer imitating a confirmation ask gets the no-proposal warning appended", async () => {
+    h.runSlackTurn.mockResolvedValue({
+      kind: "text",
+      text: "📝 Переведу ATP-1891 у статус Done.\nПродовжити? (так/ні)",
+    });
+    const res = await POST(req(base));
+    expect(res.status).toBe(200);
+    const sent = h.updateMessage.mock.calls[0][2] as string;
+    expect(sent).toContain("⚠️");
+    expect(sent).toContain("не пропозиція");
+    expect(h.insertPending).not.toHaveBeenCalled();
+    expect(h.appendTurn).toHaveBeenCalledWith("C1", "q", sent); // memory sees the warning too
+  });
+
+  it("a plain text answer gets no warning", async () => {
+    h.runSlackTurn.mockResolvedValue({ kind: "text", text: "Задача ATP-1891 вже в Done." });
+    await POST(req(base));
+    const sent = h.updateMessage.mock.calls[0][2] as string;
+    expect(sent).not.toContain("⚠️");
+  });
+
   it("DM text is converted from markdown to Slack mrkdwn before posting", async () => {
     h.runSlackTurn.mockResolvedValue({
       kind: "text",
