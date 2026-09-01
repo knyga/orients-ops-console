@@ -22,3 +22,5 @@ docs/Personal Field Metrics */
 
 # Local Claude Code settings (per-machine; never commit)
 .claude/settings.local.json
+.vercel
+.env*
