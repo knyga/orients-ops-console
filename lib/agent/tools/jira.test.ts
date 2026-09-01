@@ -1,16 +1,26 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-const { searchIssues, createIssue, addComment, updateIssue, transitionIssue, listSprints, createSprint, moveIssueToSprint } =
-  vi.hoisted(() => ({
-    searchIssues: vi.fn(),
-    createIssue: vi.fn(),
-    addComment: vi.fn(),
-    updateIssue: vi.fn(),
-    transitionIssue: vi.fn(),
-    listSprints: vi.fn(),
-    createSprint: vi.fn(),
-    moveIssueToSprint: vi.fn(),
-  }));
+const {
+  searchIssues,
+  createIssue,
+  addComment,
+  updateIssue,
+  transitionIssue,
+  listTransitions,
+  listSprints,
+  createSprint,
+  moveIssueToSprint,
+} = vi.hoisted(() => ({
+  searchIssues: vi.fn(),
+  createIssue: vi.fn(),
+  addComment: vi.fn(),
+  updateIssue: vi.fn(),
+  transitionIssue: vi.fn(),
+  listTransitions: vi.fn(),
+  listSprints: vi.fn(),
+  createSprint: vi.fn(),
+  moveIssueToSprint: vi.fn(),
+}));
 
 vi.mock("@/lib/jira", () => ({
   searchIssues,
@@ -18,6 +28,7 @@ vi.mock("@/lib/jira", () => ({
   addComment,
   updateIssue,
   transitionIssue,
+  listTransitions,
   listSprints,
   createSprint,
   moveIssueToSprint,
@@ -180,6 +191,60 @@ describe("jira write tools", () => {
       expect(t.kind).toBe("write");
       expect(typeof t.propose).toBe("function");
     }
+  });
+});
+
+/**
+ * The model must NEVER supply a raw transition id — ids are per-workflow and
+ * the model guesses (bit us 2026-09-01: hallucinated id 31 for ATP-1891,
+ * Jira 400 "Transition id '31' is not valid for this issue"). The tool takes
+ * the TARGET STATUS NAME and resolves the id live from the issue's own
+ * transitions at propose time, erroring with the valid options on no match.
+ */
+describe("jira_transition tool", () => {
+  const propose = (args: Record<string, unknown>) => findTool(jiraTools, "jira_transition")!.propose!(args);
+  const TRANSITIONS = [
+    { id: "21", name: "In Progress", toStatus: "In Progress" },
+    { id: "41", name: "Done", toStatus: "Готово" },
+  ];
+
+  it("takes a status name (not an id) in its schema", () => {
+    const t = findTool(jiraTools, "jira_transition")!;
+    expect(t.inputSchema.required).toEqual(["key", "status"]);
+    expect((t.inputSchema.properties as Record<string, unknown>).transitionId).toBeUndefined();
+  });
+
+  it("resolves the target status to the issue's live transition id, case-insensitively", async () => {
+    listTransitions.mockResolvedValue(TRANSITIONS);
+    const p = await propose({ key: "ATP-1891", status: "done" });
+    expect(p.kind).toBe("jira_transition");
+    expect(p.params).toEqual({ key: "ATP-1891", transitionId: "41" });
+    expect(p.echoUk).toContain("ATP-1891");
+    expect(p.echoUk).toContain("Готово");
+    expect(listTransitions).toHaveBeenCalledWith("ATP-1891");
+  });
+
+  it("matches on the target status name too (localized workflows)", async () => {
+    listTransitions.mockResolvedValue(TRANSITIONS);
+    const p = await propose({ key: "ATP-1891", status: "готово" });
+    expect(p.params).toEqual({ key: "ATP-1891", transitionId: "41" });
+  });
+
+  it("throws with the valid targets when the status has no transition", async () => {
+    listTransitions.mockResolvedValue(TRANSITIONS);
+    const err = await propose({ key: "ATP-1891", status: "Closed" }).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(String(err)).toContain("Closed");
+    expect(String(err)).toContain("Готово");
+    expect(String(err)).toContain("In Progress");
+  });
+
+  it("apply() transitions with the resolved id", async () => {
+    listTransitions.mockResolvedValue(TRANSITIONS);
+    transitionIssue.mockResolvedValue(undefined);
+    const p = await propose({ key: "ATP-1891", status: "Done" });
+    await p.apply();
+    expect(transitionIssue).toHaveBeenCalledWith("ATP-1891", "41");
   });
 });
 

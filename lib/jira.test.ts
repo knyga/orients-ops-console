@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { listSprints, createSprint, moveIssueToSprint, boardIdFromEnv, textToAdf, searchIssues, JiraError } from "./jira";
+import {
+  listSprints,
+  createSprint,
+  moveIssueToSprint,
+  listTransitions,
+  boardIdFromEnv,
+  textToAdf,
+  searchIssues,
+  JiraError,
+} from "./jira";
 
 const ENV = {
   JIRA_BASE_URL: "https://ex.atlassian.net",
@@ -149,6 +158,40 @@ describe("createSprint", () => {
     expect(String(f.mock.calls[0][0])).toContain("/rest/agile/1.0/sprint");
     const body = JSON.parse(String(f.mock.calls[0][1]?.body));
     expect(body).toEqual({ name: "ATP 41", originBoardId: 1 });
+  });
+});
+
+describe("listTransitions", () => {
+  it("GETs the issue's transitions and maps id/name/toStatus", async () => {
+    const f = mockFetch(200, {
+      transitions: [
+        { id: "21", name: "In Progress", to: { name: "In Progress" } },
+        { id: "41", name: "Done", to: { name: "Готово" } },
+      ],
+    });
+    const out = await listTransitions("ATP-1891");
+    expect(out).toEqual([
+      { id: "21", name: "In Progress", toStatus: "In Progress" },
+      { id: "41", name: "Done", toStatus: "Готово" },
+    ]);
+    expect(String(f.mock.calls[0][0])).toContain("/rest/api/3/issue/ATP-1891/transitions");
+  });
+
+  it("throws JiraError on a non-2xx response", async () => {
+    mockFetch(404, { errorMessages: ["no issue"] });
+    await expect(listTransitions("ATP-0")).rejects.toThrow(/404/);
+  });
+
+  it("throws JiraError 401 on a 200 that authenticated as anonymous", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ transitions: [] }), {
+        status: 200,
+        headers: { "X-Seraph-LoginReason": "AUTHENTICATED_FAILED" },
+      }),
+    );
+    const err = await listTransitions("ATP-1").catch((e) => e);
+    expect(err).toBeInstanceOf(JiraError);
+    expect((err as JiraError).status).toBe(401);
   });
 });
 

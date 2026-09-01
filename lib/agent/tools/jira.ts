@@ -6,7 +6,7 @@
  *
  * Reachable only under server-only conditions (lib/jira.ts). Needs JIRA_* env.
  */
-import { searchIssues, listSprints, boardIdFromEnv } from "@/lib/jira";
+import { searchIssues, listSprints, listTransitions, boardIdFromEnv } from "@/lib/jira";
 import { routeIssue, routingConfigFromEnv, describeAssignee } from "@/lib/jiraRouting";
 import { personByQuery } from "@/lib/people";
 import { planNextSprint, latestNumberedSprint } from "@/lib/sprintPlan";
@@ -136,14 +136,31 @@ async function jiraCommentProposal(args: Record<string, unknown>): Promise<Propo
   };
 }
 
+/** Resolve a target STATUS NAME against the issue's live transitions. The
+ *  model must never supply a raw transition id — ids are per-workflow and get
+ *  hallucinated (2026-09-01: id 31 for ATP-1891 → Jira 400). Same house
+ *  pattern as resolveNextSprint: read live at propose time so the echo names
+ *  the real thing; no match errors loudly with the valid options, which the
+ *  loop feeds back so the model can retry with one of them. */
 async function jiraTransitionProposal(args: Record<string, unknown>): Promise<Proposal> {
   const key = str(args, "key");
-  const transitionId = str(args, "transitionId");
-  const params = { key, transitionId };
+  const status = str(args, "status");
+  const transitions = await listTransitions(key);
+  const want = status.toLowerCase();
+  const match =
+    transitions.find((t) => t.toStatus.toLowerCase() === want) ??
+    transitions.find((t) => t.name.toLowerCase() === want);
+  if (!match) {
+    const options = transitions.map((t) => `«${t.toStatus}» (${t.name})`).join(", ");
+    throw new Error(
+      `No transition to "${status}" for ${key}. Valid targets right now: ${options || "(none)"}.`,
+    );
+  }
+  const params = { key, transitionId: match.id };
   return {
     kind: "jira_transition",
     params,
-    echoUk: `📝 Переведу ${key} (transition ${transitionId}).\nПродовжити? (так/ні)`,
+    echoUk: `📝 Переведу ${key} у статус «${match.toStatus}» (transition «${match.name}»).\nПродовжити? (так/ні)`,
     apply: () => applyProposal("jira_transition", params),
   };
 }
@@ -238,14 +255,15 @@ export const jiraTools: Tool[] = [
   },
   {
     name: "jira_transition",
-    description: "Move a Jira issue to a new status via a transition id.",
+    description:
+      "Move a Jira issue to a new status. Give the TARGET STATUS NAME (e.g. Done, In Progress) — the transition id is resolved live from the issue's own workflow, never guessed. If the status has no valid transition, the error lists the valid targets.",
     inputSchema: {
       type: "object",
       properties: {
         key: { type: "string", description: "Issue key." },
-        transitionId: { type: "string", description: "Jira transition id." },
+        status: { type: "string", description: "Target status name, e.g. Done." },
       },
-      required: ["key", "transitionId"],
+      required: ["key", "status"],
     },
     kind: "write",
     propose: jiraTransitionProposal,

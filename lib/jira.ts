@@ -282,6 +282,40 @@ export async function transitionIssue(key: string, transitionId: string): Promis
   });
 }
 
+export interface IssueTransition {
+  id: string;
+  name: string;
+  /** The status the transition lands on (may differ from the transition name). */
+  toStatus: string;
+}
+
+/** The transitions valid for THIS issue right now — ids are per-workflow and
+ *  per-current-status, so a caller must resolve against this list, never
+ *  assume an id. */
+export async function listTransitions(key: string): Promise<IssueTransition[]> {
+  const cfg = config();
+  const res = await fetch(`${cfg.baseUrl}/rest/api/3/issue/${key}/transitions`, {
+    headers: { Accept: API_VERSION, Authorization: authHeader(cfg) },
+    cache: "no-store",
+  });
+  assertAuthenticated(res);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new JiraError(
+      `Jira transitions fetch for ${key} returned ${res.status}${text ? `: ${text.slice(0, 300)}` : ""}`,
+      res.status,
+    );
+  }
+  const out = (await res.json()) as {
+    transitions?: { id: string; name: string; to?: { name?: string } }[];
+  };
+  return (out.transitions ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    toStatus: t.to?.name ?? t.name,
+  }));
+}
+
 /** The scrum board sprints live on. Board 1 is the team's ATP board — hardcoded
  *  like DEFAULT_PROJECT (a board id is config, not a secret); JIRA_BOARD_ID
  *  can override it. */
