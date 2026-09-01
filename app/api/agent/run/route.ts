@@ -8,6 +8,11 @@
  * route.
  */
 import { runSlackTurn } from "@/lib/agent/slackTurn";
+import {
+  isFakeConfirmAsk,
+  FAKE_CONFIRM_WARNING_UK,
+  FAKE_CONFIRM_MEMORY_UK,
+} from "@/lib/agent/fakeConfirm";
 import { markdownToMrkdwn } from "@/lib/mrkdwn";
 import { loadTranscript, appendTurn } from "@/lib/agentThread";
 import { insertPending } from "@/lib/agentProposals";
@@ -23,8 +28,9 @@ export const dynamic = "force-dynamic";
 // The agent loop budgets ~50s for itself (lib/agent/loop.ts BUDGET_MS); without
 // an explicit maxDuration Vercel applies the plan default and can kill the
 // function mid-loop, freezing the «думаю…» placeholder before the catch block
-// gets to edit it. 60 is the Hobby cap, matching the cron routes.
-export const maxDuration = 60;
+// gets to edit it. 300 (allowed on all plans) leaves room for the fake-confirm
+// corrective retry in slackTurn, which can double the worst-case turn.
+export const maxDuration = 300;
 
 interface RunBody {
   surface: "dm" | "mention";
@@ -119,14 +125,18 @@ export async function POST(req: Request): Promise<Response> {
     let answer = markdownToMrkdwn(result.text.trim()) || "Не маю відповіді на це.";
     // A TEXT answer that reads like a confirmation ask is a hallucinated
     // proposal — no PENDING row exists, so a «так» on it dies silently (bit us
-    // 2026-09-01 on ATP-1891). The prompt forbids it; prompts are not
-    // enforcement, so the surface stamps a deterministic warning on top.
-    if (/\(так\s*\/\s*ні\)|(продовжити|підтвердити|створити|додати)\s*\?\s*$/iu.test(answer)) {
-      answer +=
-        "\n\n⚠️ Це лише текст, не пропозиція: жодної дії не заплановано, «так» нічого не виконає. Згадайте мене із запитом ще раз.";
+    // 2026-09-01 on ATP-1891; slackTurn already retried once and the model
+    // faked again). The user gets a deterministic warning; MEMORY gets a
+    // neutral marker instead of the fake — a fake stored verbatim in
+    // agent_threads teaches the model to imitate it on every later turn in
+    // the same thread (the self-poisoning loop behind the ATP-1891 incident).
+    let memoryText = answer;
+    if (isFakeConfirmAsk(answer)) {
+      answer += "\n\n" + FAKE_CONFIRM_WARNING_UK;
+      memoryText = FAKE_CONFIRM_MEMORY_UK;
     }
     await deliver(answer);
-    await appendTurn(body.conversationKey, body.question, answer);
+    await appendTurn(body.conversationKey, body.question, memoryText);
     return Response.json({ ok: true, surface: body.surface });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

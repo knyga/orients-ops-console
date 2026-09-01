@@ -137,7 +137,10 @@ describe("POST /api/agent/run", () => {
    * proposal echo («Продовжити? (так/ні)») — nothing pending, so the user's
    * «так» went nowhere. The prompt already forbids this; prompts are not
    * enforcement. The surface appends a deterministic warning so a fake
-   * confirmation ask can never pass as a real one.
+   * confirmation ask can never pass as a real one — and memory stores a
+   * neutral marker INSTEAD of the fake, because a fake stored verbatim in
+   * agent_threads teaches the model to fake again on every later turn in the
+   * same thread (the self-poisoning loop that kept ATP-1891 stuck).
    */
   it("text answer imitating a confirmation ask gets the no-proposal warning appended", async () => {
     h.runSlackTurn.mockResolvedValue({
@@ -150,7 +153,10 @@ describe("POST /api/agent/run", () => {
     expect(sent).toContain("⚠️");
     expect(sent).toContain("не пропозиція");
     expect(h.insertPending).not.toHaveBeenCalled();
-    expect(h.appendTurn).toHaveBeenCalledWith("C1", "q", sent); // memory sees the warning too
+    // memory gets the marker, never the fake text (breaks the imitation loop)
+    const remembered = h.appendTurn.mock.calls[0][2] as string;
+    expect(remembered).not.toContain("Продовжити?");
+    expect(remembered).toContain("імітацією підтвердження");
   });
 
   it("a plain text answer gets no warning", async () => {

@@ -20,6 +20,7 @@ import { parseThreadRef, fetchThreadContext } from "../lib/agent/threadContext";
 import { permalinkFor } from "../lib/slack";
 
 async function main(): Promise<void> {
+  try { process.loadEnvFile(); } catch { /* rely on ambient env */ }
   const argv = process.argv.slice(2);
   const yes = argv.includes("--yes");
   const threadIdx = argv.indexOf("--thread");

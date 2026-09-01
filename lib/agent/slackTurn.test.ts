@@ -26,4 +26,55 @@ describe("runSlackTurn", () => {
     delete process.env.ANTHROPIC_API_KEY;
     await expect(runSlackTurn("q", [])).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
+
+  /**
+   * 2026-09-01 (ATP-1891): the model answered plain TEXT imitating a proposal
+   * echo («Продовжити? (так/ні)») without calling the write tool. One corrective
+   * retry demands the tool call; the fake turn rides along as history so the
+   * retry has full context.
+   */
+  describe("fake-confirm retry", () => {
+    const FAKE = { kind: "text", text: "📝 Переведу ATP-1891 у статус Done.\nПродовжити? (так/ні)" };
+
+    it("retries once with a corrective turn and returns the retry's proposal", async () => {
+      const proposal = { kind: "proposal", text: "ECHO", proposal: { kind: "jira_transition", params: {}, echoUk: "ECHO", apply: vi.fn() } };
+      runAgent.mockResolvedValueOnce(FAKE).mockResolvedValueOnce(proposal);
+      const res = await runSlackTurn("перенеси ATP-1891 в done", [{ role: "user", text: "prev" }]);
+      expect(res).toBe(proposal);
+      expect(runAgent).toHaveBeenCalledTimes(2);
+      const [correction, opts] = runAgent.mock.calls[1];
+      expect(correction).toMatch(/СИСТЕМНЕ ЗАУВАЖЕННЯ/);
+      // retry history = original history + the fake exchange
+      expect(opts.history).toEqual([
+        { role: "user", text: "prev" },
+        { role: "user", text: "перенеси ATP-1891 в done" },
+        { role: "assistant", text: FAKE.text },
+      ]);
+    });
+
+    it("returns the retry's clean text answer", async () => {
+      runAgent.mockResolvedValueOnce(FAKE).mockResolvedValueOnce({ kind: "text", text: "Задача вже в Done." });
+      const res = await runSlackTurn("q", []);
+      expect(res).toEqual({ kind: "text", text: "Задача вже в Done." });
+    });
+
+    it("keeps the original result when the retry fakes again (never loops)", async () => {
+      runAgent.mockResolvedValueOnce(FAKE).mockResolvedValueOnce({ kind: "text", text: "Створити задачу? (так/ні)" });
+      const res = await runSlackTurn("q", []);
+      expect(res).toEqual(FAKE);
+      expect(runAgent).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps the original result when the retry throws", async () => {
+      runAgent.mockResolvedValueOnce(FAKE).mockRejectedValueOnce(new Error("api down"));
+      const res = await runSlackTurn("q", []);
+      expect(res).toEqual(FAKE);
+    });
+
+    it("does not retry a clean text answer or a real proposal", async () => {
+      runAgent.mockResolvedValue({ kind: "text", text: "3 задачі закрито." });
+      await runSlackTurn("q", []);
+      expect(runAgent).toHaveBeenCalledTimes(1);
+    });
+  });
 });
