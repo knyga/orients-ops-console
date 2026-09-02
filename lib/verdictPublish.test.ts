@@ -111,7 +111,7 @@ describe("formatDayMessage", () => {
     const msg = formatDayMessage(
       day({ date: "2026-06-13", status: "ACCEPTED_EXCEPTION", reasons: ["форс-мажор: гроза"] }),
     );
-    expect(msg).toMatch(/^🟡 2026-06-13 \(субота\) — прийнято \(виняток\): форс-мажор: гроза/);
+    expect(msg).toMatch(/^✅ 2026-06-13 \(субота\) — прийнято \(виняток\): форс-мажор: гроза/);
   });
 
   it("renders the waived dataset marker (Ukrainian)", () => {
@@ -138,7 +138,7 @@ describe("formatDayMessage", () => {
         ],
       }),
     );
-    expect(msg).toMatch(/^🟡 2026-06-04 \(четвер\) — прийнято \(виняток\):/);
+    expect(msg).toMatch(/^✅ 2026-06-04 \(четвер\) — прийнято \(виняток\):/);
     expect(msg).toContain("відео 0 хв — лише 0% від 32 хв у повітрі (< 50%)");
     expect(msg).toContain("немає повідомлення про датасет за цей день");
     expect(msg).toContain('виняток (Oleksandr K): approver replied "approve"');
@@ -165,8 +165,8 @@ describe("formatDayMessage", () => {
 describe("formatOverride", () => {
   it("strikes the original and amends for an approve", () => {
     const o = formatOverride("⚠️ 2026-06-04 — потрібна перевірка: …", "accepted_exception", "Oleksandr K", "ми тестували");
-    expect(o.updatedText).toBe(`~⚠️ 2026-06-04 — потрібна перевірка: …~\n🟡 Оновлено → прийнято (виняток), ${mentionize("Oleksandr K")}: ми тестували`);
-    expect(o.replyText).toMatch(new RegExp(`^🟡 Зафіксовано: прийнято \\(виняток\\), ${mentionize("Oleksandr K")}\\. Причина: ми тестували`));
+    expect(o.updatedText).toBe(`~⚠️ 2026-06-04 — потрібна перевірка: …~\n✅ Оновлено → прийнято (виняток), ${mentionize("Oleksandr K")}: ми тестували`);
+    expect(o.replyText).toMatch(new RegExp(`^✅ Зафіксовано: прийнято \\(виняток\\), ${mentionize("Oleksandr K")}\\. Причина: ми тестували`));
   });
 
   it("uses the rejected icon/label for a disapprove", () => {

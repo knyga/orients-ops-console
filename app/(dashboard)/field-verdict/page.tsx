@@ -23,7 +23,7 @@ const STATUS_STYLE: Record<VerdictStatus, { icon: string; label: string; cls: st
   ACCEPTED: { icon: "✅", label: "Accepted", cls: "bg-emerald-100 text-emerald-800" },
   PENDING: { icon: "⏳", label: "Pending", cls: "bg-slate-100 text-slate-700" },
   NEEDS_REVIEW: { icon: "⚠️", label: "Needs review", cls: "bg-amber-100 text-amber-800" },
-  ACCEPTED_EXCEPTION: { icon: "🟡", label: "Accepted (exception)", cls: "bg-yellow-100 text-yellow-800" },
+  ACCEPTED_EXCEPTION: { icon: "✅", label: "Accepted (exception)", cls: "bg-green-100 text-green-800" },
   REJECTED: { icon: "⛔", label: "Rejected", cls: "bg-red-100 text-red-800" },
 };
 

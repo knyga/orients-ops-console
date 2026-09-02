@@ -19,7 +19,7 @@ const ICON: Record<string, string> = {
   ACCEPTED: "✅",
   PENDING: "⏳",
   NEEDS_REVIEW: "⚠️",
-  ACCEPTED_EXCEPTION: "🟡",
+  ACCEPTED_EXCEPTION: "✅",
   REJECTED: "⛔",
 };
 
@@ -130,7 +130,7 @@ export function formatOverride(
   by: string,
   reason: string,
 ): OverrideMessages {
-  const icon = decision === "accepted_exception" ? "🟡" : "⛔";
+  const icon = decision === "accepted_exception" ? "✅" : "⛔";
   const label = decision === "accepted_exception" ? "прийнято (виняток)" : "відхилено";
   const who = mentionize(by);
   return {
@@ -217,7 +217,7 @@ export function formatDayMessage(day: DayVerdict): string {
       ? day.reasons[day.reasons.length - 1].replace(/^exception/, "виняток")
       : "";
     const parts = [...ukrainianGaps(day), note].filter(Boolean);
-    body = `🟡 ${date} — прийнято (виняток): ${parts.join("; ")} ${tail}.`;
+    body = `✅ ${date} — прийнято (виняток): ${parts.join("; ")} ${tail}.`;
   } else {
     // NEEDS_REVIEW — rebuild the gaps in Ukrainian from the structured fields.
     body = `${icon} ${date} — потрібна перевірка: ${ukrainianGaps(day).join("; ")} ${tail}.`;

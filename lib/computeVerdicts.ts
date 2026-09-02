@@ -180,7 +180,7 @@ export async function computeVerdicts(
     });
     const s = report.summary;
     log(
-      `field-verdict: wrote field-verdict/${periodKey(period)} (✅${s.accepted} ⏳${s.pending} ⚠️${s.needsReview} 🟡${s.acceptedException} ⛔${s.rejected})`,
+      `field-verdict: wrote field-verdict/${periodKey(period)} (✅${s.accepted} ⏳${s.pending} ⚠️${s.needsReview} ✅${s.acceptedException} ⛔${s.rejected})`,
     );
   }
 

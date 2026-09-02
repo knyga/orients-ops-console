@@ -182,7 +182,7 @@ const STATUS_ICON: Record<string, string> = {
   ACCEPTED: "✅",
   PENDING: "⏳",
   NEEDS_REVIEW: "⚠️",
-  ACCEPTED_EXCEPTION: "🟡",
+  ACCEPTED_EXCEPTION: "✅",
   REJECTED: "⛔",
 };
 
@@ -212,6 +212,6 @@ export function formatTable(report: VerdictReport): string {
   }
   const s = report.summary;
   lines.push("");
-  lines.push(`Totals: ✅ ${s.accepted}  ⏳ ${s.pending}  ⚠️ ${s.needsReview}  🟡 ${s.acceptedException}  ⛔ ${s.rejected}`);
+  lines.push(`Totals: ✅ ${s.accepted}  ⏳ ${s.pending}  ⚠️ ${s.needsReview}  ✅ ${s.acceptedException}  ⛔ ${s.rejected}`);
   return lines.join("\n");
 }
