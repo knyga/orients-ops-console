@@ -21,7 +21,44 @@ export interface FieldReport {
   threadTs: string;
 }
 
-const DATE_RE = /(\d{2})\.(\d{2})\.(\d{4})/;
+// Header date shapes seen in #field-qa (all real): «27.06.2026», «08.08.26»,
+// «13.08», «24.08:», «2026.08.26», and a typo'd future year «28.08.2028». The
+// yearless/typo cases resolve against the Slack posting date (Kyiv) — a Звіт
+// is posted the same day or shortly after the flight, never for a future year.
+const DATE_YMD_RE = /(\d{4})\.(\d{2})\.(\d{2})/;
+const DATE_DMY_RE = /(\d{2})\.(\d{2})\.(\d{4})/;
+// Yearless / two-digit-year dates are ambiguous inside prose (the bot's own
+// «🛸 Звіт по дронах за 18.08 …» reminder, «зустріч 19.08»), so they count only
+// when the date IS the header line: «Звіт 13.08», «Звіт 24.08:», «08.08.26».
+const DATE_DMY2_RE = /^(?:Звіт\s*)?(\d{2})\.(\d{2})\.(\d{2})\s*[:.]?\s*$/i;
+const DATE_DM_RE = /^(?:Звіт\s*)?(\d{2})\.(\d{2})\s*[:.]?\s*$/i;
+
+/** Kyiv calendar date (YYYY-MM-DD) a Slack ts was posted on, or null for a bogus ts. */
+function postedKyivDate(slackTs: string): string | null {
+  const ms = Number(slackTs) * 1000;
+  if (!Number.isFinite(ms) || ms < Date.UTC(2000, 0, 1)) return null;
+  return new Date(ms).toLocaleDateString("sv-SE", { timeZone: "Europe/Kyiv" });
+}
+
+export function parseFlightDate(header: string, postedTs: string): string | null {
+  const posted = postedKyivDate(postedTs);
+  const postedYear = posted ? Number(posted.slice(0, 4)) : null;
+  let m: RegExpExecArray | null;
+  if ((m = DATE_YMD_RE.exec(header))) return `${m[1]}-${m[2]}-${m[3]}`;
+  if ((m = DATE_DMY_RE.exec(header))) {
+    let year = Number(m[3]);
+    if (postedYear != null && year > postedYear) year = postedYear; // future-year typo
+    return `${year}-${m[2]}-${m[1]}`;
+  }
+  if ((m = DATE_DMY2_RE.exec(header))) return `20${m[3]}-${m[2]}-${m[1]}`;
+  if ((m = DATE_DM_RE.exec(header)) && posted && postedYear != null) {
+    const sameYear = `${postedYear}-${m[2]}-${m[1]}`;
+    // A report can't precede its own posting by much; a January post about
+    // «31.12» is last year's flight.
+    return sameYear > posted ? `${postedYear - 1}-${m[2]}-${m[1]}` : sameYear;
+  }
+  return null;
+}
 const WINDOW_RE = /(\d{1,2})[:.](\d{2})\s*[-–—]\s*(\d{1,2})[:.](\d{2})/;
 
 const pad = (n: number | string) => String(n).padStart(2, "0");
@@ -34,9 +71,8 @@ export function parseZvit(
 ): FieldReport | null {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0) return null;
-  const dm = DATE_RE.exec(lines[0]);
-  if (!dm) return null;
-  const flightDate = `${dm[3]}-${dm[2]}-${dm[1]}`;
+  const flightDate = parseFlightDate(lines[0], meta.reportTs);
+  if (!flightDate) return null;
 
   const rosterLine = lines[1] ?? "";
   // The window is usually on the roster line («А+Серж 14:40-17:40»), but some

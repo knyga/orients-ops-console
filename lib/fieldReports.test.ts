@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { parseZvit, parseMonth } from "./fieldReports";
 
-const meta = { permalink: "http://x", threadTs: "1.1", reportTs: "1.1" };
+const meta = { permalink: "http://x", threadTs: "1.1", reportTs: "1783000000.000001" }; // posted 2026-07-02 Kyiv
+const postedAt = (ts: string) => ({ ...meta, reportTs: ts, threadTs: ts });
 
 describe("parseZvit", () => {
   it("parses the canonical shape", () => {
@@ -46,6 +47,43 @@ describe("parseZvit", () => {
     });
     expect(r?.crashText).toContain("військовий азимут");
     expect(r?.crashText).not.toContain("13:00-20:00");
+  });
+
+  describe("date header variants (real August 2026 shapes the strict DD.MM.YYYY regex dropped)", () => {
+    it("accepts a two-digit year (Звіт 08.08.26)", () => {
+      const r = parseZvit("Звіт 08.08.26\nВладислав+Сергій 13:20-16:30", postedAt("1786201213.992859"));
+      expect(r).toMatchObject({ flightDate: "2026-08-08", start: "13:20", end: "16:30" });
+    });
+    it("infers the year from the posting time when the header has none (Звіт 13.08)", () => {
+      const r = parseZvit("Звіт 13.08\nАндріан + Влад 12:00-17:00", postedAt("1786631738.996829"));
+      expect(r).toMatchObject({ flightDate: "2026-08-13", roster: ["Андріан", "Влад"] });
+    });
+    it("tolerates a trailing colon after a yearless date (Звіт 24.08:)", () => {
+      const r = parseZvit("Звіт 24.08:\nЛюбомир+Владислав 15:00-18:40:", postedAt("1787648453.239609"));
+      expect(r?.flightDate).toBe("2026-08-24");
+    });
+    it("accepts a reversed YYYY.MM.DD header (Звіт 2026.08.26)", () => {
+      const r = parseZvit("Звіт 2026.08.26\nАндріан + Влад 12:20- 16:20", postedAt("1787751822.198019"));
+      expect(r).toMatchObject({ flightDate: "2026-08-26", start: "12:20", end: "16:20" });
+    });
+    it("clamps a future-year typo to the posting year (Звіт 28.08.2028 posted 2026-08-28)", () => {
+      const r = parseZvit("Звіт 28.08.2028\nАндріан + Влад 13:20-18:50", postedAt("1787933632.727969"));
+      expect(r?.flightDate).toBe("2026-08-28");
+    });
+    it("a yearless header posted in early January belongs to the previous December", () => {
+      // 2027-01-01 10:00 Kyiv
+      const r = parseZvit("Звіт 31.12\nА+В 12:00-16:00", postedAt("1798797600.000001"));
+      expect(r?.flightDate).toBe("2026-12-31");
+    });
+    it("ignores the bot's own drone-count reminder («🛸 Звіт по дронах за 18.08 …») — a yearless date must BE the header", () => {
+      expect(parseZvit("🛸 Звіт по дронах за 18.08 <@U1>, <@U2> — будь ласка, вкажіть кількість", postedAt("1787034000.000001"))).toBeNull();
+    });
+    it("ignores chatter that merely mentions a short date («зустріч 19.08 о 12:00»)", () => {
+      expect(parseZvit("зустріч 19.08 о 12:00\nА+В 12:00-16:00", postedAt("1787034000.000001"))).toBeNull();
+    });
+    it("still returns null for a header with no date at all", () => {
+      expect(parseZvit("Звіт\nА+В 12:00-16:00", postedAt("1786631738.996829"))).toBeNull();
+    });
   });
 });
 

@@ -107,6 +107,17 @@ describe("runNightly", () => {
     expect(june?.extractedDays).toBe(3); // day count came from the reused field-qa report
   });
 
+  it("boundary with a cached catch-up verdict that still has PENDING days: re-extracts + recomputes the previous month", async () => {
+    // Regression: the 2026-08-31 nightly froze 08-26..08-30 as PENDING (still inside grace at month end);
+    // reusing that snapshot on 09-01..09-05 meant those days never flipped to NEEDS_REVIEW and never posted.
+    readReportJson.mockImplementation(async (_feature: string, key: string) =>
+      key === "2026-06" ? { days: [{ status: "ACCEPTED" }, { status: "PENDING" }] } : null,
+    );
+    await runNightly({ publish: true, today: "2026-07-02" });
+    expect(extractFieldQa).toHaveBeenCalledTimes(2); // June gets a fresh pass too
+    expect(computeVerdicts).toHaveBeenCalledTimes(2);
+  });
+
   it("short-circuits on extract failure: DMs the operator, does not publish, rethrows", async () => {
     extractFieldQa.mockRejectedValueOnce(new Error("boom"));
     await expect(runNightly({ publish: true, today: "2026-07-15" })).rejects.toThrow("boom");

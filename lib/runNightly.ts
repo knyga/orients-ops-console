@@ -167,13 +167,20 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
         // read the committed field-qa (day count) + field-verdict (the days to
         // publish) instead. Publishing still catches up any unpublished settled
         // day. Fall back to a full fresh pass only if a report is missing.
+        // EXCEPT while the committed verdict still holds PENDING days: the last
+        // in-month run froze the final ~3 working days inside their grace window
+        // (bit August 2026 — 08-26..08-30 never flipped to NEEDS_REVIEW, never
+        // posted). A fresh pass re-evaluates grace expiry with today's date; once
+        // nothing is PENDING the cheap reuse path takes over again.
         const committedVerdict = await readReportJson<VerdictReport>("field-verdict", key);
         const committedFieldQa = await readReportJson<{ days: unknown[] }>("field-qa", key);
-        if (committedVerdict && committedFieldQa) {
+        const stillPending = committedVerdict?.days.some((d) => d.status === "PENDING") ?? false;
+        if (committedVerdict && committedFieldQa && !stillPending) {
           extractedDays = committedFieldQa.days.length;
           report = committedVerdict;
           log(`field-nightly: reusing committed field-qa + field-verdict for ${key} — skip re-extraction & recompute`);
         } else {
+          if (stillPending) log(`field-nightly: committed field-verdict for ${key} still has PENDING days — fresh extract + recompute so grace expiry is re-evaluated`);
           extractedDays = (await extractFieldQa(period, { write: true, onLog: log })).days.length;
           report = await computeVerdicts(period, { today, write: true, onLog: log });
         }

@@ -1,0 +1,32 @@
+date,report,status,crew,deployMin,videoMin,ratePerPerson,splitFactor,dayTotal,reason
+2026-08-01,1785617094.158199,ACCEPTED_EXCEPTION,Любомир + Влад,90,0,1000,1,0,counted
+2026-08-02,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
+2026-08-03,,NEEDS_REVIEW,,,0,0,1,0,video 0m is 0% of airborne 56m (< 50%); flight detected but no Звіт (crew/deployment unknown)
+2026-08-04,1785858985.200759,ACCEPTED_EXCEPTION,Андріан,180,18.8,700,1,0,counted
+2026-08-05,,ACCEPTED_EXCEPTION,,,0,700,1,0,counted
+2026-08-06,,ACCEPTED_EXCEPTION,,,0,700,1,0,counted
+2026-08-07,,ACCEPTED_EXCEPTION,,,58.1,700,1,0,counted
+2026-08-08,1786201213.992859,NEEDS_REVIEW,Влад + Сергій,190,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
+2026-08-09,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
+2026-08-10,1786384784.360179,ACCEPTED_EXCEPTION,Влад + Данило,365,0,700,1,1400,counted
+2026-08-11,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne)"
+2026-08-12,1786631566.099379,ACCEPTED_EXCEPTION,Андріан + Влад,290,24,900,1,900,counted
+2026-08-13,1786631738.996829,NEEDS_REVIEW,Андріан + Влад,300,71.6,0,1,0,"drones did not fly (0 flights, 0 min airborne)"
+2026-08-14,1786733029.425399,NEEDS_REVIEW,,,78.7,0,1,0,"drones did not fly (0 flights, 0 min airborne)"
+2026-08-15,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
+2026-08-16,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
+2026-08-17,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne)"
+2026-08-18,1787068024.526779,ACCEPTED,Андріан,350,75.1,900,1,0,counted
+2026-08-19,1787213631.379399,ACCEPTED,Андріан + Влад,225,100.4,700,1,1400,counted
+2026-08-20,1787237911.805589,ACCEPTED,Андріан + Влад,335,119.9,900,1,1800,counted
+2026-08-21,1787319612.057369,NEEDS_REVIEW,Андріан + Влад,190,26.2,0,1,0,video 26m is 24% of airborne 110m (< 50%)
+2026-08-22,1787418521.652169,ACCEPTED,Андріан,255,83.4,1000,1,0,counted
+2026-08-23,1787507168.927779,ACCEPTED,Андріан,240,128.7,1000,1,0,counted
+2026-08-24,1787648453.239609,ACCEPTED,Любомир + Влад,220,50.9,700,1,1400,counted
+2026-08-25,1787677696.151879,ACCEPTED,Андріан + Влад,215,73,700,1,0,counted
+2026-08-26,1787751822.198019,ACCEPTED,Андріан + Влад,240,111.5,900,1,1800,counted
+2026-08-27,1787848656.909769,NEEDS_REVIEW,Андріан + Влад,390,118.6,0,1,0,flight reported but airborne time not recorded
+2026-08-28,1787933632.727969,ACCEPTED,Андріан + Влад,330,123.5,700,1,1400,counted
+2026-08-29,1788022152.510479,ACCEPTED,Андріан + Влад,180,33.2,1000,1,1000,counted
+2026-08-30,1788096457.293909,PENDING,Андріан + Влад,225,65.4,0,1,0,"drones did not fly (0 flights, 0 min airborne)"
+2026-08-31,,PENDING,,,0,0,1,0,video 0m is 0% of airborne 12m (< 50%); flight detected but no Звіт (crew/deployment unknown)

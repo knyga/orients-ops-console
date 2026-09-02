@@ -1,0 +1,39 @@
+person,date,report,outcome,pay,early,weekend,reason
+Любомир,2026-08-01,1785617094.158199,excluded,0,false,true,Любомир: no own drone-count submission
+Влад,2026-08-01,1785617094.158199,excluded,0,false,true,Влад: no own drone-count submission
+Андріан,2026-08-04,1785858985.200759,excluded,0,false,false,Андріан: no own drone-count submission
+Влад,2026-08-08,1786201213.992859,unsettled,0,false,false,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
+Сергій,2026-08-08,1786201213.992859,unsettled,0,false,false,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
+Влад,2026-08-10,1786384784.360179,paid,700,false,false,
+Данило,2026-08-10,1786384784.360179,paid,700,false,false,
+Андріан,2026-08-12,1786631566.099379,paid,900,true,false,
+Влад,2026-08-12,1786631566.099379,excluded,0,true,false,Влад: no own drone-count submission
+Андріан,2026-08-13,1786631738.996829,unsettled,0,false,false,"drones did not fly (0 flights, 0 min airborne)"
+Влад,2026-08-13,1786631738.996829,unsettled,0,false,false,"drones did not fly (0 flights, 0 min airborne)"
+Андріан,2026-08-18,1787068024.526779,excluded,0,true,false,Андріан: no own drone-count submission
+Андріан,2026-08-19,1787213631.379399,paid,700,false,false,
+Влад,2026-08-19,1787213631.379399,paid,700,false,false,
+Андріан,2026-08-20,1787237911.805589,paid,900,true,false,
+Влад,2026-08-20,1787237911.805589,paid,900,true,false,
+Андріан,2026-08-21,1787319612.057369,unsettled,0,false,false,video 26m is 24% of airborne 110m (< 50%)
+Влад,2026-08-21,1787319612.057369,unsettled,0,false,false,video 26m is 24% of airborne 110m (< 50%)
+Андріан,2026-08-22,1787418521.652169,excluded,0,false,true,Андріан: no own drone-count submission
+Андріан,2026-08-23,1787507168.927779,excluded,0,false,true,Андріан: no own drone-count submission
+Любомир,2026-08-24,1787648453.239609,paid,700,false,false,
+Влад,2026-08-24,1787648453.239609,paid,700,false,false,
+Андріан,2026-08-25,1787677696.151879,excluded,0,false,false,Андріан: no own drone-count submission
+Влад,2026-08-25,1787677696.151879,excluded,0,false,false,Влад: no own drone-count submission
+Андріан,2026-08-26,1787751822.198019,paid,900,true,false,
+Влад,2026-08-26,1787751822.198019,paid,900,true,false,
+Андріан,2026-08-27,1787848656.909769,unsettled,0,false,false,flight reported but airborne time not recorded
+Влад,2026-08-27,1787848656.909769,unsettled,0,false,false,flight reported but airborne time not recorded
+Андріан,2026-08-28,1787933632.727969,paid,700,false,false,
+Влад,2026-08-28,1787933632.727969,paid,700,false,false,
+Андріан,2026-08-29,1788022152.510479,excluded,0,false,true,Андріан: no own drone-count submission
+Влад,2026-08-29,1788022152.510479,paid,1000,false,true,
+Андріан,2026-08-30,1788096457.293909,unsettled,0,false,false,"drones did not fly (0 flights, 0 min airborne)"
+Влад,2026-08-30,1788096457.293909,unsettled,0,false,false,"drones did not fly (0 flights, 0 min airborne)"
+Андріан,,,TOTAL,4100,3,0,trips=5
+Влад,,,TOTAL,5600,2,1,trips=7
+Данило,,,TOTAL,700,0,0,trips=1
+Любомир,,,TOTAL,700,0,0,trips=1
