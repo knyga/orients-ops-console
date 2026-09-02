@@ -1,26 +1,26 @@
 {
   "period": "2026-08-01..2026-08-31",
-  "generatedFrom": "npm run field-bonus -- --start 2026-08-01 --end 2026-08-31 --write (2026-09-02, after the Звіт date-header parser fix + field-verdict recompute)",
+  "generatedFrom": "npm run field-bonus -- --start 2026-08-01 --end 2026-08-31 --write (2026-09-02 ~21:00 Kyiv, after the parser fix, verdict recompute and the approver's Slack pass)",
   "sums": {
-    "report1_perPersonNets": 11100,
-    "report3_dayTotals": 11100,
-    "canonicalReportTotal": 11100
+    "report1_perPersonNets": 14700,
+    "report3_dayTotals": 14700,
+    "canonicalReportTotal": 14700
   },
   "allSumsMatch": true,
   "splitDayRoundingDelta": 0,
   "perPersonRederived": {
     "Андріан": {
-      "trips": 5,
-      "early": 3,
+      "trips": 7,
+      "early": 4,
       "weekend": 0,
-      "net": 4100,
+      "net": 5700,
       "matches": true
     },
     "Влад": {
-      "trips": 7,
+      "trips": 8,
       "early": 2,
-      "weekend": 1,
-      "net": 5600,
+      "weekend": 2,
+      "net": 6600,
       "matches": true
     },
     "Данило": {
@@ -36,13 +36,20 @@
       "weekend": 0,
       "net": 700,
       "matches": true
+    },
+    "Сергій": {
+      "trips": 1,
+      "early": 0,
+      "weekend": 1,
+      "net": 1000,
+      "matches": true
     }
   },
-  "countedReports": 14,
-  "rejectedReports": 0,
-  "pendingOrReviewRows": 14,
-  "pendingRowsWithStake": 5,
-  "amountAtStake": 9800,
+  "countedReports": 17,
+  "rejectedReports": 2,
+  "pendingOrReviewRows": 12,
+  "pendingRowsWithStake": 3,
+  "amountAtStake": 6000,
   "teamZeroed": false,
   "droneGateFlags": [
     "2026-08-01 Любомир: no own drone-count submission",
@@ -50,11 +57,12 @@
     "2026-08-04 Андріан: no own drone-count submission",
     "2026-08-12 Влад: no own drone-count submission",
     "2026-08-18 Андріан: no own drone-count submission",
+    "2026-08-21 Влад: no own drone-count submission",
     "2026-08-22 Андріан: no own drone-count submission",
     "2026-08-23 Андріан: no own drone-count submission",
     "2026-08-25 Андріан: no own drone-count submission",
     "2026-08-25 Влад: no own drone-count submission",
     "2026-08-29 Андріан: no own drone-count submission"
   ],
-  "acceptedButUnpaidByDroneGate": 8900
+  "acceptedButUnpaidByDroneGate": 9800
 }

@@ -3,10 +3,10 @@ date,report,status,crew,deployMin,videoMin,ratePerPerson,splitFactor,dayTotal,re
 2026-08-02,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
 2026-08-03,,NEEDS_REVIEW,,,0,0,1,0,video 0m is 0% of airborne 56m (< 50%); flight detected but no Звіт (crew/deployment unknown)
 2026-08-04,1785858985.200759,ACCEPTED_EXCEPTION,Андріан,180,18.8,700,1,0,counted
-2026-08-05,,ACCEPTED_EXCEPTION,,,0,700,1,0,counted
-2026-08-06,,ACCEPTED_EXCEPTION,,,0,700,1,0,counted
-2026-08-07,,ACCEPTED_EXCEPTION,,,58.1,700,1,0,counted
-2026-08-08,1786201213.992859,NEEDS_REVIEW,Влад + Сергій,190,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
+2026-08-05,,REJECTED,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); rejected (Oleksandr K): Approver replied «відмова» (refusal/rejection) — the day is rejected, no flight report was submitted and telemetry shows 0 airborne minutes."
+2026-08-06,,ACCEPTED_EXCEPTION,Андріан,,0,700,1,700,counted
+2026-08-07,,REJECTED,,,58.1,0,1,0,"flight detected but no Звіт (crew/deployment unknown); rejected (Oleksandr K): Approver rejected the day — no crew recorded in the field (відмова, не зафіксовано хто в полі)."
+2026-08-08,1786201213.992859,ACCEPTED_EXCEPTION,Влад + Сергій,190,0,1000,1,2000,counted
 2026-08-09,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne); no #datasets notice for the day"
 2026-08-10,1786384784.360179,ACCEPTED_EXCEPTION,Влад + Данило,365,0,700,1,1400,counted
 2026-08-11,,NEEDS_REVIEW,,,0,0,1,0,"drones did not fly (0 flights, 0 min airborne)"
@@ -19,7 +19,7 @@ date,report,status,crew,deployMin,videoMin,ratePerPerson,splitFactor,dayTotal,re
 2026-08-18,1787068024.526779,ACCEPTED,Андріан,350,75.1,900,1,0,counted
 2026-08-19,1787213631.379399,ACCEPTED,Андріан + Влад,225,100.4,700,1,1400,counted
 2026-08-20,1787237911.805589,ACCEPTED,Андріан + Влад,335,119.9,900,1,1800,counted
-2026-08-21,1787319612.057369,NEEDS_REVIEW,Андріан + Влад,190,26.2,0,1,0,video 26m is 24% of airborne 110m (< 50%)
+2026-08-21,1787319612.057369,ACCEPTED_EXCEPTION,Андріан + Влад,190,26.2,900,1,900,counted
 2026-08-22,1787418521.652169,ACCEPTED,Андріан,255,83.4,1000,1,0,counted
 2026-08-23,1787507168.927779,ACCEPTED,Андріан,240,128.7,1000,1,0,counted
 2026-08-24,1787648453.239609,ACCEPTED,Любомир + Влад,220,50.9,700,1,1400,counted
