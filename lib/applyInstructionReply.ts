@@ -14,7 +14,7 @@ import "server-only";
 import { classifyInstruction } from "./instructionClassify";
 import { applyInstruction } from "./applyInstruction";
 import { mentionize } from "./mention";
-import { createProposal, readActiveProposal, settleProposal } from "./proposals";
+import { createProposal, readActiveProposals, settleProposal } from "./proposals";
 import { renderProposalSummary } from "./proposalSummary";
 import { postMessage } from "./slack";
 import { contentRev, instructionAckKey, type SendTrigger } from "./outboundKeys";
@@ -44,31 +44,40 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
   const { entry, period, replyText, approverName, replyPermalink, replyTs, trigger = "webhook" } = args;
   const channel = TRACKED_CHANNELS.find((ch) => ch.name === entry.channel);
 
-  const active = await readActiveProposal(entry.ts);
-  const c = await classifyInstruction(entry.text, replyText, active ? active.summaryUk : null);
+  const pending = await readActiveProposals(entry.ts); // oldest first, possibly several axes
+  const pendingEcho = pending.length ? pending.map((p) => p.summaryUk).join("; ") : null;
+  const c = await classifyInstruction(entry.text, replyText, pendingEcho);
 
-  // Confirm the pending proposal → apply it now.
-  if (active && c.intent === "confirm") {
-    const next = await settleProposal(active, "confirm");
-    if (next !== "CONFIRMED") return { handled: "noop", intent: c.intent }; // already settled (redelivery)
-    const res = await applyInstruction({
-      entry,
-      period,
-      axis: active.axis,
-      instruction: active.payload as InstructionClassification,
-      by: active.proposedBy,
-      evidence: replyPermalink,
-      trigger,
-    });
-    return { handled: "confirmed", applied: res.applied, intent: c.intent };
+  // Confirm → apply EVERY pending proposal (day accept + crew fix + … stack up under one «так»).
+  if (pending.length && c.intent === "confirm") {
+    let applied = false;
+    let settledAny = false;
+    for (const p of pending) {
+      const next = await settleProposal(p, "confirm");
+      if (next !== "CONFIRMED") continue; // already settled (redelivery)
+      settledAny = true;
+      const res = await applyInstruction({
+        entry,
+        period,
+        axis: p.axis,
+        instruction: p.payload as InstructionClassification,
+        by: p.proposedBy,
+        evidence: replyPermalink,
+        trigger,
+      });
+      applied = applied || res.applied;
+    }
+    if (!settledAny) return { handled: "noop", intent: c.intent };
+    return { handled: "confirmed", applied, intent: c.intent };
   }
 
-  // Cancel the pending proposal.
-  if (active && c.intent === "cancel") {
-    const next = await settleProposal(active, "cancel");
-    if (next !== "CANCELLED") return { handled: "noop", intent: c.intent };
+  // Cancel → every pending proposal, one note.
+  if (pending.length && c.intent === "cancel") {
+    const cancelled = [];
+    for (const p of pending) if ((await settleProposal(p, "cancel")) === "CANCELLED") cancelled.push(p);
+    if (cancelled.length === 0) return { handled: "noop", intent: c.intent };
     if (channel) {
-      const text = `❌ Скасовано: ${active.summaryUk} — ${mentionize(approverName)}.`;
+      const text = `❌ Скасовано: ${cancelled.map((p) => p.summaryUk).join("; ")} — ${mentionize(approverName)}.`;
       await postMessage(
         channel.id,
         text,
@@ -79,7 +88,7 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
     return { handled: "cancelled", intent: c.intent };
   }
 
-  // A fresh instruction → record PROPOSED (superseding any prior) + echo for confirmation.
+  // A fresh instruction → record PROPOSED (superseding a prior one on the SAME axis only) + echo for confirmation.
   if (c.intent === "instruction" && c.axis) {
     const summary = renderProposalSummary(entry.date, c);
     const { created } = await createProposal({
@@ -94,7 +103,10 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
     });
     if (!created) return { handled: "noop", intent: c.intent }; // redelivery of the same reply
     if (channel) {
-      const text = `📝 Зрозумів: ${summary}. Підтвердьте «так»/👍 або «ні».`;
+      // Other-axis proposals stay pending; name them so the approver knows one «так» covers all.
+      const stillPending = pending.filter((p) => p.axis !== c.axis).map((p) => p.summaryUk);
+      const also = stillPending.length ? ` Разом із: ${stillPending.join("; ")}.` : "";
+      const text = `📝 Зрозумів: ${summary}.${also} Підтвердьте «так»/👍 або «ні».`;
       await postMessage(
         channel.id,
         text,

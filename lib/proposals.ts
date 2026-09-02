@@ -7,11 +7,12 @@
  * NOT server-only: the CLI imports it (like lib/resolutions.ts). The state
  * machine is pure (lib/proposalDecision.ts); only read/write hit the DB.
  */
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { db, schema } from "./db";
 import { nextState, type ProposalAction, type ProposalAxis, type ProposalState } from "./proposalDecision";
 
 export type { ProposalAction, ProposalAxis, ProposalState } from "./proposalDecision";
+import { supersedes } from "./proposalDecision";
 
 export interface Proposal {
   id: string;
@@ -56,21 +57,19 @@ function toProposal(r: typeof schema.proposals.$inferSelect): Proposal {
   };
 }
 
-/** The single active (PROPOSED) proposal for a thread, or null. */
-export async function readActiveProposal(threadTs: string): Promise<Proposal | null> {
+/** Every active (PROPOSED) proposal in a thread, oldest first (may span several axes). */
+export async function readActiveProposals(threadTs: string): Promise<Proposal[]> {
   const rows = await db
     .select()
     .from(schema.proposals)
     .where(and(eq(schema.proposals.threadTs, threadTs), eq(schema.proposals.state, "PROPOSED")));
-  if (rows.length === 0) return null;
-  // Newest wins if more than one somehow exists.
-  rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return toProposal(rows[0]);
+  rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return rows.map(toProposal);
 }
 
 /**
- * Record a new PROPOSED proposal, superseding any prior active proposal in the
- * same thread. Idempotent on `sourceReplyTs` (a re-delivered Slack event returns
+ * Record a new PROPOSED proposal, superseding any prior active proposal on the
+ * SAME axis in the thread (other axes stay pending — see `supersedes`). Idempotent on `sourceReplyTs` (a re-delivered Slack event returns
  * the existing proposal without inserting a duplicate).
  * Returns `{ created }` — false when the reply already produced a proposal.
  */
@@ -81,7 +80,7 @@ export async function createProposal(input: NewProposal): Promise<{ created: boo
     .where(eq(schema.proposals.sourceReplyTs, input.sourceReplyTs));
   if (existing.length > 0) return { created: false, proposal: toProposal(existing[0]) };
 
-  await supersedeThread(input.threadTs);
+  await supersedeThread(input.threadTs, input.axis);
 
   const now = new Date().toISOString();
   const rows = await db
@@ -98,12 +97,18 @@ export async function createProposal(input: NewProposal): Promise<{ created: boo
   return { created: false, proposal: toProposal(winner[0]) };
 }
 
-/** Mark every active (PROPOSED) proposal in a thread as SUPERSEDED. */
-export async function supersedeThread(threadTs: string): Promise<void> {
+/**
+ * Mark active (PROPOSED) proposals in a thread as SUPERSEDED — only those on
+ * `incomingAxis` when given, every one when omitted.
+ */
+export async function supersedeThread(threadTs: string, incomingAxis?: ProposalAxis): Promise<void> {
+  const pending = await readActiveProposals(threadTs);
+  const victims = pending.filter((p) => incomingAxis === undefined || supersedes(incomingAxis, p.axis));
+  if (victims.length === 0) return;
   await db
     .update(schema.proposals)
     .set({ state: "SUPERSEDED", resolvedAt: new Date().toISOString() })
-    .where(and(eq(schema.proposals.threadTs, threadTs), eq(schema.proposals.state, "PROPOSED")));
+    .where(and(inArray(schema.proposals.id, victims.map((v) => v.id)), eq(schema.proposals.state, "PROPOSED")));
 }
 
 /**

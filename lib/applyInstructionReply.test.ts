@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { postMessage, applyInstruction, createProposal, readActiveProposal, settleProposal, classifyInstruction } =
+const { postMessage, applyInstruction, createProposal, readActiveProposals, settleProposal, classifyInstruction } =
   vi.hoisted(() => ({
     postMessage: vi.fn(),
     applyInstruction: vi.fn(),
     createProposal: vi.fn(),
-    readActiveProposal: vi.fn(),
+    readActiveProposals: vi.fn(),
     settleProposal: vi.fn(),
     classifyInstruction: vi.fn(),
   }));
 vi.mock("./slack", () => ({ postMessage }));
 vi.mock("./applyInstruction", () => ({ applyInstruction }));
-vi.mock("./proposals", () => ({ createProposal, readActiveProposal, settleProposal }));
+vi.mock("./proposals", () => ({ createProposal, readActiveProposals, settleProposal }));
 vi.mock("./instructionClassify", () => ({ classifyInstruction }));
 
 import { applyInstructionReply } from "./applyInstructionReply";
@@ -47,14 +47,14 @@ beforeEach(() => {
   postMessage.mockReset().mockResolvedValue("1782900000.000200");
   applyInstruction.mockReset().mockResolvedValue({ applied: true });
   createProposal.mockReset().mockResolvedValue({ created: true, proposal: activeProposal });
-  readActiveProposal.mockReset().mockResolvedValue(null);
+  readActiveProposals.mockReset().mockResolvedValue([]);
   settleProposal.mockReset().mockResolvedValue("CANCELLED");
   classifyInstruction.mockReset();
 });
 
 describe("applyInstructionReply — report-scoped ack keys (second-report thread must not be swallowed)", () => {
   it("a proposal echo for a report-scoped entry (reportTs set) keys the post by date#reportTs, not the bare date", async () => {
-    readActiveProposal.mockResolvedValue(null);
+    readActiveProposals.mockResolvedValue([]);
     classifyInstruction.mockResolvedValue({
       intent: "instruction",
       axis: "dataset",
@@ -79,7 +79,7 @@ describe("applyInstructionReply — report-scoped ack keys (second-report thread
   });
 
   it("a cancel note for a report-scoped entry (reportTs set) keys the post by date#reportTs, not the bare date", async () => {
-    readActiveProposal.mockResolvedValue(activeProposal);
+    readActiveProposals.mockResolvedValue([activeProposal]);
     classifyInstruction.mockResolvedValue({ intent: "cancel" });
     settleProposal.mockResolvedValue("CANCELLED");
 
@@ -99,7 +99,7 @@ describe("applyInstructionReply — report-scoped ack keys (second-report thread
   });
 
   it("a legacy no-report entry (reportTs null) still keys by the bare date", async () => {
-    readActiveProposal.mockResolvedValue(null);
+    readActiveProposals.mockResolvedValue([]);
     classifyInstruction.mockResolvedValue({
       intent: "instruction",
       axis: "dataset",
@@ -118,5 +118,89 @@ describe("applyInstructionReply — report-scoped ack keys (second-report thread
 
     const [, , opts] = postMessage.mock.calls[0];
     expect(opts.key).toBe(`instruction-ack:2026-07-01:propose:${opts.key.split(":").pop()}`);
+  });
+});
+
+describe("applyInstructionReply — several pending proposals (different axes) in one thread", () => {
+  const dayProposal = {
+    ...activeProposal,
+    id: "p-day",
+    axis: "day" as const,
+    payload: { intent: "instruction", axis: "day", decision: "accepted_exception", reason: "ok" },
+    summaryUk: "прийняти день 2026-07-01 (виняток)",
+    sourceReplyTs: "1781000100.000200",
+    createdAt: "2026-07-02T05:00:00.000Z",
+  };
+  const crewProposal = {
+    ...activeProposal,
+    id: "p-crew",
+    axis: "crew" as const,
+    payload: { intent: "instruction", axis: "crew", crew: ["Влад", "Сергій"], reason: "ok" },
+    summaryUk: "склад 2026-07-01: Влад, Сергій",
+    sourceReplyTs: "1781000100.000300",
+    createdAt: "2026-07-02T05:01:00.000Z",
+  };
+
+  it("«так» applies EVERY pending proposal, oldest first", async () => {
+    readActiveProposals.mockResolvedValue([dayProposal, crewProposal]);
+    classifyInstruction.mockResolvedValue({ intent: "confirm" });
+    settleProposal.mockResolvedValue("CONFIRMED");
+
+    const res = await applyInstructionReply({
+      entry: entry(null), period, replyText: "так", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/ok", replyTs: "1781000300.000100",
+    });
+
+    expect(res.handled).toBe("confirmed");
+    expect(settleProposal).toHaveBeenCalledTimes(2);
+    expect(applyInstruction).toHaveBeenCalledTimes(2);
+    expect(applyInstruction.mock.calls.map((c) => c[0].axis)).toEqual(["day", "crew"]);
+  });
+
+  it("«ні» cancels EVERY pending proposal and posts one note naming them all", async () => {
+    readActiveProposals.mockResolvedValue([dayProposal, crewProposal]);
+    classifyInstruction.mockResolvedValue({ intent: "cancel" });
+    settleProposal.mockResolvedValue("CANCELLED");
+
+    const res = await applyInstructionReply({
+      entry: entry(null), period, replyText: "ні", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/no", replyTs: "1781000300.000200",
+    });
+
+    expect(res.handled).toBe("cancelled");
+    expect(settleProposal).toHaveBeenCalledTimes(2);
+    expect(applyInstruction).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    const [, text] = postMessage.mock.calls[0];
+    expect(text).toContain(dayProposal.summaryUk);
+    expect(text).toContain(crewProposal.summaryUk);
+  });
+
+  it("the classifier sees every pending echo, not just the newest", async () => {
+    readActiveProposals.mockResolvedValue([dayProposal, crewProposal]);
+    classifyInstruction.mockResolvedValue({ intent: "confirm" });
+    settleProposal.mockResolvedValue("CONFIRMED");
+    await applyInstructionReply({
+      entry: entry(null), period, replyText: "так", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/ok", replyTs: "1781000300.000300",
+    });
+    const pendingEcho = classifyInstruction.mock.calls[0][2] as string;
+    expect(pendingEcho).toContain(dayProposal.summaryUk);
+    expect(pendingEcho).toContain(crewProposal.summaryUk);
+  });
+
+  it("a new instruction while another axis is pending echoes that both await one «так»", async () => {
+    readActiveProposals.mockResolvedValue([dayProposal]);
+    classifyInstruction.mockResolvedValue({ intent: "instruction", axis: "crew", crew: ["Влад", "Сергій"], reason: "x" });
+    createProposal.mockResolvedValue({ created: true, proposal: crewProposal });
+
+    const res = await applyInstructionReply({
+      entry: entry(null), period, replyText: "склад: Влад, Сергій", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/crew", replyTs: "1781000300.000400",
+    });
+
+    expect(res.handled).toBe("proposed");
+    const [, text] = postMessage.mock.calls[0];
+    expect(text).toContain(dayProposal.summaryUk); // the still-pending accept is named in the echo
   });
 });
