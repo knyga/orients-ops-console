@@ -157,19 +157,40 @@ export function buildMonthSummary(period: Period, today: string, days: SummaryDa
   const month = MONTHS_UK_GEN[Number(period.start.slice(5, 7)) - 1];
   const year = period.start.slice(0, 4);
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
-  const n = (pred: (d: SummaryDay) => boolean) => sorted.filter(pred).length;
-  const counts = [
-    `✅ ${n((d) => d.status === "ACCEPTED" || d.status === "ACCEPTED_EXCEPTION")}`,
-    `⚠️ ${n((d) => d.status === "NEEDS_REVIEW")}`,
-    `⛔ ${n((d) => d.status === "REJECTED")}`,
-    `⏳ ${n((d) => d.status === "PENDING")}`,
-  ].join(" · ");
   const anchor = [
     `*Польові дні — ${month} ${year}* (станом на ${ddmm(today)})`,
-    `${sorted.length} днів: ${counts}`,
+    countsUk(summaryCounts(sorted)),
     "✅ прийнято · ⚠️ на перевірці · ⛔ відхилено · ⏳ очікує (ще в межах 3 робочих днів на відео/датасет)",
     "Деталі по днях — у треді 👇",
   ].join("\n");
   const details = packLines(sorted.map(formatDayLine), SLACK_MSG_MAX_BYTES);
   return { anchor, details };
+}
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Validate a {start,end} period from untrusted params (model output / CLI). Ukrainian errors. */
+export function parseSummaryPeriod(start: unknown, end: unknown): Period {
+  if (typeof start !== "string" || !ISO_DAY.test(start) || typeof end !== "string" || !ISO_DAY.test(end)) {
+    throw new Error("період має бути у форматі YYYY-MM-DD (start і end).");
+  }
+  if (end < start) throw new Error("кінець періоду раніше за початок.");
+  return { start, end };
+}
+
+export interface SummaryCounts { days: number; accepted: number; review: number; rejected: number; pending: number }
+
+export function summaryCounts(days: Pick<SummaryDay, "status">[]): SummaryCounts {
+  const n = (f: (s: SummaryStatus) => boolean) => days.filter((d) => f(d.status)).length;
+  return {
+    days: days.length,
+    accepted: n((s) => s === "ACCEPTED" || s === "ACCEPTED_EXCEPTION"),
+    review: n((s) => s === "NEEDS_REVIEW"),
+    rejected: n((s) => s === "REJECTED"),
+    pending: n((s) => s === "PENDING"),
+  };
+}
+
+export function countsUk(c: SummaryCounts): string {
+  return `${c.days} днів: ✅ ${c.accepted} · ⚠️ ${c.review} · ⛔ ${c.rejected} · ⏳ ${c.pending}`;
 }

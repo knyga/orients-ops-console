@@ -16,6 +16,7 @@ import { jiraTools } from "./tools/jira";
 import { fieldLossTools } from "./tools/fieldLoss";
 import { calendarTools } from "./tools/calendar";
 import { sprintTools } from "./tools/sprint";
+import { fieldSummaryTools } from "./tools/fieldSummary";
 import { isAuthError, alertApprovers } from "../opsAlert";
 
 const MODEL = "claude-sonnet-5";
@@ -44,6 +45,7 @@ const systemPrompt = (nowMs: number) => [
   "Ніколи не пиши «Підтвердити? (так/ні)» звичайним текстом: підтвердження існує лише коли інструмент запису повернув пропозицію. Якщо користувач уточнив або змінив запит (виконавця, опис, посилання) — одразу виклич інструмент запису знову з оновленими полями; не переказуй план власним текстом і не проси підтвердження без виклику інструмента. Якщо інструмент повернув помилку — поясни її і не імітуй підтвердження.",
   "«Постав/створи зустріч» — це calendar_create_event: перетвори відносну дату в конкретний Europe/Kyiv ISO (напр. 2026-07-08T15:00); без явної тривалості бери 30 хв; учасники — імена з реєстру або email. Це теж запис із підтвердженням.",
   "«Склади план спринту» у треді із заглушкою — це sprint_plan_build (запис із підтвердженням).",
+  "«Опублікуй/надішли підсумок польових днів за <місяць або період>» — це field_summary_post (запис із підтвердженням): передай start/end як ISO-дати, місяць = з 1-го по останнє число.",
 ].join("\n");
 
 export type AnthropicLike = {
@@ -101,7 +103,7 @@ function toolUsesOf(content: unknown[]): ToolUseBlock[] {
 }
 
 export async function runAgent(userText: string, opts: RunAgentOptions = {}): Promise<AgentResult> {
-  const tools = opts.tools ?? [...jiraTools, ...fieldLossTools, ...calendarTools, ...sprintTools];
+  const tools = opts.tools ?? [...jiraTools, ...fieldLossTools, ...calendarTools, ...sprintTools, ...fieldSummaryTools];
   const client = (opts.client ?? new Anthropic()) as AnthropicLike;
   const maxIters = opts.maxIters ?? MAX_ITERS;
   const now = opts.now ?? (() => Date.now());

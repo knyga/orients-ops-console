@@ -28,7 +28,9 @@ const mocks = vi.hoisted(() => ({
   postMessage: vi.fn(),
   findSentByTs: vi.fn(),
   fillSprintPlan: vi.fn(),
+  postFieldSummary: vi.fn(),
 }));
+vi.mock("@/lib/fieldSummaryPost", () => ({ postFieldSummary: mocks.postFieldSummary }));
 vi.mock("@/lib/lossStore", () => ({ upsertLossRecord: mocks.upsertLossRecord }));
 vi.mock("@/lib/published", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
@@ -44,6 +46,7 @@ beforeEach(() => {
   mocks.postMessage.mockReset().mockResolvedValue("1782900000.000200");
   mocks.findSentByTs.mockReset().mockResolvedValue([]);
   mocks.fillSprintPlan.mockReset().mockResolvedValue({ slug: "ATP-49", sprintName: "ATP 49", count: 12 });
+  mocks.postFieldSummary.mockReset().mockResolvedValue({ anchorTs: "1788400000.000100", replies: 4, days: 31 });
 });
 
 describe("applyProposal", () => {
@@ -286,5 +289,37 @@ describe("applyProposal sprint_plan_build", () => {
     ]);
     await expect(applyProposal("sprint_plan_build", PARAMS)).resolves.toContain("ATP 49");
     expect(mocks.fillSprintPlan).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("applyProposal field_summary_post", () => {
+  it("posts the summary into the channel (new anchor) and reports anchor + reply count in Ukrainian", async () => {
+    const out = await applyProposal("field_summary_post", {
+      channelId: "C08GY2NKF9D",
+      threadTs: null,
+      start: "2026-08-01",
+      end: "2026-08-31",
+    });
+    expect(mocks.postFieldSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ channelId: "C08GY2NKF9D", period: { start: "2026-08-01", end: "2026-08-31" }, threadTs: undefined, trigger: "webhook" }),
+    );
+    expect(out).toContain("31");
+    expect(out).toContain("4");
+    expect(out).toMatch(/треді/);
+  });
+
+  it("posts into an existing thread when threadTs is given", async () => {
+    await applyProposal("field_summary_post", {
+      channelId: "C08GY2NKF9D",
+      threadTs: "1788400000.000100",
+      start: "2026-08-01",
+      end: "2026-08-31",
+    });
+    expect(mocks.postFieldSummary.mock.calls[0][0]).toMatchObject({ threadTs: "1788400000.000100" });
+  });
+
+  it("rejects a malformed period before posting", async () => {
+    await expect(applyProposal("field_summary_post", { channelId: "C1", threadTs: null, start: "x", end: "2026-08-31" })).rejects.toThrow();
+    expect(mocks.postFieldSummary).not.toHaveBeenCalled();
   });
 });

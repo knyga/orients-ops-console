@@ -24,6 +24,9 @@ import { parsePeriodKey } from "@/lib/period";
 import { TRACKED_CHANNELS } from "@/lib/slackChannels";
 import { postMessage } from "@/lib/slack";
 import { fillSprintPlan } from "@/lib/runSprint";
+import { postFieldSummary } from "@/lib/fieldSummaryPost";
+import { parseSummaryPeriod } from "@/lib/fieldMonthSummary";
+import { todayInFieldTz } from "@/lib/computeVerdicts";
 import { slugifySprint } from "@/lib/sprintReport";
 import { findSentByTs } from "@/lib/outbound";
 import { contentRev, instructionAckKey } from "@/lib/outboundKeys";
@@ -39,7 +42,8 @@ export type ProposalKind =
   | "jira_move_to_sprint"
   | "calendar_create_event"
   | "field_loss_set"
-  | "sprint_plan_build";
+  | "sprint_plan_build"
+  | "field_summary_post";
 
 function str(params: Record<string, unknown>, key: string): string {
   const v = params[key];
@@ -223,6 +227,13 @@ export async function applyProposal(kind: ProposalKind, params: Record<string, u
       }
       const r = await fillSprintPlan({ channelId, anchorTs, sprintId, trigger: "webhook" });
       return `✅ План спринту ${r.sprintName} складено: ${r.count} задач. Повідомлення вище оновлено.`;
+    }
+    case "field_summary_post": {
+      const channelId = str(params, "channelId");
+      const period = parseSummaryPeriod(params.start, params.end);
+      const threadTs = typeof params.threadTs === "string" && params.threadTs.trim() ? params.threadTs : undefined;
+      const r = await postFieldSummary({ channelId, period, today: todayInFieldTz(), threadTs, trigger: "webhook" });
+      return `✅ Підсумок польових днів опубліковано: ${r.days} днів, ${r.replies} повідомлень у треді${threadTs ? " (у цьому треді)" : ""}.`;
     }
     default:
       throw new Error(`Unknown proposal kind: ${kind}`);

@@ -31,6 +31,10 @@ const APPROVER_GATED_KINDS = new Map<string, string>([
     "sprint_plan_build",
     "⛔ Скласти план спринту може лише затверджувач (Oleksandr K або Bohdan Forostianyi).",
   ],
+  [
+    "field_summary_post",
+    "⛔ Опублікувати підсумок польових днів може лише затверджувач (Oleksandr K або Bohdan Forostianyi).",
+  ],
 ]);
 
 export function gateProposalApply(

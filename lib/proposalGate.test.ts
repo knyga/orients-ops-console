@@ -43,3 +43,18 @@ describe("gateProposalApply — sprint_plan_build", () => {
     }
   });
 });
+
+describe("gateProposalApply — field_summary_post", () => {
+  it("passes for an approver and injects their name", () => {
+    const r = gateProposalApply("field_summary_post", "U08G4EC244X");
+    expect(r).toEqual({ ok: true, extraParams: { by: "Oleksandr K" } });
+  });
+  it("refuses a non-approver with a summary-specific Ukrainian refusal", () => {
+    const r = gateProposalApply("field_summary_post", "U_RANDOM");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.refusalUk).toContain("підсумок");
+      expect(r.refusalUk).toContain("затверджувач");
+    }
+  });
+});
