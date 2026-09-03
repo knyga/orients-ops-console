@@ -8,6 +8,7 @@
  * reports and posts the result chunked.
  */
 import type { Period } from "./period";
+import { SLACK_MSG_MAX_BYTES, byteLength } from "./slackChunk";
 
 export type SummaryStatus = "ACCEPTED" | "ACCEPTED_EXCEPTION" | "REJECTED" | "NEEDS_REVIEW" | "PENDING";
 
@@ -128,11 +129,47 @@ export function formatDayLine(day: SummaryDay): string {
   return parts.join(" · ");
 }
 
-export function buildMonthSummary(period: Period, today: string, days: SummaryDay[]): string {
+export interface MonthSummaryPost {
+  /** Short channel anchor: header, status counts, legend. No per-day lines. */
+  anchor: string;
+  /** Thread replies: per-day lines packed under the Slack byte cap, in date order. */
+  details: string[];
+}
+
+/** Greedy line packer: consecutive lines joined by "\n", each chunk ≤ maxBytes. */
+function packLines(lines: string[], maxBytes: number): string[] {
+  const out: string[] = [];
+  let cur = "";
+  for (const line of lines) {
+    const next = cur ? `${cur}\n${line}` : line;
+    if (cur && byteLength(next) > maxBytes) {
+      out.push(cur);
+      cur = line;
+    } else {
+      cur = next;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+export function buildMonthSummary(period: Period, today: string, days: SummaryDay[]): MonthSummaryPost {
   const month = MONTHS_UK_GEN[Number(period.start.slice(5, 7)) - 1];
   const year = period.start.slice(0, 4);
-  const header = `*Польові дні — ${month} ${year}* (станом на ${ddmm(today)})`;
-  const legend = "✅ прийнято · ⚠️ на перевірці · ⛔ відхилено · ⏳ очікує (ще в межах 3 робочих днів на відео/датасет)";
-  const lines = [...days].sort((a, b) => a.date.localeCompare(b.date)).map(formatDayLine);
-  return [header, legend, "", ...lines].join("\n");
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const n = (pred: (d: SummaryDay) => boolean) => sorted.filter(pred).length;
+  const counts = [
+    `✅ ${n((d) => d.status === "ACCEPTED" || d.status === "ACCEPTED_EXCEPTION")}`,
+    `⚠️ ${n((d) => d.status === "NEEDS_REVIEW")}`,
+    `⛔ ${n((d) => d.status === "REJECTED")}`,
+    `⏳ ${n((d) => d.status === "PENDING")}`,
+  ].join(" · ");
+  const anchor = [
+    `*Польові дні — ${month} ${year}* (станом на ${ddmm(today)})`,
+    `${sorted.length} днів: ${counts}`,
+    "✅ прийнято · ⚠️ на перевірці · ⛔ відхилено · ⏳ очікує (ще в межах 3 робочих днів на відео/датасет)",
+    "Деталі по днях — у треді 👇",
+  ].join("\n");
+  const details = packLines(sorted.map(formatDayLine), SLACK_MSG_MAX_BYTES);
+  return { anchor, details };
 }

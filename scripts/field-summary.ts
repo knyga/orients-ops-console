@@ -9,8 +9,8 @@
  *   npm run field-summary -- --start 2026-08-01 --end 2026-08-31 --channel field-qa --publish
  *
  * DRY-RUN by default. `--publish` requires `--channel <name>`. Long text is
- * chunked under Slack's msg_too_long cap: first chunk top-level, the rest as
- * thread replies. Idempotent per (period, Kyiv day, chunk) via outbound keys.
+ * ONE short anchor in the channel (header, status counts, legend) + the per-day
+ * lines as thread replies packed under Slack's msg_too_long cap. Idempotent per (period, Kyiv day, chunk) via outbound keys.
  * Runs under `--conditions=react-server` so the server-only imports resolve.
  */
 import { FIELD_TIMEZONE } from "../lib/reconcile";
@@ -20,7 +20,6 @@ import { reportKey, type DayVerdict } from "../lib/fieldDayVerdict";
 import type { DayBonus } from "../lib/fieldBonus";
 import { TRACKED_CHANNELS } from "../lib/slackChannels";
 import { permalinkFor, postMessage } from "../lib/slack";
-import { chunkForSlack } from "../lib/slackChunk";
 import { buildMonthSummary, type SummaryDay } from "../lib/fieldMonthSummary";
 import { parseArgs, resolvePeriod, type Period } from "./fieldPublishReport";
 
@@ -88,11 +87,15 @@ async function main(): Promise<void> {
     };
   });
 
-  const text = buildMonthSummary(period, today, days);
-  const chunks = chunkForSlack(text);
+  const { anchor, details } = buildMonthSummary(period, today, days);
 
   if (!args.publish) {
-    process.stdout.write(`DRY RUN — would post ${chunks.length} message(s) [${period.start} … ${period.end}]\n\n${text}\n\nNo messages were sent. Re-run with --publish --channel <name>.\n`);
+    process.stdout.write(
+      `DRY RUN — would post 1 anchor + ${details.length} thread repl${details.length === 1 ? "y" : "ies"} [${period.start} … ${period.end}]\n\n` +
+        `=== ANCHOR ===\n${anchor}\n\n` +
+        details.map((d, i) => `=== THREAD ${i + 1}/${details.length} ===\n${d}`).join("\n\n") +
+        `\n\nNo messages were sent. Re-run with --publish --channel <name>.\n`,
+    );
     return;
   }
   if (!args.channel) {
@@ -104,16 +107,12 @@ async function main(): Promise<void> {
     process.stderr.write(`field-summary: unknown channel "${args.channel}".\n`);
     process.exit(1);
   }
-  let threadTs: string | undefined;
-  for (const [i, chunk] of chunks.entries()) {
-    const ts = await postMessage(
-      channel.id,
-      chunk,
-      { key: `field-summary:${key}:${today}:c${i}`, feature: "field-summary", channel: channel.name, trigger: "cli" },
-      threadTs,
-    );
-    if (i === 0) threadTs = ts;
-    process.stderr.write(`field-summary: posted chunk ${i + 1}/${chunks.length} to #${channel.name} (ts ${ts})\n`);
+  const meta = (suffix: string) => ({ key: `field-summary:${key}:${today}:${suffix}`, feature: "field-summary", channel: channel.name, trigger: "cli" as const });
+  const anchorTs = await postMessage(channel.id, anchor, meta("anchor"));
+  process.stderr.write(`field-summary: posted anchor to #${channel.name} (ts ${anchorTs})\n`);
+  for (const [i, d] of details.entries()) {
+    const ts = await postMessage(channel.id, d, meta(`t${i + 1}`), anchorTs);
+    process.stderr.write(`field-summary: posted thread reply ${i + 1}/${details.length} (ts ${ts})\n`);
   }
 }
 

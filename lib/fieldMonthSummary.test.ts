@@ -94,19 +94,40 @@ describe("formatDayLine", () => {
   });
 });
 
-describe("buildMonthSummary", () => {
-  it("has a Ukrainian header with the month and as-of date, one line per day in order, and a legend", () => {
-    const text = buildMonthSummary(
-      { start: "2026-08-01", end: "2026-08-31" },
-      "2026-09-03",
-      [{ ...base, date: "2026-08-20" }, base],
-    );
-    expect(text.startsWith("*Польові дні — серпень 2026*")).toBe(true);
-    expect(text).toContain("станом на 03.09");
-    const i19 = text.indexOf("19.08");
-    const i20 = text.indexOf("20.08");
-    expect(i19).toBeGreaterThan(-1);
-    expect(i20).toBeGreaterThan(i19); // sorted by date, not input order
-    expect(text).toContain("✅ прийнято · ⚠️ на перевірці · ⛔ відхилено · ⏳ очікує");
+describe("buildMonthSummary — anchor + thread replies (sprint-post shape)", () => {
+  const days = [
+    { ...base, date: "2026-08-20" },
+    base,
+    { ...base, date: "2026-08-05", status: "REJECTED" as const, approver: "Oleksandr K" },
+    { ...base, date: "2026-08-13", status: "NEEDS_REVIEW" as const, reasons: ["drones did not fly (0 flights, 0 min airborne)"] },
+    { ...base, date: "2026-08-31", status: "PENDING" as const },
+  ];
+
+  it("anchor: Ukrainian header with month + as-of date, status counts, legend — and NO per-day lines", () => {
+    const { anchor } = buildMonthSummary({ start: "2026-08-01", end: "2026-08-31" }, "2026-09-03", days);
+    expect(anchor.startsWith("*Польові дні — серпень 2026*")).toBe(true);
+    expect(anchor).toContain("станом на 03.09");
+    expect(anchor).toContain("✅ 2");
+    expect(anchor).toContain("⚠️ 1");
+    expect(anchor).toContain("⛔ 1");
+    expect(anchor).toContain("⏳ 1");
+    expect(anchor).toContain("Деталі по днях — у треді");
+    expect(anchor).not.toMatch(/\*\d\d\.\d\d /); // no day lines in the channel
+  });
+
+  it("details: every day as a thread line, sorted by date, packed under the Slack byte cap", () => {
+    const { details } = buildMonthSummary({ start: "2026-08-01", end: "2026-08-31" }, "2026-09-03", days);
+    const all = details.join("\n");
+    expect(all.indexOf("05.08")).toBeLessThan(all.indexOf("13.08"));
+    expect(all.indexOf("19.08")).toBeLessThan(all.indexOf("20.08"));
+    expect(all.indexOf("20.08")).toBeLessThan(all.indexOf("31.08"));
+    for (const d of details) expect(new TextEncoder().encode(d).length).toBeLessThanOrEqual(3800);
+  });
+
+  it("a month with many days spills into several thread replies, none over the cap, no day lost", () => {
+    const many = Array.from({ length: 31 }, (_, i) => ({ ...base, date: `2026-08-${String(i + 1).padStart(2, "0")}` }));
+    const { details } = buildMonthSummary({ start: "2026-08-01", end: "2026-08-31" }, "2026-09-03", many);
+    expect(details.length).toBeGreaterThan(1);
+    expect(details.join("\n").match(/^\*\d\d\.08/gm)?.length).toBe(31);
   });
 });
