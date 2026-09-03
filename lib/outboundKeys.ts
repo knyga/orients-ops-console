@@ -125,6 +125,21 @@ export const opsAlertKey = (userId: string, day: string, errKey: string): string
 /** Weekly investor report post, keyed by the explicit Mon_Sun week key. */
 export const investorKey = (periodKey: string): string => `investor:${periodKey}`;
 
+/**
+ * Per-day field summary (lib/fieldSummaryPost): ONE anchor + N thread parts,
+ * keyed by period, the Kyiv day it is "as of", the CHANNEL (a same-day test-
+ * channel publish must never dedup the #field-qa one — see the sprint keys),
+ * the thread it was asked in (a re-ask into a different thread posts anew),
+ * and the part ("anchor" | "t1" | "t2" …).
+ */
+export const fieldSummaryKey = (
+  periodKey: string,
+  day: string,
+  channel: string,
+  threadTs: string | null,
+  part: string,
+): string => `field-summary:${periodKey}:${day}:${channel}${threadTs ? `:${threadTs}` : ""}:${part}`;
+
 /** Roster correction (S-roster): edit the verdict's crew suffix + threaded ack. */
 export const rosterEditKey = (date: string, rev: string): string =>
   `roster-edit:${date}:${rev}`;

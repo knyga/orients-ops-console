@@ -28,6 +28,8 @@ export interface InstructionReplyResult {
   handled: "confirmed" | "cancelled" | "proposed" | "noop";
   applied?: boolean;
   intent?: string;
+  /** Summaries of confirmed proposals whose apply threw (posted in-thread, never silently lost). */
+  failed?: string[];
 }
 
 export interface InstructionReplyArgs {
@@ -52,23 +54,39 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
   if (pending.length && c.intent === "confirm") {
     let applied = false;
     let settledAny = false;
+    const failed: { summary: string; reason: string }[] = [];
     for (const p of pending) {
       const next = await settleProposal(p, "confirm");
       if (next !== "CONFIRMED") continue; // already settled (redelivery)
       settledAny = true;
-      const res = await applyInstruction({
-        entry,
-        period,
-        axis: p.axis,
-        instruction: p.payload as InstructionClassification,
-        by: p.proposedBy,
-        evidence: replyPermalink,
-        trigger,
-      });
-      applied = applied || res.applied;
+      // One sibling's failure must not block the others, nor vanish: it is
+      // CONFIRMED in the store already, so the only trace left is this note.
+      try {
+        const res = await applyInstruction({
+          entry,
+          period,
+          axis: p.axis,
+          instruction: p.payload as InstructionClassification,
+          by: p.proposedBy,
+          evidence: replyPermalink,
+          trigger,
+        });
+        applied = applied || res.applied;
+      } catch (err) {
+        failed.push({ summary: p.summaryUk, reason: err instanceof Error ? err.message : String(err) });
+      }
     }
     if (!settledAny) return { handled: "noop", intent: c.intent };
-    return { handled: "confirmed", applied, intent: c.intent };
+    if (failed.length && channel) {
+      const text = `❌ Не вдалося застосувати: ${failed.map((f) => `${f.summary} — ${f.reason}`).join("; ")}. Повторіть інструкцію.`;
+      await postMessage(
+        channel.id,
+        text,
+        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "apply-failed", contentRev(text)), feature: "instruction", channel: channel.name, trigger },
+        entry.ts,
+      );
+    }
+    return { handled: "confirmed", applied, intent: c.intent, ...(failed.length ? { failed: failed.map((f) => f.summary) } : {}) };
   }
 
   // Cancel → every pending proposal, one note.

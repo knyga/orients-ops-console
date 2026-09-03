@@ -34,13 +34,16 @@ export async function fieldSummaryPostProposal(
   // Live counts at PROPOSE time so the approver confirms against real numbers.
   const days = await assembleSummaryDays(period);
   const counts = summaryCounts(days);
+  // Only a turn from INSIDE a thread posts into that thread; a top-level
+  // @mention (whose ctx.threadTs is the mention's own ts) gets a fresh anchor.
+  const threadTs = ctx.inThread && ctx.threadTs ? ctx.threadTs : null;
   const params: Record<string, unknown> = {
     channelId: ctx.channelId,
-    threadTs: ctx.threadTs ?? null,
+    threadTs,
     start: period.start,
     end: period.end,
   };
-  const where = ctx.threadTs ? "у цьому треді" : `у <#${ctx.channelId}> (анкор + деталі в треді)`;
+  const where = threadTs ? "у цьому треді" : `у <#${ctx.channelId}> (анкор + деталі в треді)`;
   return {
     kind: "field_summary_post",
     params,

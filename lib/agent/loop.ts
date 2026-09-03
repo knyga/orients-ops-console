@@ -70,6 +70,8 @@ export interface RunAgentOptions {
    *  a thread-scoped write (sprint_plan_build) needs; the model never relays them. */
   channelId?: string;
   threadTs?: string;
+  /** See ProposeContext.inThread. */
+  inThread?: boolean;
 }
 
 interface ToolUseBlock { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
@@ -141,6 +143,7 @@ export async function runAgent(userText: string, opts: RunAgentOptions = {}): Pr
           sourceUrl: opts.sourceUrl,
           channelId: opts.channelId,
           threadTs: opts.threadTs,
+          inThread: opts.inThread,
         });
         return { kind: "proposal", text: proposal.echoUk, proposal };
       } catch (err) {

@@ -31,6 +31,11 @@ export interface ProposeContext {
   channelId?: string;
   /** The thread's anchor ts (the message a thread-scoped write rewrites). */
   threadTs?: string;
+  /** True only when the turn came from INSIDE an existing thread. Slack hands
+   *  a top-level @mention `threadTs === its own ts` (the bot replies under it),
+   *  so `threadTs` alone cannot tell "asked in a thread" from "asked in the
+   *  channel" — a channel-vs-thread write (field_summary_post) needs this. */
+  inThread?: boolean;
 }
 
 export interface Tool {

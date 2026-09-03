@@ -31,7 +31,8 @@ describe("field_summary_post", () => {
   });
 
   it("from a channel mention: proposes a new anchor + thread in that channel, echo names month + live counts", async () => {
-    const p = await tool.propose!({ start: "2026-08-01", end: "2026-08-31" }, { channelId: "C08GY2NKF9D" });
+    // A top-level @mention: Slack hands the loop threadTs === the mention's own ts, inThread false.
+    const p = await tool.propose!({ start: "2026-08-01", end: "2026-08-31" }, { channelId: "C08GY2NKF9D", threadTs: "1788390000.000001", inThread: false });
     expect(p.kind).toBe("field_summary_post");
     expect(p.params).toEqual({ channelId: "C08GY2NKF9D", threadTs: null, start: "2026-08-01", end: "2026-08-31" });
     expect(p.echoUk).toContain("серпень 2026");
@@ -46,7 +47,7 @@ describe("field_summary_post", () => {
   it("from inside a thread: posts into THAT thread (params carry threadTs) and the echo says so", async () => {
     const p = await tool.propose!(
       { start: "2026-08-01", end: "2026-08-31" },
-      { channelId: "C08GY2NKF9D", threadTs: "1788400000.000100" },
+      { channelId: "C08GY2NKF9D", threadTs: "1788400000.000100", inThread: true },
     );
     expect(p.params.threadTs).toBe("1788400000.000100");
     expect(p.echoUk).toContain("у цьому треді");

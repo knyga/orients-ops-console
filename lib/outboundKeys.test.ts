@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  fieldSummaryKey,
   approvalAckKey,
   approvalEditKey,
   approvalOutboundKeys,
@@ -153,5 +154,19 @@ describe("sprint-plan fallback keys", () => {
     expect(filled).not.toBe(anchor);
     expect(filled.startsWith("sprint-committed")).toBe(false);
     expect(anchor.startsWith("sprint-plan")).toBe(false);
+  });
+});
+
+describe("fieldSummaryKey", () => {
+  it("scopes by period, Kyiv day, channel, optional thread and part", () => {
+    expect(fieldSummaryKey("2026-08", "2026-09-03", "field-qa", null, "anchor")).toBe("field-summary:2026-08:2026-09-03:field-qa:anchor");
+    expect(fieldSummaryKey("2026-08", "2026-09-03", "field-qa", "1788300000.000001", "t2")).toBe(
+      "field-summary:2026-08:2026-09-03:field-qa:1788300000.000001:t2",
+    );
+  });
+  it("differs across channels for the same day (a test-channel publish must not dedup #field-qa)", () => {
+    expect(fieldSummaryKey("2026-08", "2026-09-03", "orients-ops-console-test", null, "anchor")).not.toBe(
+      fieldSummaryKey("2026-08", "2026-09-03", "field-qa", null, "anchor"),
+    );
   });
 });

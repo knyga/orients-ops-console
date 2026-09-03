@@ -66,6 +66,10 @@ describe("parseZvit", () => {
       const r = parseZvit("Звіт 2026.08.26\nАндріан + Влад 12:20- 16:20", postedAt("1787751822.198019"));
       expect(r).toMatchObject({ flightDate: "2026-08-26", start: "12:20", end: "16:20" });
     });
+    it("clamps a two-digit future-year typo too (Звіт 28.08.28 posted 2026-08-28)", () => {
+      const r = parseZvit("Звіт 28.08.28\nАндріан + Влад 13:20-18:50", postedAt("1787933632.727969"));
+      expect(r?.flightDate).toBe("2026-08-28");
+    });
     it("clamps a future-year typo to the posting year (Звіт 28.08.2028 posted 2026-08-28)", () => {
       const r = parseZvit("Звіт 28.08.2028\nАндріан + Влад 13:20-18:50", postedAt("1787933632.727969"));
       expect(r?.flightDate).toBe("2026-08-28");

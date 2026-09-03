@@ -108,6 +108,9 @@ export async function POST(req: Request): Promise<Response> {
       sourceUrl,
       channelId: body.channelId,
       threadTs: body.threadTs,
+      // A top-level @mention arrives with threadTs === its own ts (parse sets
+      // `e.thread_ts ?? e.ts`); only a reply inside an existing thread differs.
+      inThread: body.threadTs !== undefined && body.threadTs !== body.incomingTs,
     });
     if (result.kind === "proposal" && result.proposal) {
       await deliver(result.proposal.echoUk);

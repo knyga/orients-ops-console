@@ -204,3 +204,32 @@ describe("applyInstructionReply — several pending proposals (different axes) i
     expect(text).toContain(dayProposal.summaryUk); // the still-pending accept is named in the echo
   });
 });
+
+describe("applyInstructionReply — partial failure across several pending proposals", () => {
+  const dayProposal = { ...activeProposal, id: "p-day", axis: "day" as const, summaryUk: "прийняти день 2026-07-01 (виняток)", sourceReplyTs: "1781000100.000200" };
+  const crewProposal = { ...activeProposal, id: "p-crew", axis: "crew" as const, summaryUk: "склад 2026-07-01: Влад, Сергій", sourceReplyTs: "1781000100.000300" };
+
+  it("one failing apply does not block the others, and the failure is posted in the thread", async () => {
+    readActiveProposals.mockResolvedValue([dayProposal, crewProposal]);
+    classifyInstruction.mockResolvedValue({ intent: "confirm" });
+    settleProposal.mockResolvedValue("CONFIRMED");
+    applyInstruction.mockImplementation(async ({ axis }: { axis: string }) => {
+      if (axis === "day") throw new Error("Jira exploded");
+      return { applied: true };
+    });
+
+    const res = await applyInstructionReply({
+      entry: entry(null), period, replyText: "так", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/ok", replyTs: "1781000300.000500",
+    });
+
+    expect(res.handled).toBe("confirmed");
+    expect(res.applied).toBe(true); // the crew one went through
+    expect(res.failed).toEqual([dayProposal.summaryUk]);
+    expect(applyInstruction).toHaveBeenCalledTimes(2);
+    const note = postMessage.mock.calls.map((c) => c[1] as string).find((t) => t.includes("Не вдалося"));
+    expect(note).toBeDefined();
+    expect(note).toContain(dayProposal.summaryUk);
+    expect(note).toContain("Jira exploded");
+  });
+});

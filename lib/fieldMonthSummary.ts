@@ -8,12 +8,15 @@
  * reports and posts the result chunked.
  */
 import type { Period } from "./period";
-import { SLACK_MSG_MAX_BYTES, byteLength } from "./slackChunk";
+import { SLACK_MSG_MAX_BYTES, byteLength, chunkForSlack } from "./slackChunk";
 
 export type SummaryStatus = "ACCEPTED" | "ACCEPTED_EXCEPTION" | "REJECTED" | "NEEDS_REVIEW" | "PENDING";
 
 export interface SummaryDay {
   date: string; // YYYY-MM-DD
+  /** Position among the day's Звіти (1-based) — labelled «виїзд N/M» when M > 1. */
+  reportSeq?: number;
+  reportCount?: number;
   roster: string[];
   deployWindow: { start: string; end: string } | null;
   deployMin: number | null;
@@ -28,6 +31,10 @@ export interface SummaryDay {
   droneReportKnown: boolean;
   /** Crew members on an accepted day who are excluded by the per-person drone gate. */
   gateExcluded: string[];
+  /** Crew members on an accepted day left out of the pay roster for another
+   *  reason (approver eligibility, or a gate miss the verdict does not display
+   *  on a 0-airborne day) — from the committed bonus report; [] when absent. */
+  notCounted: string[];
   /** Approver who accepted (exception) or rejected the day, if any. */
   approver: string | null;
   /** Machine reasons (English, from the verdict) — rendered in Ukrainian here. */
@@ -72,6 +79,10 @@ export function reasonUk(reason: string): string {
   const vid = /video (\d+)m is (\d+)% of airborne (\d+)m/.exec(reason);
   if (vid) return `відео ${vid[1]} хв — лише ${vid[2]}% від ${vid[3]} хв у повітрі`;
   if (/no dataset — reason accepted/.test(reason)) return "";
+  const floor = /video ([\d.]+)m is under the 2-minute floor/.exec(reason);
+  if (floor) return `відео ${floor[1]} хв — менше 2 хв`;
+  if (/dataset reason declined by an admin/.test(reason)) return "датасет відхилено адміністратором";
+  if (/drone lost and not recovered/.test(reason)) return "втрата борта — не знайдено";
   return reason;
 }
 
@@ -93,6 +104,7 @@ function statusUk(day: SummaryDay): string {
 export function formatDayLine(day: SummaryDay): string {
   const parts: string[] = [];
   parts.push(`*${ddmm(day.date)} ${weekdayUk(day.date)}*`);
+  if (day.reportCount != null && day.reportCount > 1 && day.reportSeq != null) parts.push(`виїзд ${day.reportSeq}/${day.reportCount}`);
   parts.push(day.roster.length ? `екіпаж ${day.roster.join(" + ")}` : "екіпаж —");
   if (day.deployWindow) {
     parts.push(`${day.deployWindow.start}–${day.deployWindow.end}${day.deployMin != null ? ` (${hoursUk(day.deployMin)})` : ""}`);
@@ -107,7 +119,9 @@ export function formatDayLine(day: SummaryDay): string {
   parts.push(statusUk(day));
 
   const notes: string[] = [];
-  if (day.status === "NEEDS_REVIEW" || day.status === "PENDING") {
+  // Machine reasons: for unsettled days always; for a REJECTED day only when
+  // no approver decided it (a machine hard-reject must still say why).
+  if (day.status === "NEEDS_REVIEW" || day.status === "PENDING" || (day.status === "REJECTED" && !day.approver)) {
     for (const r of day.reasons) {
       const uk = reasonUk(r);
       if (uk) notes.push(uk);
@@ -115,6 +129,9 @@ export function formatDayLine(day: SummaryDay): string {
   }
   if ((day.status === "ACCEPTED" || day.status === "ACCEPTED_EXCEPTION") && day.gateExcluded.length) {
     notes.push(`без свого звіту дронів: ${day.gateExcluded.join(", ")}`);
+  }
+  if ((day.status === "ACCEPTED" || day.status === "ACCEPTED_EXCEPTION") && day.notCounted.length) {
+    notes.push(`не зараховано до бонусу: ${day.notCounted.join(", ")}`);
   }
   if ((day.status === "ACCEPTED" || day.status === "ACCEPTED_EXCEPTION") && !day.droneReportKnown && day.roster.length) {
     notes.push("даних по дронах за день немає");
@@ -136,11 +153,13 @@ export interface MonthSummaryPost {
   details: string[];
 }
 
-/** Greedy line packer: consecutive lines joined by "\n", each chunk ≤ maxBytes. */
+/** Greedy line packer: consecutive lines joined by "\n", each chunk ≤ maxBytes.
+ *  A single line over the cap is split by chunkForSlack rather than sent oversized. */
 function packLines(lines: string[], maxBytes: number): string[] {
   const out: string[] = [];
   let cur = "";
-  for (const line of lines) {
+  const fitted = lines.flatMap((l) => (byteLength(l) > maxBytes ? chunkForSlack(l, maxBytes) : [l]));
+  for (const line of fitted) {
     const next = cur ? `${cur}\n${line}` : line;
     if (cur && byteLength(next) > maxBytes) {
       out.push(cur);
@@ -153,7 +172,12 @@ function packLines(lines: string[], maxBytes: number): string[] {
   return out;
 }
 
-export function buildMonthSummary(period: Period, today: string, days: SummaryDay[]): MonthSummaryPost {
+export function buildMonthSummary(
+  period: Period,
+  today: string,
+  days: SummaryDay[],
+  opts: { inThread?: boolean } = {},
+): MonthSummaryPost {
   const month = MONTHS_UK_GEN[Number(period.start.slice(5, 7)) - 1];
   const year = period.start.slice(0, 4);
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
@@ -161,7 +185,7 @@ export function buildMonthSummary(period: Period, today: string, days: SummaryDa
     `*Польові дні — ${month} ${year}* (станом на ${ddmm(today)})`,
     countsUk(summaryCounts(sorted)),
     "✅ прийнято · ⚠️ на перевірці · ⛔ відхилено · ⏳ очікує (ще в межах 3 робочих днів на відео/датасет)",
-    "Деталі по днях — у треді 👇",
+    opts.inThread ? "Деталі по днях — нижче 👇" : "Деталі по днях — у треді 👇",
   ].join("\n");
   const details = packLines(sorted.map(formatDayLine), SLACK_MSG_MAX_BYTES);
   return { anchor, details };

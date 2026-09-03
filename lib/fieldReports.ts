@@ -50,7 +50,11 @@ export function parseFlightDate(header: string, postedTs: string): string | null
     if (postedYear != null && year > postedYear) year = postedYear; // future-year typo
     return `${year}-${m[2]}-${m[1]}`;
   }
-  if ((m = DATE_DMY2_RE.exec(header))) return `20${m[3]}-${m[2]}-${m[1]}`;
+  if ((m = DATE_DMY2_RE.exec(header))) {
+    let year = 2000 + Number(m[3]);
+    if (postedYear != null && year > postedYear) year = postedYear; // future-year typo
+    return `${year}-${m[2]}-${m[1]}`;
+  }
   if ((m = DATE_DM_RE.exec(header)) && posted && postedYear != null) {
     const sameYear = `${postedYear}-${m[2]}-${m[1]}`;
     // A report can't precede its own posting by much; a January post about

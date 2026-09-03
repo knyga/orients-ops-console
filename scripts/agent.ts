@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     else console.error("(thread has no messages — running without context)");
   }
 
-  const res = await runAgent(message, { sourceUrl, channelId, threadTs });
+  const res = await runAgent(message, { sourceUrl, channelId, threadTs, inThread: Boolean(threadTs) });
   if (res.kind === "text" || res.kind === "error") {
     console.log(res.text);
     if (res.kind === "error") process.exit(1);

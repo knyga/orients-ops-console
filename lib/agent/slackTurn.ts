@@ -14,7 +14,7 @@ const SLACK_MAX_ITERS = 6;
 export async function runSlackTurn(
   text: string,
   history: Turn[],
-  opts: { sourceUrl?: string; channelId?: string; threadTs?: string } = {},
+  opts: { sourceUrl?: string; channelId?: string; threadTs?: string; inThread?: boolean } = {},
 ): Promise<AgentResult> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set on the server.");

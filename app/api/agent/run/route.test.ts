@@ -213,6 +213,7 @@ describe("POST /api/agent/run", () => {
         sourceUrl: "https://orientsai.slack.com/archives/C-issue-log/p111222",
         channelId: "C-issue-log",
         threadTs: "111.222",
+        inThread: true, // threadTs !== incomingTs → a reply inside an existing thread
       },
     );
     // memory stores the ORIGINAL question, not the augmented one
@@ -223,7 +224,13 @@ describe("POST /api/agent/run", () => {
     h.runSlackTurn.mockResolvedValue({ kind: "text", text: "answer" });
     await POST(req(base));
     expect(h.fetchThreadContext).not.toHaveBeenCalled();
-    expect(h.runSlackTurn).toHaveBeenCalledWith("q", [], { sourceUrl: undefined, channelId: "C1", threadTs: undefined });
+    expect(h.runSlackTurn).toHaveBeenCalledWith("q", [], { sourceUrl: undefined, channelId: "C1", threadTs: undefined, inThread: false });
+  });
+
+  it("top-level @mention (threadTs === its own ts) → inThread false, so channel-vs-thread writes post a fresh anchor", async () => {
+    h.runSlackTurn.mockResolvedValue({ kind: "text", text: "answer" });
+    await POST(req({ ...base, surface: "mention", incomingTs: "111.900", threadTs: "111.900" }));
+    expect(h.runSlackTurn).toHaveBeenCalledWith("q", [], expect.objectContaining({ threadTs: "111.900", inThread: false }));
   });
 
   it("thread-context fetch failure → turn still runs on the bare question", async () => {
@@ -236,6 +243,7 @@ describe("POST /api/agent/run", () => {
       sourceUrl: "https://orientsai.slack.com/archives/C1/p111222",
       channelId: "C1",
       threadTs: "111.222",
+      inThread: true,
     });
     expect(h.updateMessage).toHaveBeenCalledWith("C1", "2", "answer", expect.anything());
   });

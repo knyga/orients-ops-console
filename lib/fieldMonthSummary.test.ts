@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMonthSummary, formatDayLine, type SummaryDay } from "./fieldMonthSummary";
+import { buildMonthSummary, formatDayLine, reasonUk, type SummaryDay } from "./fieldMonthSummary";
 
 const base: SummaryDay = {
   date: "2026-08-19",
@@ -15,6 +15,7 @@ const base: SummaryDay = {
   droneCounts: [{ name: "Андріан", count: 4 }, { name: "Влад", count: 3 }],
   droneReportKnown: true,
   gateExcluded: [],
+  notCounted: [],
   approver: null,
   reasons: [],
   hasZvit: true,
@@ -129,5 +130,43 @@ describe("buildMonthSummary — anchor + thread replies (sprint-post shape)", ()
     const { details } = buildMonthSummary({ start: "2026-08-01", end: "2026-08-31" }, "2026-09-03", many);
     expect(details.length).toBeGreaterThan(1);
     expect(details.join("\n").match(/^\*\d\d\.08/gm)?.length).toBe(31);
+  });
+});
+
+describe("formatDayLine — reasons and labels", () => {
+  it("a machine-rejected day (no approver) still shows WHY in Ukrainian", () => {
+    const line = formatDayLine({ ...base, status: "REJECTED", approver: null, reasons: ["deployment 110m is under 3h"] });
+    expect(line).toContain("⛔ відхилено");
+    expect(line).toContain("менше 3 год");
+  });
+  it("translates the remaining machine reasons instead of leaking English", () => {
+    expect(reasonUk("video 1.5m is under the 2-minute floor")).toMatch(/відео .*менше 2 хв/);
+    expect(reasonUk("dataset reason declined by an admin")).toMatch(/датасет .*відхилено/);
+    expect(reasonUk("drone lost and not recovered")).toMatch(/втрата борта/);
+  });
+  it("names crew not counted for the bonus for a non-gate reason, separately from the drone-gate line", () => {
+    const line = formatDayLine({ ...base, gateExcluded: ["Андріан"], notCounted: ["Данило"] });
+    expect(line).toContain("без свого звіту дронів: Андріан");
+    expect(line).toContain("не зараховано до бонусу: Данило");
+  });
+  it("labels the report position on a multi-report day", () => {
+    const line = formatDayLine({ ...base, reportSeq: 2, reportCount: 2 });
+    expect(line).toContain("виїзд 2/2");
+    expect(formatDayLine({ ...base, reportSeq: 1, reportCount: 1 })).not.toContain("виїзд 1/1");
+  });
+});
+
+describe("buildMonthSummary — thread mode + oversize lines", () => {
+  it("in thread mode the anchor points down the same thread, not to a thread of its own", () => {
+    const { anchor } = buildMonthSummary({ start: "2026-08-01", end: "2026-08-31" }, "2026-09-03", [base], { inThread: true });
+    expect(anchor).toContain("нижче");
+    expect(anchor).not.toContain("у треді 👇");
+  });
+  it("a single line longer than the cap is split rather than dropped or sent oversized", () => {
+    const huge = { ...base, roster: Array.from({ length: 400 }, (_, i) => `Пілот${i}`) };
+    const { details } = buildMonthSummary({ start: "2026-08-01", end: "2026-08-31" }, "2026-09-03", [huge]);
+    expect(details.length).toBeGreaterThan(1);
+    for (const d of details) expect(new TextEncoder().encode(d).length).toBeLessThanOrEqual(3800);
+    expect(details.join("")).toContain("Пілот399");
   });
 });

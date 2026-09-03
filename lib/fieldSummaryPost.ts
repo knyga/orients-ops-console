@@ -4,22 +4,22 @@
  * (`npm run field-summary`) and the agent's confirm-first `field_summary_post`
  * tool via lib/proposalExecutor, so both surfaces post byte-identical text.
  *
- * Inputs are the COMMITTED reports (field-verdict — refreshed nightly; field-qa
- * — its drone counts/submitters; field-bonus — optional, only for the
- * per-person drone-gate exclusions; when absent the gate is derived from the
- * same `owesDroneSubmission` predicate the pay gate uses, minus approver
- * eligibility overrides) plus the published log for verdict links.
+ * Inputs are the COMMITTED reports (field-verdict — refreshed nightly, and the
+ * single source for status, crew, window and the per-person drone-gate names
+ * (`droneMissingSubmitters`, computed with the SAME predicate + approver
+ * eligibility the pay gate uses — never re-derived here); field-qa — its
+ * per-person drone counts; field-bonus — OPTIONAL, only to list accepted-day
+ * crew the pay roster left out for a non-gate reason as «не зараховано до
+ * бонусу») plus the published log for verdict links.
  * SERVER-ONLY reachable (DB + Slack).
  */
 import { readReportJson, periodKey } from "./reports";
 import { readPublished } from "./published";
 import { reportKey, type DayVerdict } from "./fieldDayVerdict";
-import type { DayBonus } from "./fieldBonus";
-import { EARLY_CUTOFF_MIN } from "./fieldBonus";
-import { owesDroneSubmission } from "./droneOwners";
+import { EARLY_CUTOFF_MIN, type DayBonus } from "./fieldBonus";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { permalinkFor, postMessage } from "./slack";
-import type { SendTrigger } from "./outboundKeys";
+import { fieldSummaryKey, type SendTrigger } from "./outboundKeys";
 import { buildMonthSummary, type SummaryDay, type SummaryStatus } from "./fieldMonthSummary";
 export { parseSummaryPeriod, summaryCounts, countsUk, type SummaryCounts } from "./fieldMonthSummary";
 import type { Period } from "./period";
@@ -27,7 +27,6 @@ import type { Period } from "./period";
 interface FieldQaDay {
   date: string;
   droneReport?: { name: string; isPerson: boolean; count: number }[];
-  droneSubmitters?: string[];
 }
 
 function approverFromReasons(reasons: string[]): string | null {
@@ -56,8 +55,8 @@ export async function assembleSummaryDays(period: Period): Promise<SummaryDay[]>
   if (!verdict) {
     throw new Error(`немає збереженого field-verdict за ${key} — запустіть \`npm run field-verdict -- --start ${period.start} --end ${period.end} --write\`.`);
   }
-  const bonus = await readReportJson<{ days: DayBonus[] }>("field-bonus", key);
   const fieldQa = await readReportJson<{ days: FieldQaDay[] }>("field-qa", key);
+  const bonus = await readReportJson<{ days: Pick<DayBonus, "date" | "reportTs" | "roster" | "paidRoster">[] }>("field-bonus", key);
   const fieldQaChannel = TRACKED_CHANNELS.find((c) => c.name === "field-qa");
   if (!fieldQaChannel) throw new Error("#field-qa is not a tracked channel");
   const published = await readPublished(period);
@@ -65,15 +64,18 @@ export async function assembleSummaryDays(period: Period): Promise<SummaryDay[]>
   const bonusByKey = new Map((bonus?.days ?? []).map((d) => [reportKey(d.date, d.reportTs), d]));
 
   return verdict.days.map((v) => {
-    const b = bonusByKey.get(reportKey(v.date, v.reportTs));
     const qa = qaByDate.get(v.date);
+    const b = bonusByKey.get(reportKey(v.date, v.reportTs));
+    const gateExcluded = v.droneMissingSubmitters ?? [];
+    const accepted = v.status === "ACCEPTED" || v.status === "ACCEPTED_EXCEPTION";
+    const notCounted =
+      accepted && b ? v.roster.filter((n) => !(b.paidRoster ?? v.roster).includes(n) && !gateExcluded.includes(n)) : [];
     const pub = published[reportKey(v.date, v.reportTs)] ?? published[v.date];
-    const gateExcluded = b
-      ? v.roster.filter((n) => !(b.paidRoster ?? v.roster).includes(n))
-      : v.roster.filter((n) => owesDroneSubmission(n, qa?.droneSubmitters ?? [], v.date));
     const sm = startMinutes(v.deployWindow);
     return {
       date: v.date,
+      reportSeq: v.reportSeq,
+      reportCount: v.reportCount,
       roster: v.roster,
       deployWindow: v.deployWindow ?? null,
       deployMin: v.deployMin ?? null,
@@ -85,7 +87,9 @@ export async function assembleSummaryDays(period: Period): Promise<SummaryDay[]>
       weekend: isWeekend(v.date),
       droneCounts: (qa?.droneReport ?? []).filter((e) => e.isPerson).map((e) => ({ name: e.name, count: e.count })),
       droneReportKnown: Array.isArray(qa?.droneReport),
+      // Verdict-owned: same predicate + approver eligibility as the pay gate; empty when attribution is unknown.
       gateExcluded,
+      notCounted,
       approver: approverFromReasons(v.reasons),
       reasons: v.reasons,
       hasZvit: v.hasZvit !== false,
@@ -114,16 +118,18 @@ export async function postFieldSummary(args: PostFieldSummaryArgs): Promise<{ an
   const channel = TRACKED_CHANNELS.find((c) => c.id === args.channelId);
   if (!channel) throw new Error(`канал ${args.channelId} не відстежується — підсумок можна публікувати лише у відстежуваних каналах.`);
   const days = await assembleSummaryDays(args.period);
-  const { anchor, details } = buildMonthSummary(args.period, args.today, days);
+  const { anchor, details } = buildMonthSummary(args.period, args.today, days, { inThread: Boolean(args.threadTs) });
   const key = periodKey(args.period);
-  const scope = args.threadTs ? `:${args.threadTs}` : "";
   const meta = (part: string) => ({
-    key: `field-summary:${key}:${args.today}${scope}:${part}`,
+    key: fieldSummaryKey(key, args.today, channel.name, args.threadTs ?? null, part),
     feature: "field-summary",
     channel: channel.name,
     trigger: args.trigger,
   });
   const anchorTs = await postMessage(channel.id, anchor, meta("anchor"), args.threadTs);
+  // An empty ts means the chokepoint skipped the send (a stuck `pending`
+  // reservation) — posting the day lines now would scatter them top-level.
+  if (!anchorTs) throw new Error("анкор підсумку не надіслано (застрягла резервація) — деталі не публікую; повторіть пізніше.");
   // Day lines hang under the anchor (new post) or under the existing thread root.
   const threadRoot = args.threadTs ?? anchorTs;
   for (const [i, d] of details.entries()) {
