@@ -24,6 +24,7 @@
     "drive": "node --conditions=react-server --import tsx scripts/drive.ts",
     "field-verdict": "node --conditions=react-server --import tsx scripts/field-verdict.ts",
     "field-publish": "node --conditions=react-server --import tsx scripts/field-publish.ts",
+    "field-summary": "node --conditions=react-server --import tsx scripts/field-summary.ts",
     "field-backfill": "node --conditions=react-server --import tsx scripts/field-backfill.ts",
     "field-ask": "node --conditions=react-server --import tsx scripts/field-ask.ts",
     "field-remember": "node --conditions=react-server --import tsx scripts/field-remember.ts",
