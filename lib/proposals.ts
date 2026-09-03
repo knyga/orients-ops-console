@@ -118,11 +118,15 @@ export async function supersedeThread(threadTs: string, incomingAxis?: ProposalA
 export async function settleProposal(proposal: Proposal, action: ProposalAction): Promise<ProposalState | null> {
   const next = nextState(proposal.state, action);
   if (!next) return null;
-  await db
+  // The conditional update is the atomic claim: two concurrent confirms race
+  // here, and only the one whose UPDATE matched the still-PROPOSED row may
+  // run the effect — the loser sees null (idempotent no-op).
+  const rows = await db
     .update(schema.proposals)
     .set({ state: next, resolvedAt: new Date().toISOString() })
-    .where(and(eq(schema.proposals.id, proposal.id), eq(schema.proposals.state, "PROPOSED")));
-  return next;
+    .where(and(eq(schema.proposals.id, proposal.id), eq(schema.proposals.state, "PROPOSED")))
+    .returning({ id: schema.proposals.id });
+  return rows.length > 0 ? next : null;
 }
 
 /** All proposals whose flight date falls in [start, end] (for web/CLI listing). */

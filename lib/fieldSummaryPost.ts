@@ -13,6 +13,7 @@
  * бонусу») plus the published log for verdict links.
  * SERVER-ONLY reachable (DB + Slack).
  */
+import "server-only";
 import { readReportJson, periodKey } from "./reports";
 import { readPublished } from "./published";
 import { reportKey, type DayVerdict } from "./fieldDayVerdict";

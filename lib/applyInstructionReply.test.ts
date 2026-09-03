@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { postMessage, applyInstruction, createProposal, readActiveProposals, settleProposal, classifyInstruction } =
+const { postMessage, applyInstruction, createProposal, readActiveProposals, settleProposal, classifyInstruction, findPublishedByTs } =
   vi.hoisted(() => ({
     postMessage: vi.fn(),
     applyInstruction: vi.fn(),
@@ -8,7 +8,12 @@ const { postMessage, applyInstruction, createProposal, readActiveProposals, sett
     readActiveProposals: vi.fn(),
     settleProposal: vi.fn(),
     classifyInstruction: vi.fn(),
+    findPublishedByTs: vi.fn(),
   }));
+vi.mock("./published", async (orig) => {
+  const actual = await (orig as () => Promise<Record<string, unknown>>)();
+  return { ...actual, findPublishedByTs };
+});
 vi.mock("./slack", () => ({ postMessage }));
 vi.mock("./applyInstruction", () => ({ applyInstruction }));
 vi.mock("./proposals", () => ({ createProposal, readActiveProposals, settleProposal }));
@@ -50,6 +55,7 @@ beforeEach(() => {
   readActiveProposals.mockReset().mockResolvedValue([]);
   settleProposal.mockReset().mockResolvedValue("CANCELLED");
   classifyInstruction.mockReset();
+  findPublishedByTs.mockReset().mockResolvedValue(null);
 });
 
 describe("applyInstructionReply — report-scoped ack keys (second-report thread must not be swallowed)", () => {
@@ -231,5 +237,40 @@ describe("applyInstructionReply — partial failure across several pending propo
     expect(note).toBeDefined();
     expect(note).toContain(dayProposal.summaryUk);
     expect(note).toContain("Jira exploded");
+  });
+});
+
+describe("applyInstructionReply — stacked applies see each other's effects", () => {
+  const dayProposal = { ...activeProposal, id: "p-day", axis: "day" as const, summaryUk: "прийняти день 2026-07-01 (виняток)", sourceReplyTs: "1781000100.000200" };
+  const crewProposal = { ...activeProposal, id: "p-crew", axis: "crew" as const, summaryUk: "склад 2026-07-01: Влад, Сергій", sourceReplyTs: "1781000100.000300" };
+
+  it("reloads the published entry after each apply so the crew edit builds on the amended text, not the stale one", async () => {
+    readActiveProposals.mockResolvedValue([dayProposal, crewProposal]);
+    classifyInstruction.mockResolvedValue({ intent: "confirm" });
+    settleProposal.mockResolvedValue("CONFIRMED");
+    const amended = { ...entry(null), text: "~⚠️ 2026-07-01 — потрібна перевірка.~\n✅ Оновлено → прийнято (виняток)\n👥 У полі: Влад, Тарас." };
+    findPublishedByTs.mockResolvedValue({ period, entry: amended });
+
+    await applyInstructionReply({
+      entry: entry(null), period, replyText: "так", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/ok", replyTs: "1781000300.000600",
+    });
+
+    expect(applyInstruction).toHaveBeenCalledTimes(2);
+    expect(applyInstruction.mock.calls[0][0].entry.text).toBe(entry(null).text); // first apply: original
+    expect(applyInstruction.mock.calls[1][0].entry.text).toBe(amended.text); // second apply: reloaded
+    expect(findPublishedByTs).toHaveBeenCalledWith(entry(null).ts);
+  });
+
+  it("falls back to the last known entry when the reload finds nothing", async () => {
+    readActiveProposals.mockResolvedValue([dayProposal, crewProposal]);
+    classifyInstruction.mockResolvedValue({ intent: "confirm" });
+    settleProposal.mockResolvedValue("CONFIRMED");
+    findPublishedByTs.mockResolvedValue(null);
+    await applyInstructionReply({
+      entry: entry(null), period, replyText: "так", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/ok", replyTs: "1781000300.000700",
+    });
+    expect(applyInstruction.mock.calls[1][0].entry.text).toBe(entry(null).text);
   });
 });

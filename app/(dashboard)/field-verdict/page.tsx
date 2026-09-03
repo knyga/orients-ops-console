@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { reportKey, type DayVerdict, type VerdictStatus } from "@/lib/fieldDayVerdict";
 import { formatDroneLine } from "@/lib/droneReport";
+import { parseMrkdwnLine } from "@/lib/mrkdwnLite";
 
 /** The committed verdict artifact shape (reports/field-verdict/<key>.json). */
 interface VerdictReport {
@@ -36,6 +37,7 @@ export default function FieldVerdictPage() {
   const [selected, setSelected] = useState<string>("");
   const [report, setReport] = useState<VerdictReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<{ anchor: string; details: string[] } | null>(null);
 
   const load = useCallback(async (key: string) => {
     setError(null);
@@ -47,6 +49,17 @@ export default function FieldVerdictPage() {
       setReport(body as VerdictReport);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load report.");
+    }
+    // The Slack summary twin (same committed reports; soft-fails to "unavailable").
+    setSummary(null);
+    try {
+      const res = await fetch(`/api/field-summary?period=${encodeURIComponent(key)}`);
+      if (res.ok) {
+        const body = (await res.json()) as { anchor: string; details: string[] };
+        setSummary({ anchor: body.anchor, details: body.details });
+      }
+    } catch {
+      /* panel simply stays hidden */
     }
   }, []);
 
@@ -140,6 +153,21 @@ export default function FieldVerdictPage() {
         </div>
       )}
 
+      {/* Slack summary twin — the exact Ukrainian text `npm run field-summary` / the agent's field_summary_post posts */}
+      {summary && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-slate-900">Підсумок для #field-qa</h2>
+          <div className="rounded-md border border-slate-200 bg-white p-4 text-sm leading-6">
+            <MrkdwnBlock text={summary.anchor} />
+            {summary.details.map((d, i) => (
+              <div key={i} className="mt-3 border-t border-slate-100 pt-3">
+                <MrkdwnBlock text={d} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Daily verdicts */}
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-slate-900">Daily verdicts</h2>
@@ -213,6 +241,28 @@ export default function FieldVerdictPage() {
           </table>
         </div>
       </section>
+    </div>
+  );
+}
+
+function MrkdwnBlock({ text }: { text: string }) {
+  return (
+    <div className="space-y-1">
+      {text.split("\n").map((line, i) => (
+        <p key={i} className="break-words">
+          {parseMrkdwnLine(line).map((seg, j) =>
+            seg.kind === "bold" ? (
+              <strong key={j}>{seg.text}</strong>
+            ) : seg.kind === "link" ? (
+              <a key={j} href={seg.href} target="_blank" rel="noreferrer" className="text-blue-700 underline">
+                {seg.text}
+              </a>
+            ) : (
+              <span key={j}>{seg.text}</span>
+            ),
+          )}
+        </p>
+      ))}
     </div>
   );
 }

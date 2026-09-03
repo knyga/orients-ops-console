@@ -53,6 +53,12 @@ describe("field_summary_post", () => {
     expect(p.echoUk).toContain("у цьому треді");
   });
 
+  it("labels a partial period with exact bounds in the echo", async () => {
+    const p = await tool.propose!({ start: "2026-08-15", end: "2026-09-10" }, { channelId: "C1" });
+    expect(p.echoUk).toContain("15.08–10.09.2026");
+    expect(p.echoUk).not.toContain("серпень");
+  });
+
   it("refuses outside Slack (no channel in context) in Ukrainian", async () => {
     await expect(tool.propose!({ start: "2026-08-01", end: "2026-08-31" }, {})).rejects.toThrow(/лише у Slack/);
   });

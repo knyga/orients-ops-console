@@ -8,20 +8,9 @@
  * path is approver-gated (lib/proposalGate).
  */
 import { assembleSummaryDays } from "@/lib/fieldSummaryPost";
-import { countsUk, parseSummaryPeriod, summaryCounts } from "@/lib/fieldMonthSummary";
+import { countsUk, parseSummaryPeriod, periodLabelUk, summaryCounts } from "@/lib/fieldMonthSummary";
 import { applyProposal } from "@/lib/proposalExecutor";
 import type { Proposal, ProposeContext, Tool } from "./types";
-
-const MONTHS_UK = [
-  "січень", "лютий", "березень", "квітень", "травень", "червень",
-  "липень", "серпень", "вересень", "жовтень", "листопад", "грудень",
-];
-
-function periodLabelUk(start: string, end: string): string {
-  const sameMonth = start.slice(0, 7) === end.slice(0, 7);
-  if (sameMonth && start.endsWith("-01")) return `${MONTHS_UK[Number(start.slice(5, 7)) - 1]} ${start.slice(0, 4)}`;
-  return `${start} … ${end}`;
-}
 
 export async function fieldSummaryPostProposal(
   args: Record<string, unknown>,
@@ -47,7 +36,7 @@ export async function fieldSummaryPostProposal(
   return {
     kind: "field_summary_post",
     params,
-    echoUk: `📋 Опублікую підсумок польових днів за ${periodLabelUk(period.start, period.end)} — ${countsUk(counts)} — ${where}. Застосувати? (так/ні)`,
+    echoUk: `📋 Опублікую підсумок польових днів за ${periodLabelUk(period)} — ${countsUk(counts)} — ${where}. Застосувати? (так/ні)`,
     apply: () => applyProposal("field_summary_post", params),
   };
 }

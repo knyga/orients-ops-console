@@ -20,7 +20,7 @@ import { postMessage } from "./slack";
 import { contentRev, instructionAckKey, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { reportKey } from "./fieldDayVerdict";
-import type { PublishedEntry } from "./published";
+import { findPublishedByTs, type PublishedEntry } from "./published";
 import type { InstructionClassification } from "./instructionClassifyPrompt";
 import type { Period } from "./period";
 
@@ -55,6 +55,11 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
     let applied = false;
     let settledAny = false;
     const failed: { summary: string; reason: string }[] = [];
+    // Each apply rebuilds the Slack message from `entry.text` and rewrites
+    // `published`; the next sibling must build on the RESULT, not on the
+    // entry this reply arrived with (a day amendment followed by a crew edit
+    // would otherwise restore the un-amended text).
+    let current: PublishedEntry = entry;
     for (const p of pending) {
       const next = await settleProposal(p, "confirm");
       if (next !== "CONFIRMED") continue; // already settled (redelivery)
@@ -63,7 +68,7 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
       // CONFIRMED in the store already, so the only trace left is this note.
       try {
         const res = await applyInstruction({
-          entry,
+          entry: current,
           period,
           axis: p.axis,
           instruction: p.payload as InstructionClassification,
@@ -74,6 +79,10 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
         applied = applied || res.applied;
       } catch (err) {
         failed.push({ summary: p.summaryUk, reason: err instanceof Error ? err.message : String(err) });
+      }
+      if (pending.length > 1) {
+        const fresh = await findPublishedByTs(entry.ts).catch(() => null);
+        if (fresh) current = fresh.entry;
       }
     }
     if (!settledAny) return { handled: "noop", intent: c.intent };

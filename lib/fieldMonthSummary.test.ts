@@ -170,3 +170,23 @@ describe("buildMonthSummary — thread mode + oversize lines", () => {
     expect(details.join("")).toContain("Пілот399");
   });
 });
+
+describe("buildMonthSummary — header label and day count", () => {
+  it("a partial or cross-month period is labelled with its exact bounds, not a month name", () => {
+    const { anchor } = buildMonthSummary({ start: "2026-08-15", end: "2026-09-10" }, "2026-09-11", [base]);
+    expect(anchor).toContain("15.08–10.09.2026");
+    expect(anchor).not.toContain("серпень 2026*");
+  });
+  it("a full calendar month keeps the month name", () => {
+    const { anchor } = buildMonthSummary({ start: "2026-08-01", end: "2026-08-31" }, "2026-09-03", [base]);
+    expect(anchor).toContain("серпень 2026");
+  });
+  it("counts calendar days, and says how many reports when a day has several Звіти", () => {
+    const { anchor } = buildMonthSummary({ start: "2026-08-01", end: "2026-08-31" }, "2026-09-03", [
+      { ...base, reportSeq: 1, reportCount: 2 },
+      { ...base, reportSeq: 2, reportCount: 2, roster: ["Любомир"] },
+      { ...base, date: "2026-08-20" },
+    ]);
+    expect(anchor).toContain("2 дні (3 звіти)");
+  });
+});

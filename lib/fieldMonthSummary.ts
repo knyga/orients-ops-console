@@ -50,6 +50,30 @@ const MONTHS_UK_GEN = [
   "липень", "серпень", "вересень", "жовтень", "листопад", "грудень",
 ];
 
+function lastDayOfMonth(yyyyMm: string): string {
+  const [y, m] = yyyyMm.split("-").map(Number);
+  return String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0");
+}
+
+/** «серпень 2026» for a full calendar month, else exact bounds «15.08–10.09.2026». */
+export function periodLabelUk(period: Period): string {
+  const fullMonth =
+    period.start.slice(0, 7) === period.end.slice(0, 7) &&
+    period.start.endsWith("-01") &&
+    period.end.slice(8, 10) === lastDayOfMonth(period.start.slice(0, 7));
+  if (fullMonth) return `${MONTHS_UK_GEN[Number(period.start.slice(5, 7)) - 1]} ${period.start.slice(0, 4)}`;
+  return `${ddmm(period.start)}–${ddmm(period.end)}.${period.end.slice(0, 4)}`;
+}
+
+/** Ukrainian count noun: 1 день / 2 дні / 5 днів (same shape for звіт/звіти/звітів). */
+export function pluralUk(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return `${n} ${one}`;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
 function weekdayUk(date: string): string {
   const d = new Date(`${date}T12:00:00Z`);
   return WEEKDAYS_UK[d.getUTCDay()];
@@ -178,11 +202,9 @@ export function buildMonthSummary(
   days: SummaryDay[],
   opts: { inThread?: boolean } = {},
 ): MonthSummaryPost {
-  const month = MONTHS_UK_GEN[Number(period.start.slice(5, 7)) - 1];
-  const year = period.start.slice(0, 4);
-  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date) || (a.reportSeq ?? 0) - (b.reportSeq ?? 0));
   const anchor = [
-    `*Польові дні — ${month} ${year}* (станом на ${ddmm(today)})`,
+    `*Польові дні — ${periodLabelUk(period)}* (станом на ${ddmm(today)})`,
     countsUk(summaryCounts(sorted)),
     "✅ прийнято · ⚠️ на перевірці · ⛔ відхилено · ⏳ очікує (ще в межах 3 робочих днів на відео/датасет)",
     opts.inThread ? "Деталі по днях — нижче 👇" : "Деталі по днях — у треді 👇",
@@ -202,12 +224,22 @@ export function parseSummaryPeriod(start: unknown, end: unknown): Period {
   return { start, end };
 }
 
-export interface SummaryCounts { days: number; accepted: number; review: number; rejected: number; pending: number }
+export interface SummaryCounts {
+  /** Distinct calendar days. */
+  days: number;
+  /** Звіт rows (≥ days; a day may carry several reports). */
+  reports: number;
+  accepted: number;
+  review: number;
+  rejected: number;
+  pending: number;
+}
 
-export function summaryCounts(days: Pick<SummaryDay, "status">[]): SummaryCounts {
+export function summaryCounts(days: Pick<SummaryDay, "status" | "date">[]): SummaryCounts {
   const n = (f: (s: SummaryStatus) => boolean) => days.filter((d) => f(d.status)).length;
   return {
-    days: days.length,
+    days: new Set(days.map((d) => d.date)).size,
+    reports: days.length,
     accepted: n((s) => s === "ACCEPTED" || s === "ACCEPTED_EXCEPTION"),
     review: n((s) => s === "NEEDS_REVIEW"),
     rejected: n((s) => s === "REJECTED"),
@@ -216,5 +248,6 @@ export function summaryCounts(days: Pick<SummaryDay, "status">[]): SummaryCounts
 }
 
 export function countsUk(c: SummaryCounts): string {
-  return `${c.days} днів: ✅ ${c.accepted} · ⚠️ ${c.review} · ⛔ ${c.rejected} · ⏳ ${c.pending}`;
+  const head = pluralUk(c.days, "день", "дні", "днів") + (c.reports !== c.days ? ` (${pluralUk(c.reports, "звіт", "звіти", "звітів")})` : "");
+  return `${head}: ✅ ${c.accepted} · ⚠️ ${c.review} · ⛔ ${c.rejected} · ⏳ ${c.pending}`;
 }
