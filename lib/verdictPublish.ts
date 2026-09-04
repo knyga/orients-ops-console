@@ -14,6 +14,7 @@ import { dateWithWeekday } from "./workdays";
 import type { DayVerdict } from "./fieldDayVerdict";
 import { formatDroneLine, type DroneEntry } from "./droneReport";
 import { mentionize, dementionText } from "./mention";
+import { splitLinksRegion } from "./linksRegion";
 
 const ICON: Record<string, string> = {
   ACCEPTED: "✅",
@@ -64,23 +65,28 @@ export function withLossLine(body: string, day: DayVerdict): string {
   return `${body}\n${day.loss.found ? "✅ Борт втрачено і знайдено." : "⚠️ Втрата борта (не знайдено)."}`;
 }
 
-/** Peel a trailing "\n🛸 Дрони: …" line off the end. Pure. */
-export function splitDroneLine(text: string): { rest: string; droneLine: string | null } {
-  const idx = text.lastIndexOf(`\n${DRONE_MARKER}`);
-  if (idx === -1) return { rest: text, droneLine: null };
-  const after = text.slice(idx + 1);
-  if (after.includes("\n")) return { rest: text, droneLine: null }; // not the trailing line
-  return { rest: text.slice(0, idx), droneLine: after };
+/** Peel a trailing "\n🔗 …" cross-link line (if any), then a trailing "\n🛸 Дрони: …" line. Pure. */
+export function splitDroneLine(text: string): { rest: string; droneLine: string | null; linksLine: string | null } {
+  const { rest: noLinks, linksLine } = splitLinksRegion(text);
+  const idx = noLinks.lastIndexOf(`\n${DRONE_MARKER}`);
+  if (idx === -1) return { rest: noLinks, droneLine: null, linksLine };
+  const after = noLinks.slice(idx + 1);
+  if (after.includes("\n")) return { rest: noLinks, droneLine: null, linksLine }; // not the trailing line
+  return { rest: noLinks.slice(0, idx), droneLine: after, linksLine };
 }
 
-/** Split a published message into body + crew suffix + drone line. The crew
- *  suffix is the line at the last crew marker with any trailing drone line
- *  removed, so parseRosterSuffix stays drone-free. Pure. */
-export function splitRosterSuffix(text: string): { body: string; rosterLine: string | null; droneLine: string | null } {
-  const { rest, droneLine } = splitDroneLine(text);
+/** Split a published message into body + crew suffix + drone line + 🔗 links line.
+ *  Regions are disjoint; every editor rebuilds ONE and re-appends the others. Pure. */
+export function splitRosterSuffix(text: string): {
+  body: string;
+  rosterLine: string | null;
+  droneLine: string | null;
+  linksLine: string | null;
+} {
+  const { rest, droneLine, linksLine } = splitDroneLine(text);
   const idx = rest.lastIndexOf(`\n${ROSTER_MARKER}`);
-  if (idx === -1) return { body: rest, rosterLine: null, droneLine };
-  return { body: rest.slice(0, idx), rosterLine: rest.slice(idx + 1), droneLine };
+  if (idx === -1) return { body: rest, rosterLine: null, droneLine, linksLine };
+  return { body: rest.slice(0, idx), rosterLine: rest.slice(idx + 1), droneLine, linksLine };
 }
 
 /** Parse the crew names from a published message's crew suffix ([] when none). Pure. */

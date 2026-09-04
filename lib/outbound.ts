@@ -103,6 +103,18 @@ export async function findSentByTs(ts: string): Promise<OutboundRow[]> {
   return db.select().from(schema.outboundMessages).where(eq(schema.outboundMessages.ts, ts));
 }
 
+/** The SENT row under `key` (with a ts), or null. Used by the cross-link
+ *  planner to find the drone reminder / Звіт-thread reply it posted earlier. */
+export async function findSentByKey(key: string): Promise<OutboundRow | null> {
+  const [row] = await db.select().from(schema.outboundMessages).where(eq(schema.outboundMessages.key, key)).limit(1);
+  return row && row.status === "sent" && row.ts ? row : null;
+}
+
+/** Every row of one feature (indexed). Small tables (reminders, summaries). */
+export async function readOutboundByFeature(feature: string): Promise<OutboundRow[]> {
+  return db.select().from(schema.outboundMessages).where(eq(schema.outboundMessages.feature, feature));
+}
+
 /**
  * Reserve `key` as already SATISFIED by an existing message — no send happens.
  * The sprint fill-in EDITS the pending fallback anchor into the real Committed

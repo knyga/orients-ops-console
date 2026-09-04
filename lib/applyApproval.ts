@@ -49,12 +49,13 @@ export interface AmendVerdictArgs {
 }
 
 /**
- * Amend a published verdict in Slack: strike the BODY (preserving the disjoint
- * 👥 crew suffix + 🛸 drone line), optionally post the generic threaded ack, and
- * stamp the entry's `override`. Skips entirely when this same decision was
- * already acked (Slack's at-least-once delivery / a CLI re-run never
- * double-posts); a CHANGED decision re-amends (formatOverride always strikes
- * the ORIGINAL text). Shared by the day axis and the dataset-decline path.
+ * Amend a published verdict in Slack: strike the BODY; keep the body, the
+ * trailing drone line AND the 🔗 links line intact — each is a disjoint
+ * region. Optionally posts the generic threaded ack, and stamps the entry's
+ * `override`. Skips entirely when this same decision was already acked
+ * (Slack's at-least-once delivery / a CLI re-run never double-posts); a
+ * CHANGED decision re-amends (formatOverride always strikes the ORIGINAL
+ * text). Shared by the day axis and the dataset-decline path.
  */
 export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<ApproverDecisionResult> {
   const { entry, period, decision, by, reason, trigger, postAck, salt } = args;
@@ -68,9 +69,9 @@ export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<App
     return { applied: false, alreadyAcked: false };
   }
 
-  const { body, rosterLine, droneLine } = splitRosterSuffix(entry.text);
+  const { body, rosterLine, droneLine, linksLine } = splitRosterSuffix(entry.text);
   const { updatedText: struck, replyText } = formatOverride(body, decision, by, reason);
-  const tail = [rosterLine, droneLine].filter(Boolean).join("\n");
+  const tail = [rosterLine, droneLine, linksLine].filter(Boolean).join("\n");
   const updatedText = tail ? `${struck}\n${tail}` : struck;
   // Key the edit + ack by the DECISION, not the (non-deterministic) reason text,
   // so a redelivered Slack event dedups to a single post while a genuine flip

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { formatDayMessage, formatOverride, formatTimeTail, formatDuration, publishableDays, ROSTER_MARKER, splitRosterSuffix, withRosterSuffix, parseRosterSuffix, withDroneLine, withLossLine } from "./verdictPublish";
+import { formatDayMessage, formatOverride, formatTimeTail, formatDuration, publishableDays, ROSTER_MARKER, splitRosterSuffix, splitDroneLine, withRosterSuffix, parseRosterSuffix, withDroneLine, withLossLine } from "./verdictPublish";
 import { mentionize, dementionText } from "./mention";
+import { LINKS_MARKER } from "./linksRegion";
 import type { DayVerdict } from "./fieldDayVerdict";
 
 const day = (over: Partial<DayVerdict>): DayVerdict => ({
@@ -194,7 +195,7 @@ describe("crew suffix", () => {
 
   it("omits the suffix for an empty roster and splits cleanly when absent", () => {
     expect(withRosterSuffix("body", [])).toBe("body");
-    expect(splitRosterSuffix("body")).toEqual({ body: "body", rosterLine: null, droneLine: null });
+    expect(splitRosterSuffix("body")).toEqual({ body: "body", rosterLine: null, droneLine: null, linksLine: null });
   });
 
   it("round-trips the roster namespace: first-names out as mentions, back as first-names", () => {
@@ -490,5 +491,30 @@ describe("loss line", () => {
   });
   it("withLossLine is a no-op without a loss", () => {
     expect(withLossLine("body", lossDay())).toBe("body");
+  });
+});
+
+describe("region splitters with a trailing 🔗 line", () => {
+  const body = "✅ 18.06 — прийнято (у повітрі 18 хв; відео 206 хв — 1144%; датасет ✓).";
+  const roster = `${ROSTER_MARKER}<@U1>, <@U2>.`;
+  const drone = "🛸 Дрони: Влад 3; разом 3";
+  const links = `${LINKS_MARKER}<https://x/p1|Звіт> · <https://x/p2|Дрони>`;
+  const full = [body, roster, drone, links].join("\n");
+
+  it("splitDroneLine peels 🔗 first, then the 🛸 line", () => {
+    expect(splitDroneLine(full)).toEqual({ rest: `${body}\n${roster}`, droneLine: drone, linksLine: links });
+  });
+  it("splitDroneLine without 🔗 is unchanged in shape", () => {
+    expect(splitDroneLine(`${body}\n${drone}`)).toEqual({ rest: body, droneLine: drone, linksLine: null });
+  });
+  it("splitRosterSuffix returns all four regions", () => {
+    expect(splitRosterSuffix(full)).toEqual({ body, rosterLine: roster, droneLine: drone, linksLine: links });
+  });
+  it("splitRosterSuffix: 🔗 directly after the crew line (no 🛸)", () => {
+    expect(splitRosterSuffix([body, roster, links].join("\n"))).toEqual({ body, rosterLine: roster, droneLine: null, linksLine: links });
+  });
+  it("parseRosterSuffix reads the same crew with or without a trailing 🔗 line", () => {
+    expect(parseRosterSuffix(full)).toEqual(parseRosterSuffix([body, roster, drone].join("\n")));
+    expect(parseRosterSuffix(full).length).toBe(2);
   });
 });

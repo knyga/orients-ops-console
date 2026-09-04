@@ -81,6 +81,16 @@ async function main(): Promise<void> {
       }
       for (const n of item.unmatched) process.stderr.write(`field-bonus: no Slack id for ${n} on ${item.date} — DM skipped.\n`);
     }
+
+    const { relinkDays } = await import("../lib/relinkDay");
+    const notifiedDates = [...new Set(plan.filter((i) => i.published).map((i) => i.date))];
+    try {
+      const r = await relinkDays(period, notifiedDates, { publish: true, trigger: "cli", zvitReply: true, channel: channel.name, onLog: (m) => process.stderr.write(`${m}\n`) });
+      process.stderr.write(`field-links: ${r.sent} sent, ${r.skipped} skipped, ${r.failed} failed\n`);
+    } catch (e) {
+      process.stderr.write(`field-links: stage skipped — ${e instanceof Error ? e.message : String(e)}\n`);
+    }
+
     process.stderr.write("field-bonus: notify done.\n");
     return;
   }

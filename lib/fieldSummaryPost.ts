@@ -21,7 +21,11 @@ import { EARLY_CUTOFF_MIN, type DayBonus } from "./fieldBonus";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { permalinkFor, postMessage } from "./slack";
 import { fieldSummaryKey, type SendTrigger } from "./outboundKeys";
+import { readNotified } from "./bonusNotified";
+import { readOutboundByFeature } from "./outbound";
+import { DRONE_REMINDER_FEATURE } from "./droneReminderPlan";
 import { buildMonthSummary, type SummaryDay, type SummaryStatus } from "./fieldMonthSummary";
+import { relinkDays } from "./relinkDay";
 export { parseSummaryPeriod, summaryCounts, countsUk, type SummaryCounts } from "./fieldMonthSummary";
 import type { Period } from "./period";
 
@@ -61,6 +65,11 @@ export async function assembleSummaryDays(period: Period): Promise<SummaryDay[]>
   const fieldQaChannel = TRACKED_CHANNELS.find((c) => c.name === "field-qa");
   if (!fieldQaChannel) throw new Error("#field-qa is not a tracked channel");
   const published = await readPublished(period);
+  const notified = await readNotified(period);
+  const reminderTsByDate = new Map<string, string>();
+  for (const r of await readOutboundByFeature(DRONE_REMINDER_FEATURE)) {
+    if (r.status === "sent" && r.ts && r.channel === fieldQaChannel.name) reminderTsByDate.set(r.key.slice(`${DRONE_REMINDER_FEATURE}:`.length), r.ts);
+  }
   const qaByDate = new Map((fieldQa?.days ?? []).map((d) => [d.date, d]));
   const bonusByKey = new Map((bonus?.days ?? []).map((d) => [reportKey(d.date, d.reportTs), d]));
 
@@ -96,6 +105,8 @@ export async function assembleSummaryDays(period: Period): Promise<SummaryDay[]>
       hasZvit: v.hasZvit !== false,
       verdictUrl: pub ? permalinkFor(fieldQaChannel.id, pub.ts) : null,
       zvitUrl: v.reportTs ? permalinkFor(fieldQaChannel.id, v.reportTs) : null,
+      reminderUrl: reminderTsByDate.has(v.date) ? permalinkFor(fieldQaChannel.id, reminderTsByDate.get(v.date)!) : null,
+      bonusUrl: notified[reportKey(v.date, v.reportTs)]?.threadTs ? permalinkFor(fieldQaChannel.id, notified[reportKey(v.date, v.reportTs)]!.threadTs!) : null,
     };
   });
 }
@@ -136,5 +147,15 @@ export async function postFieldSummary(args: PostFieldSummaryArgs): Promise<{ an
   for (const [i, d] of details.entries()) {
     await postMessage(channel.id, d, meta(`t${i + 1}`), threadRoot);
   }
+
+  // Reverse links: the just-posted summary chunks are never edited, but the
+  // reminder / verdict / bonus / Звіт-reply messages now gain «Підсумок».
+  try {
+    const r = await relinkDays(args.period, null, { publish: true, trigger: args.trigger, zvitReply: false, channel: channel.name });
+    console.error(`field-links: ${r.sent} sent, ${r.skipped} skipped, ${r.failed} failed`);
+  } catch (e) {
+    console.error(`field-links: stage skipped — ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   return { anchorTs, replies: details.length, days: days.length };
 }

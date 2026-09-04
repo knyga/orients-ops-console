@@ -20,6 +20,7 @@ import { extractDroneReportsCached } from "./extractDroneReports";
 import { DRONE_REMINDER_FEATURE, droneReminderAnchors, droneReminderKey, planDroneReminder } from "./droneReminderPlan";
 import { readOutbound } from "./outbound";
 import type { SendTrigger } from "./outboundKeys";
+import { relinkDays } from "./relinkDay";
 
 const FIELD_QA = "field-qa";
 
@@ -88,5 +89,13 @@ export async function runDroneReminder(opts: RunDroneReminderOptions): Promise<D
     trigger: opts.trigger ?? "cron",
   });
   log(`drone-reminder: posted to #${channel.name}, tagged ${missing.join(", ")}`);
+
+  try {
+    const r = await relinkDays({ start: today, end: today }, [today], { publish: true, trigger: opts.trigger ?? "cron", zvitReply: true, onLog: log });
+    log(`field-links: ${r.sent} sent, ${r.skipped} skipped, ${r.failed} failed`);
+  } catch (e) {
+    log(`field-links: stage skipped — ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   return { date: today, submitted, missing, text: plan.text, posted: true };
 }

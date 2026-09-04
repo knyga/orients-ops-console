@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   readReportJson: vi.fn(),
   readPublished: vi.fn(),
   postMessage: vi.fn(),
+  readNotified: vi.fn(),
+  readOutboundByFeature: vi.fn(),
 }));
 vi.mock("./reports", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
@@ -16,6 +18,17 @@ vi.mock("./published", async (orig) => {
 vi.mock("./slack", () => ({
   postMessage: mocks.postMessage,
   permalinkFor: (c: string, ts: string) => `https://slack/${c}/p${ts.replace(".", "")}`,
+}));
+vi.mock("./bonusNotified", async (orig) => {
+  const actual = await (orig as () => Promise<Record<string, unknown>>)();
+  return { ...actual, readNotified: mocks.readNotified };
+});
+vi.mock("./outbound", async (orig) => {
+  const actual = await (orig as () => Promise<Record<string, unknown>>)();
+  return { ...actual, readOutboundByFeature: mocks.readOutboundByFeature };
+});
+vi.mock("./relinkDay", () => ({
+  relinkDays: vi.fn().mockResolvedValue({ sent: 0, skipped: 0, failed: 0, days: [], channel: "field-qa" }),
 }));
 
 import { assembleSummaryDays, postFieldSummary } from "./fieldSummaryPost";
@@ -71,6 +84,8 @@ beforeEach(() => {
     "2026-08-07": { ts: "1786602644280.149" },
   });
   mocks.postMessage.mockResolvedValue("1788400000.000100");
+  mocks.readNotified.mockResolvedValue({});
+  mocks.readOutboundByFeature.mockResolvedValue([]);
 });
 
 describe("assembleSummaryDays", () => {
@@ -129,6 +144,27 @@ describe("assembleSummaryDays", () => {
     const [d] = await assembleSummaryDays(period);
     expect(d.reportSeq).toBe(2);
     expect(d.reportCount).toBe(2);
+  });
+
+  it("links the day's drone-count reminder (sent, field-qa channel only) and the bonus thread reply", async () => {
+    mocks.readOutboundByFeature.mockResolvedValue([
+      { key: "drone-reminder:2026-08-25", status: "sent", ts: "1787600000.000001", channel: "field-qa" },
+      { key: "drone-reminder:2026-08-04", status: "sent", ts: "1785800000.000001", channel: "some-other-channel" },
+      { key: "drone-reminder:2026-08-07", status: "pending", ts: null, channel: "field-qa" },
+    ]);
+    mocks.readNotified.mockResolvedValue({
+      "2026-08-25#1787677696.151879": { date: "2026-08-25", reportTs: "1787677696.151879", threadTs: "1787999999.000002", dms: [] },
+    });
+    const days = await assembleSummaryDays(period);
+    const d25 = days.find((d) => d.date === "2026-08-25")!;
+    expect(d25.reminderUrl).toBe("https://slack/C08GY2NKF9D/p1787600000000001");
+    expect(d25.bonusUrl).toBe("https://slack/C08GY2NKF9D/p1787999999000002");
+    const d04 = days.find((d) => d.date === "2026-08-04")!; // reminder posted to a different channel → not linked
+    expect(d04.reminderUrl).toBeNull();
+    expect(d04.bonusUrl).toBeNull();
+    const d07 = days.find((d) => d.date === "2026-08-07")!; // reminder still pending (never sent) → not linked
+    expect(d07.reminderUrl).toBeNull();
+    expect(d07.bonusUrl).toBeNull();
   });
 });
 

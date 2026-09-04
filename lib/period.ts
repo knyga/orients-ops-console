@@ -44,3 +44,30 @@ export function parsePeriodKey(key: string): Period | null {
   }
   return null;
 }
+
+/**
+ * The calendar months `[start..end]` touch, as full-month periods clipped to
+ * whole months, e.g. 2026-08-20..2026-09-04 → [2026-08, 2026-09]. Used by
+ * callers (like lib/relinkDay) whose store is written per calendar month
+ * (`periodKey` collapses a same-month window, but a cross-month window keeps
+ * a range key nothing was ever stored under) so they can read every month a
+ * requested range touches and merge the logs. A reversed range (end month
+ * before start month) returns `[]` rather than looping forever — `YYYY-MM`
+ * strings compare correctly lexicographically, so the loop condition alone
+ * guards termination.
+ */
+export function monthsCovering(period: Period): Period[] {
+  const months: Period[] = [];
+  let cursor = period.start.slice(0, 7);
+  const endMonth = period.end.slice(0, 7);
+  while (cursor <= endMonth) {
+    const expanded = parsePeriodKey(cursor);
+    if (!expanded) break;
+    months.push(expanded);
+    if (cursor === endMonth) break;
+    const [year, month] = cursor.split("-").map(Number);
+    const next = new Date(Date.UTC(year, month, 1)); // month is 1-based here → day 1 of next month
+    cursor = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+  return months;
+}

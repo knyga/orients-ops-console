@@ -13,6 +13,10 @@ import {
   dmHelpKey,
   detectOrigin,
   investorKey,
+  linksEditKey,
+  linksTargetKey,
+  linksZvitEditKey,
+  linksZvitKey,
   rosterAckKey,
   rosterEditKey,
   sprintAnchorKey,
@@ -187,5 +191,19 @@ describe("fieldSummaryKey", () => {
     expect(fieldSummaryKey("2026-08", "2026-09-03", "orients-ops-console-test", null, "anchor")).not.toBe(
       fieldSummaryKey("2026-08", "2026-09-03", "field-qa", null, "anchor"),
     );
+  });
+});
+
+describe("links keys", () => {
+  it("target keys are report-exact for per-Звіт targets and date-only for the reminder", () => {
+    expect(linksTargetKey({ kind: "reminder", date: "2026-09-03" })).toBe("reminder:2026-09-03");
+    expect(linksTargetKey({ kind: "verdict", date: "2026-09-03", reportTs: "1.5" })).toBe("verdict:2026-09-03#1.5");
+    expect(linksTargetKey({ kind: "bonus", date: "2026-09-03", reportTs: "1.5" })).toBe("bonus:2026-09-03#1.5");
+    expect(linksTargetKey({ kind: "zvit", reportTs: "1.5" })).toBe("zvit:1.5");
+  });
+  it("edit / post keys are namespaced apart from every other key family", () => {
+    expect(linksEditKey({ kind: "reminder", date: "2026-09-03" }, "abc")).toBe("links-edit:reminder:2026-09-03:abc");
+    expect(linksZvitKey("1.5")).toBe("links-zvit:1.5");
+    expect(linksZvitEditKey("1.5", "abc")).toBe("links-zvit-edit:1.5:abc");
   });
 });

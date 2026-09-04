@@ -37,6 +37,7 @@
     "field-nightly": "node --conditions=react-server --import tsx scripts/field-nightly.ts",
     "drone-reminder": "node --conditions=react-server --import tsx scripts/droneReminder.ts",
     "field-loss": "node --conditions=react-server --import tsx scripts/field-loss.ts",
+    "field-links": "node --conditions=react-server --import tsx scripts/field-links.ts",
     "sent": "node --conditions=react-server --import tsx scripts/sent.ts",
     "backfill-outbound": "node --conditions=react-server --import tsx scripts/backfill-outbound.ts",
     "access": "node --conditions=react-server --import tsx scripts/access.ts",
