@@ -35,14 +35,22 @@ export const approvalAckKey = (date: string, rev: string): string =>
  * each Slack event redelivery, so a content hash would let the same reply
  * double-post. Decision-keying makes a redelivered event dedup to one send, while
  * a genuine flip (accept → reject) still changes the key and reposts.
+ *
+ * `salt` (the instructing reply's Slack ts, or a run-day marker for the CLI)
+ * additionally separates a flip BACK to an earlier decision: accept → reject →
+ * accept reuses the first accept's decision key, and on 2026-09-04 the second
+ * accept was silently skipped as "already sent" — the DB flipped, Slack still
+ * showed «відхилено», and the approver got no ack. A redelivery of the same
+ * reply carries the same ts, so it still dedups to one send.
  */
 export const approvalOutboundKeys = (
   date: string,
   decision: string,
-): { editKey: string; ackKey: string } => ({
-  editKey: approvalEditKey(date, decision),
-  ackKey: approvalAckKey(date, decision),
-});
+  salt?: string,
+): { editKey: string; ackKey: string } => {
+  const rev = salt ? `${decision}:${salt}` : decision;
+  return { editKey: approvalEditKey(date, rev), ackKey: approvalAckKey(date, rev) };
+};
 export const webhookFailureKey = (date: string, kind: string, rev: string): string =>
   `webhook-failure:${date}:${kind}:${rev}`;
 /**

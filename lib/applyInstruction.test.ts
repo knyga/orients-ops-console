@@ -187,6 +187,56 @@ describe("applyInstruction day axis (refactor regression)", () => {
   });
 });
 
+describe("applyInstruction salt (flip-back re-posts)", () => {
+  // 2026-09-04 #field-qa: a day went accept → reject → accept. The second accept's
+  // edit + ack keys equalled the first's, so the chokepoint skipped both: the DB
+  // flipped to accepted but Slack still showed «відхилено» and nobody was acked.
+  // The salt (the instructing reply's ts) makes each instruction its own send.
+  it("day axis: the edit + ack outbound keys carry the salt", async () => {
+    await applyInstruction({
+      entry: entry({ decision: "rejected", by: "Oleksandr K", ackedAt: "2026-09-04T08:23:27.000Z" }),
+      period,
+      axis: "day",
+      instruction: { intent: "instruction", axis: "day", decision: "accepted_exception", reason: "ok" } as InstructionClassification,
+      by: "Oleksandr K",
+      evidence: "",
+      trigger: "webhook",
+      salt: "1788510237.178909",
+    });
+    expect(updateMessage).toHaveBeenCalledTimes(1);
+    expect(updateMessage.mock.calls[0][3].key).toBe("approval-edit:2026-06-09:accepted_exception:1788510237.178909");
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage.mock.calls[0][2].key).toBe("approval-ack:2026-06-09:accepted_exception:1788510237.178909");
+  });
+
+  it("ack-only axes: the ack key is the salt, not the (repeatable) text hash", async () => {
+    await applyInstruction({
+      entry: entry(),
+      period,
+      axis: "video",
+      instruction: { intent: "instruction", axis: "video", videoWaive: true, reason: "ok" } as InstructionClassification,
+      by: "Oleksandr K",
+      evidence: "",
+      trigger: "webhook",
+      salt: "1788510237.178909",
+    });
+    expect(postMessage.mock.calls[0][2].key).toBe("instruction-ack:2026-06-09:video:1788510237.178909");
+  });
+
+  it("without a salt the keys keep the legacy shape", async () => {
+    await applyInstruction({
+      entry: entry(),
+      period,
+      axis: "day",
+      instruction: { intent: "instruction", axis: "day", decision: "rejected", reason: "no-go" } as InstructionClassification,
+      by: "Oleksandr K",
+      evidence: "",
+      trigger: "cli",
+    });
+    expect(updateMessage.mock.calls[0][3].key).toBe("approval-edit:2026-06-09:rejected");
+  });
+});
+
 describe("applyInstruction loss axis", () => {
   it("writes an instruction ledger row for the report and acks in Ukrainian", async () => {
     const res = await applyInstruction({

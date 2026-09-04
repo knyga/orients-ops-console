@@ -127,6 +127,45 @@ describe("applyInstructionReply — report-scoped ack keys (second-report thread
   });
 });
 
+describe("applyInstructionReply — per-reply outbound salt (flip-back must re-post)", () => {
+  it("a confirm passes the proposal's source reply ts as the apply salt", async () => {
+    readActiveProposals.mockResolvedValue([activeProposal]);
+    classifyInstruction.mockResolvedValue({ intent: "confirm" });
+    settleProposal.mockResolvedValue("CONFIRMED");
+
+    await applyInstructionReply({
+      entry: entry(null), period, replyText: "так", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/ok", replyTs: "1781000300.000100",
+    });
+
+    expect(applyInstruction).toHaveBeenCalledWith(expect.objectContaining({ salt: activeProposal.sourceReplyTs }));
+  });
+
+  it("a proposal echo is keyed by the instructing reply's ts, so an identical re-instruction echoes again", async () => {
+    classifyInstruction.mockResolvedValue({ intent: "instruction", axis: "day", decision: "accepted_exception", reason: "x" });
+
+    await applyInstructionReply({
+      entry: entry(null), period, replyText: "прийняти", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/p", replyTs: "1788510237.178909",
+    });
+
+    expect(postMessage.mock.calls[0][2].key).toBe("instruction-ack:2026-07-01:propose:1788510237.178909");
+  });
+
+  it("a cancel note is keyed by the cancelling reply's ts", async () => {
+    readActiveProposals.mockResolvedValue([activeProposal]);
+    classifyInstruction.mockResolvedValue({ intent: "cancel" });
+    settleProposal.mockResolvedValue("CANCELLED");
+
+    await applyInstructionReply({
+      entry: entry(null), period, replyText: "ні", approverName: "Oleksandr K",
+      replyPermalink: "https://slack/no", replyTs: "1781000300.000200",
+    });
+
+    expect(postMessage.mock.calls[0][2].key).toBe("instruction-ack:2026-07-01:cancel:1781000300.000200");
+  });
+});
+
 describe("applyInstructionReply — several pending proposals (different axes) in one thread", () => {
   const dayProposal = {
     ...activeProposal,

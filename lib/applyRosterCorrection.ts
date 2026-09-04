@@ -23,8 +23,12 @@ export async function applyRosterDecision(args: {
   period: Period;
   outcome: RosterOutcome;
   trigger?: SendTrigger;
+  /** Per-instruction outbound salt (the instructing reply's ts) — a crew set back
+   *  to an earlier roster must re-edit + re-ack instead of deduping against the
+   *  first send (see lib/applyInstruction.ts). */
+  salt?: string;
 }): Promise<{ applied: boolean }> {
-  const { entry, period, outcome, trigger = "unknown" } = args;
+  const { entry, period, outcome, trigger = "unknown", salt } = args;
 
   await upsertRosterCorrection({
     date: entry.date,
@@ -48,8 +52,9 @@ export async function applyRosterDecision(args: {
   if (updatedText === entry.text) return { applied: false }; // suffix already current
 
   const key = reportKey(entry.date, entry.reportTs);
+  const rev = (text: string) => (salt ? `${contentRev(text)}:${salt}` : contentRev(text));
   await updateMessage(channel.id, entry.ts, updatedText, {
-    key: rosterEditKey(key, contentRev(updatedText)),
+    key: rosterEditKey(key, rev(updatedText)),
     feature: "roster",
     channel: channel.name,
     trigger,
@@ -63,7 +68,7 @@ export async function applyRosterDecision(args: {
   await postMessage(
     channel.id,
     replyText,
-    { key: rosterAckKey(key, contentRev(replyText)), feature: "roster", channel: channel.name, trigger },
+    { key: rosterAckKey(key, rev(replyText)), feature: "roster", channel: channel.name, trigger },
     entry.ts,
   );
 

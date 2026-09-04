@@ -56,6 +56,25 @@ describe("approvalOutboundKeys", () => {
       approvalOutboundKeys("2026-06-21", "rejected").ackKey,
     );
   });
+
+  it("a salt (the instructing reply's ts) separates a flip BACK to an earlier decision", () => {
+    // accept → reject → accept: the third apply must not collide with the first
+    // (2026-09-04: the re-accept was silently skipped as "already sent").
+    const first = approvalOutboundKeys("2026-08-30#1.0", "accepted_exception", "1788444106.792309");
+    const again = approvalOutboundKeys("2026-08-30#1.0", "accepted_exception", "1788510237.178909");
+    expect(first).toEqual({
+      editKey: "approval-edit:2026-08-30#1.0:accepted_exception:1788444106.792309",
+      ackKey: "approval-ack:2026-08-30#1.0:accepted_exception:1788444106.792309",
+    });
+    expect(again.editKey).not.toBe(first.editKey);
+    expect(again.ackKey).not.toBe(first.ackKey);
+    // Same salt (a redelivery) still dedups.
+    expect(approvalOutboundKeys("2026-08-30#1.0", "accepted_exception", "1788510237.178909")).toEqual(again);
+    // No salt keeps the legacy shape.
+    expect(approvalOutboundKeys("2026-08-30#1.0", "accepted_exception").editKey).toBe(
+      "approval-edit:2026-08-30#1.0:accepted_exception",
+    );
+  });
 });
 
 describe("contentRev", () => {

@@ -76,7 +76,8 @@ async function main(): Promise<void> {
     const entry = resolved.entry!;
     process.stdout.write(`• ${args.date} ⇒ ${args.write ? "applying" : "would apply"}: ${renderProposalSummary(args.date, manual.instruction)} (by ${by})\n`);
     if (args.write) {
-      const res = await applyInstruction({ entry, period, axis: manual.axis, instruction: manual.instruction, by, evidence: "manual", trigger: "cli" });
+      // Run-day salt: a same-day re-run dedups, a later flip back re-posts.
+      const res = await applyInstruction({ entry, period, axis: manual.axis, instruction: manual.instruction, by, evidence: "manual", trigger: "cli", salt: `manual:${today}` });
       process.stderr.write(`field-instructions: ${res.applied ? "applied" : "no change"} for ${args.date}.\n`);
     } else {
       process.stderr.write("field-instructions: DRY RUN — re-run with --write to apply.\n");
@@ -94,19 +95,19 @@ async function main(): Promise<void> {
     if (replies.length === 0) continue;
 
     // The last decisive (intent=instruction) approver reply wins for the day.
-    let chosen: { axis: InstructionAxis; instruction: InstructionClassification; permalink: string } | null = null;
+    let chosen: { axis: InstructionAxis; instruction: InstructionClassification; permalink: string; ts: string } | null = null;
     for (const r of replies) {
       const approver = approverFor(r.authorId);
       if (!approver) { console.log(`• ${entry.date} — ignoring reply from non-approver ${r.author}.`); continue; }
       const c = await classifyInstruction(entry.text, r.text, null);
       console.log(`• ${entry.date} ← ${approver.name}: "${r.text.slice(0, 70)}" → ${c.intent}${c.axis ? `/${c.axis}` : ""}`);
-      if (c.intent === "instruction" && c.axis) chosen = { axis: c.axis, instruction: c, permalink: permalinkFor(entry.channel, r.ts) };
+      if (c.intent === "instruction" && c.axis) chosen = { axis: c.axis, instruction: c, permalink: permalinkFor(entry.channel, r.ts), ts: r.ts };
     }
     if (!chosen) continue;
 
     process.stdout.write(`  ⇒ ${args.write ? "applying" : "would apply"}: ${entry.date} → ${renderProposalSummary(entry.date, chosen.instruction)}\n`);
     if (args.write) {
-      const res = await applyInstruction({ entry, period, axis: chosen.axis, instruction: chosen.instruction, by, evidence: chosen.permalink, trigger: "cli" });
+      const res = await applyInstruction({ entry, period, axis: chosen.axis, instruction: chosen.instruction, by, evidence: chosen.permalink, trigger: "cli", salt: chosen.ts });
       if (res.applied) applied += 1;
     }
   }

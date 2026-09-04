@@ -25,6 +25,8 @@ export interface ApproverDecisionArgs {
   reason: string;
   evidence: string;             // permalink to the deciding reply (or "")
   trigger?: SendTrigger;
+  /** Per-instruction outbound salt (the instructing reply's ts) — see approvalOutboundKeys. */
+  salt?: string;
 }
 
 export interface ApproverDecisionResult {
@@ -42,6 +44,8 @@ export interface AmendVerdictArgs {
   trigger: SendTrigger;
   /** Post the generic "Зафіксовано" threaded ack. Callers with an axis-specific ack pass false. */
   postAck: boolean;
+  /** Per-instruction outbound salt (the instructing reply's ts) — see approvalOutboundKeys. */
+  salt?: string;
 }
 
 /**
@@ -53,7 +57,7 @@ export interface AmendVerdictArgs {
  * the ORIGINAL text). Shared by the day axis and the dataset-decline path.
  */
 export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<ApproverDecisionResult> {
-  const { entry, period, decision, by, reason, trigger, postAck } = args;
+  const { entry, period, decision, by, reason, trigger, postAck, salt } = args;
 
   if (entry.override?.decision === decision) {
     return { applied: false, alreadyAcked: true };
@@ -70,8 +74,9 @@ export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<App
   const updatedText = tail ? `${struck}\n${tail}` : struck;
   // Key the edit + ack by the DECISION, not the (non-deterministic) reason text,
   // so a redelivered Slack event dedups to a single post while a genuine flip
-  // (accept → reject) still reposts. See lib/outboundKeys.ts.
-  const { editKey, ackKey } = approvalOutboundKeys(reportKey(entry.date, entry.reportTs), decision);
+  // (accept → reject) still reposts; the salt keeps a flip BACK (accept → reject
+  // → accept) from colliding with the first accept. See lib/outboundKeys.ts.
+  const { editKey, ackKey } = approvalOutboundKeys(reportKey(entry.date, entry.reportTs), decision, salt);
   await updateMessage(channel.id, entry.ts, updatedText, {
     key: editKey,
     feature: "approval",
@@ -108,7 +113,7 @@ export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<App
 export async function applyApproverDecision(
   args: ApproverDecisionArgs,
 ): Promise<ApproverDecisionResult> {
-  const { entry, period, decision, by, reason, evidence, trigger = "unknown" } = args;
+  const { entry, period, decision, by, reason, evidence, trigger = "unknown", salt } = args;
 
   if (entry.override?.decision === decision) {
     return { applied: false, alreadyAcked: true };
@@ -126,7 +131,7 @@ export async function applyApproverDecision(
   });
 
   // Resolution is recorded even when no tracked channel exists to edit/ack.
-  return amendPublishedVerdict({ entry, period, decision, by, reason, trigger, postAck: true });
+  return amendPublishedVerdict({ entry, period, decision, by, reason, trigger, postAck: true, salt });
 }
 
 export interface ApproverReplyArgs {

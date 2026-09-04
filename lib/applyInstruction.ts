@@ -43,6 +43,16 @@ export interface ApplyInstructionArgs {
   by: string; // approver name
   evidence: string; // permalink to the deciding reply (or "")
   trigger?: SendTrigger;
+  /**
+   * Per-instruction outbound salt: the instructing reply's Slack ts (webhook /
+   * sweep) or a run-day marker (manual CLI). Without it the edit/ack keys are
+   * keyed on the decision or the ack text, so a flip BACK to an earlier state
+   * (accept → reject → accept; lost → found → lost; the same crew twice) reuses
+   * the first send's key and the chokepoint silently skips the Slack edit + ack
+   * while the DB flips (2026-09-04 #field-qa). A redelivery of the same reply
+   * carries the same ts, so it still dedups.
+   */
+  salt?: string;
 }
 
 async function resolveNames(tokens: string[] | undefined): Promise<string[] | undefined> {
@@ -54,14 +64,14 @@ async function resolveNames(tokens: string[] | undefined): Promise<string[] | un
   });
 }
 
-async function ack(entry: PublishedEntry, text: string, axis: string, trigger: SendTrigger): Promise<boolean> {
+async function ack(entry: PublishedEntry, text: string, axis: string, trigger: SendTrigger, salt?: string): Promise<boolean> {
   const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
   if (!channel) return false;
   await postMessage(
     channel.id,
     text,
     {
-      key: instructionAckKey(reportKey(entry.date, entry.reportTs), axis, contentRev(text)),
+      key: instructionAckKey(reportKey(entry.date, entry.reportTs), axis, salt ?? contentRev(text)),
       feature: "instruction",
       channel: channel.name,
       trigger,
@@ -73,12 +83,12 @@ async function ack(entry: PublishedEntry, text: string, axis: string, trigger: S
 
 /** Apply one confirmed instruction. Returns whether an effect landed. */
 export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ applied: boolean }> {
-  const { entry, period, axis, instruction: c, by, evidence, trigger = "unknown" } = args;
+  const { entry, period, axis, instruction: c, by, evidence, trigger = "unknown", salt } = args;
   const who = mentionize(by);
 
   if (axis === "day") {
     if (c.decision !== "accepted_exception" && c.decision !== "rejected") return { applied: false };
-    const res = await applyApproverDecision({ entry, period, decision: c.decision, by, reason: c.reason, evidence, trigger });
+    const res = await applyApproverDecision({ entry, period, decision: c.decision, by, reason: c.reason, evidence, trigger, salt });
     return { applied: res.applied };
   }
 
@@ -93,28 +103,28 @@ export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ ap
       notCounted: await resolveNames(c.notCounted),
     };
     const outcome = buildRosterOutcome(baseline, resolved, by, evidence);
-    return applyRosterDecision({ entry, period, outcome, trigger });
+    return applyRosterDecision({ entry, period, outcome, trigger, salt });
   }
 
   if (axis === "dataset") {
     const decision = c.datasetStatus === "DECLINED" ? "rejected" : "accepted_exception";
     await upsertResolution({ date: entry.date, axis: "dataset", decision, note: c.reason, source: evidence || "slack", recordedAt: new Date().toISOString(), by });
     const label = decision === "rejected" ? "датасет ⛔ причину відхилено" : "датасет 📝 виняток (не потрібен)";
-    const applied = await ack(entry, `📝 Зафіксовано: ${label} — ${who}. Причина: ${c.reason}`, "dataset", trigger);
+    const applied = await ack(entry, `📝 Зафіксовано: ${label} — ${who}. Причина: ${c.reason}`, "dataset", trigger, salt);
     if (decision === "rejected" && !dayRescuedByException(entry.date, await readResolutions(), entry.reportTs ?? null)) {
       // A dataset decline machine-rejects ALL of the day's reports (the dataset
       // axis is day-wide by design); only THIS thread's message is amended here —
       // any sibling report's already-published message is untouched and picks up
       // the rejection on the next verdict recompute (pre-existing behavior for
       // un-amended messages).
-      await amendPublishedVerdict({ entry, period, decision: "rejected", by, reason: c.reason, trigger, postAck: false });
+      await amendPublishedVerdict({ entry, period, decision: "rejected", by, reason: c.reason, trigger, postAck: false, salt });
     }
     return { applied };
   }
 
   if (axis === "video") {
     await upsertResolution({ date: entry.date, axis: "video", decision: "accepted_exception", note: c.reason, source: evidence || "slack", recordedAt: new Date().toISOString(), by });
-    const applied = await ack(entry, `🎥 Зафіксовано: відео зараховано (виняток) — ${who}. Причина: ${c.reason}`, "video", trigger);
+    const applied = await ack(entry, `🎥 Зафіксовано: відео зараховано (виняток) — ${who}. Причина: ${c.reason}`, "video", trigger, salt);
     return { applied };
   }
 
@@ -136,13 +146,13 @@ export async function applyInstruction(args: ApplyInstructionArgs): Promise<{ ap
       c.lossState === "found"
         ? `🛸 Зафіксовано: борт знайдено — втрату за ${entry.date} знято`
         : `🛸 Зафіксовано: борт за ${entry.date} втрачено (не знайдено)`;
-    const applied = await ack(entry, `${label} — ${who}. Причина: ${c.reason}`, "loss", trigger);
+    const applied = await ack(entry, `${label} — ${who}. Причина: ${c.reason}`, "loss", trigger, salt);
     return { applied };
   }
 
   // airborne
   if (typeof c.airborneMinutes !== "number") return { applied: false };
   await upsertAirborneOverride({ date: entry.date, minutes: c.airborneMinutes, note: c.reason, by, source: evidence || "slack", recordedAt: new Date().toISOString() });
-  const applied = await ack(entry, `✈️ Зафіксовано час у повітрі: ${c.airborneMinutes.toFixed(0)} хв — ${who}. Причина: ${c.reason}`, "airborne", trigger);
+  const applied = await ack(entry, `✈️ Зафіксовано час у повітрі: ${c.airborneMinutes.toFixed(0)} хв — ${who}. Причина: ${c.reason}`, "airborne", trigger, salt);
   return { applied };
 }

@@ -75,6 +75,10 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
           by: p.proposedBy,
           evidence: replyPermalink,
           trigger,
+          // The instructing reply's ts: a re-instruction of an earlier state
+          // (accept → reject → accept) must re-edit + re-ack, not dedup against
+          // the first send; a redelivered confirm never reaches here (settled).
+          salt: p.sourceReplyTs,
         });
         applied = applied || res.applied;
       } catch (err) {
@@ -91,7 +95,7 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
       await postMessage(
         channel.id,
         text,
-        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "apply-failed", contentRev(text)), feature: "instruction", channel: channel.name, trigger },
+        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "apply-failed", replyTs), feature: "instruction", channel: channel.name, trigger },
         entry.ts,
       );
     }
@@ -108,7 +112,7 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
       await postMessage(
         channel.id,
         text,
-        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "cancel", contentRev(text)), feature: "instruction", channel: channel.name, trigger },
+        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "cancel", replyTs), feature: "instruction", channel: channel.name, trigger },
         entry.ts,
       );
     }
@@ -133,11 +137,15 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
       // Other-axis proposals stay pending; name them so the approver knows one «так» covers all.
       const stillPending = pending.filter((p) => p.axis !== c.axis).map((p) => p.summaryUk);
       const also = stillPending.length ? ` Разом із: ${stillPending.join("; ")}.` : "";
+      // Keyed by the instructing reply's ts, NOT the echo text: the same summary
+      // re-proposed later (accept → reject → accept) renders byte-identical text,
+      // and a content key made the second echo dedup into silence (2026-09-04).
+      // A redelivery of this reply is already stopped above (`created` false).
       const text = `📝 Зрозумів: ${summary}.${also} Підтвердьте «так»/👍 або «ні».`;
       await postMessage(
         channel.id,
         text,
-        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "propose", contentRev(text)), feature: "instruction", channel: channel.name, trigger },
+        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "propose", replyTs), feature: "instruction", channel: channel.name, trigger },
         entry.ts,
       );
     }
