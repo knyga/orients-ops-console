@@ -35,5 +35,5 @@ export function buildRosterOutcome(
     add(n);
   }
   for (const n of c.notCounted ?? []) eligibility[n] = "not_counted";
-  return { roster, eligibility, note: c.reason, by, evidencePermalink };
+  return { roster, eligibility, ...(c.early !== undefined ? { early: c.early } : {}), note: c.reason, by, evidencePermalink };
 }

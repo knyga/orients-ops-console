@@ -117,11 +117,13 @@ export function computeBonuses(input: {
   for (const q of qualified) {
     for (const u of q.unknownInitials) flags.push({ kind: "unknown_initial", date: q.date, detail: u });
     const counted = q.status === "ACCEPTED" || q.status === "ACCEPTED_EXCEPTION";
+    const correction = correctionForReport(corrections, q.date, q.reportTs, q.reportCount);
     const sm = startMin(q.start);
-    const earlyEligible = sm != null && sm <= EARLY_CUTOFF_MIN;
+    // An approver's `early` assertion outranks the Звіт arrival time (a no-Звіт
+    // day has none, so it could never earn +200 otherwise).
+    const earlyEligible = correction?.early ?? (sm != null && sm <= EARLY_CUTOFF_MIN);
     const early = counted && earlyEligible;
     const weekend = counted && isWeekend(q.date);
-    const correction = correctionForReport(corrections, q.date, q.reportTs, q.reportCount);
     const eff = applyRosterCorrection(q.roster, counted, correction);
     const gated = applyDroneGate(eff.perPerson, q.droneSubmitters, correction, q.date, flags);
     gatedByReport.set(reportKey(q.date, q.reportTs), gated);

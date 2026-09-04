@@ -4,7 +4,7 @@
  * `roster_corrections` Postgres table; read by the verdict (display) and the
  * bonus calc. NOT server-only (CLIs import it, like lib/resolutions.ts).
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db";
 import { sheetImportShouldSkip, type RosterCorrection } from "./rosterCorrection";
 
@@ -17,6 +17,7 @@ function toCorrection(r: typeof schema.rosterCorrections.$inferSelect): RosterCo
     recordedAt: r.recordedAt,
     ...(r.roster != null ? { roster: r.roster as string[] } : {}),
     ...(r.eligibility != null ? { eligibility: r.eligibility as Record<string, "counted" | "not_counted"> } : {}),
+    ...(r.early != null ? { early: r.early } : {}),
     ...(r.reportTs ? { reportTs: r.reportTs } : {}),
   };
 }
@@ -46,12 +47,15 @@ export async function upsertRosterCorrection(c: RosterCorrection): Promise<void>
     source: c.source,
     recordedAt: c.recordedAt,
     reportTs: c.reportTs ?? "",
+    early: c.early ?? null,
   };
   await db
     .insert(schema.rosterCorrections)
     .values(values)
     .onConflictDoUpdate({
       target: [schema.rosterCorrections.date, schema.rosterCorrections.reportTs],
-      set: values,
+      // A correction silent about `early` keeps the stored flag — a later crew
+      // fix must not silently un-pay an approver's early-departure decision.
+      set: { ...values, early: c.early === undefined ? sql`${schema.rosterCorrections.early}` : c.early },
     });
 }

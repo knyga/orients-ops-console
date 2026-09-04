@@ -19,6 +19,13 @@ describe("parseRosterSuffix", () => {
 });
 
 describe("buildRosterOutcome", () => {
+  it("carries the early-departure flag through (and omits it when unset)", () => {
+    const out = buildRosterOutcome(["Влад"], instr({ axis: "crew", roster: ["Андріан", "Любомир"], early: true }), "x", "");
+    expect(out.roster).toEqual(["Андріан", "Любомир"]);
+    expect(out.early).toBe(true);
+    expect(buildRosterOutcome(["Влад"], instr({ axis: "crew", add: ["Тарас"] }), "x", "").early).toBeUndefined();
+  });
+
   it("patch add preserves the existing crew (empty-baseline bug fix)", () => {
     const out = buildRosterOutcome(["Влад"], instr({ axis: "crew", add: ["Тарас"] }), "Oleksandr K", "url");
     expect(out.roster).toEqual(["Влад", "Тарас"]);

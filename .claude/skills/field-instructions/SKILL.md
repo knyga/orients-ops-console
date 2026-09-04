@@ -29,7 +29,12 @@ if missing, the webhook posts a loud in-thread failure notice.
 - *Sweep:* `-- --start YYYY-MM-DD --end YYYY-MM-DD [--write]` classifies approver
   replies across the window's verdict threads and applies the last decisive
   instruction per day (the operator running `--write` is the confirmation).
-- *Manual:* `-- --date D --set-crew "A,B" | --add-crew X | --remove-crew X | --airborne N | --accept | --reject [--by NAME] [--reason "…"] --write`.
+- *Manual:* `-- --date D --set-crew "A,B" | --add-crew X | --remove-crew X | --count "A,B" | --no-count X | --airborne N | --accept | --reject [--early | --no-early] [--by NAME] [--reason "…"] --write`.
+  `--early`/`--no-early` is the approver's early-departure (+200) assertion — it outranks the
+  Звіт arrival time, so a no-Звіт day accepted as an exception can still pay «ранній виїзд».
+  `--count` marks people `counted` (also skips the per-person drone-count gate). Extras ride on
+  the crew instruction when crew flags are present. Typical «virtual» full day for two people:
+  `--set-crew "A,B" --early --write`, then `--accept --write`, then `--count "A,B" --write`.
 - `-- --list` prints pending proposals + applied corrections (= `GET /api/instructions`, the **Instructions** tab).
 
 Run `npm run slack-sync` first (reads the mirror). After `--write`, re-run

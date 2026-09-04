@@ -119,6 +119,22 @@ describe("computeBonuses with roster corrections", () => {
     const r = computeBonuses({ period, days, losses: [] });
     expect(r.people.map((p) => p.name).sort()).toEqual(["Андріан", "Любомир"]);
   });
+
+  it("an approver `early: true` pays the early bonus on a day with no Звіт start time", () => {
+    const noStart: QualifiedDay[] = [{ ...days[0], start: null }];
+    const base = computeBonuses({ period, days: noStart, losses: [] });
+    expect(base.people[0].early).toBe(0);
+    const r = computeBonuses({ period, days: noStart, losses: [], corrections: [{ date: "2026-06-10", roster: ["Андріан", "Любомир"], early: true, note: "n", by: "Oleksandr K", source: "s", recordedAt: "r" }] });
+    expect(r.days[0].early).toBe(true);
+    expect(r.people.map((p) => p.early)).toEqual([1, 1]);
+    expect(r.people[0].net).toBe(TRIP + EARLY);
+  });
+
+  it("an approver `early: false` denies the early bonus despite an early Звіт start", () => {
+    const r = computeBonuses({ period, days, losses: [], corrections: [{ date: "2026-06-10", early: false, note: "n", by: "Oleksandr K", source: "s", recordedAt: "r" }] });
+    expect(r.days[0].early).toBe(false);
+    expect(r.people[0].net).toBe(TRIP);
+  });
 });
 
 describe("per-person drone-count gate (2026-07-28)", () => {

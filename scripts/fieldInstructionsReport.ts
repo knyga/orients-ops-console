@@ -29,6 +29,11 @@ export interface ParsedArgs {
   loss?: "found" | "lost";
   accept?: boolean;
   reject?: boolean;
+  /** --early / --no-early: approver early-departure assertion for the report. */
+  early?: boolean;
+  /** --count / --no-count: per-person bonus eligibility (counted / not_counted). */
+  count?: string[];
+  noCount?: string[];
   by?: string;
   reason?: string;
   /** Disambiguates --date when the day has more than one published report. */
@@ -58,6 +63,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
     else if (flag === "--accept") { a.accept = true; }
     else if (flag === "--reject") { a.reject = true; }
+    else if (flag === "--early") { a.early = true; }
+    else if (flag === "--no-early") { a.early = false; }
+    else if (flag === "--count") { a.count = names(value); i += 1; }
+    else if (flag === "--no-count") { a.noCount = names(value); i += 1; }
     else if (flag === "--by") { a.by = value; i += 1; }
     else if (flag === "--reason") { a.reason = value; i += 1; }
     else if (flag === "--report") { a.report = value; i += 1; }
@@ -98,6 +107,9 @@ export interface ManualSpec {
   loss?: "found" | "lost";
   accept?: boolean;
   reject?: boolean;
+  early?: boolean;
+  count?: string[];
+  noCount?: string[];
   reason?: string;
 }
 
@@ -106,14 +118,24 @@ export function buildManualInstruction(
   spec: ManualSpec,
 ): { axis: InstructionAxis; instruction: InstructionClassification } | null {
   const reason = spec.reason ?? "manual correction";
+  // Eligibility extras (early flag, per-person counted/not_counted) ride on a
+  // crew instruction when crew flags are present, else form their own.
+  const extras = {
+    ...(spec.early !== undefined ? { early: spec.early } : {}),
+    ...(spec.count?.length ? { counted: spec.count } : {}),
+    ...(spec.noCount?.length ? { notCounted: spec.noCount } : {}),
+  };
   if (spec.setCrew?.length) {
-    return { axis: "crew", instruction: { intent: "instruction", axis: "crew", roster: spec.setCrew, reason } };
+    return { axis: "crew", instruction: { intent: "instruction", axis: "crew", roster: spec.setCrew, ...extras, reason } };
   }
   if (spec.addCrew?.length || spec.removeCrew?.length) {
     return {
       axis: "crew",
-      instruction: { intent: "instruction", axis: "crew", add: spec.addCrew, remove: spec.removeCrew, reason },
+      instruction: { intent: "instruction", axis: "crew", add: spec.addCrew, remove: spec.removeCrew, ...extras, reason },
     };
+  }
+  if (Object.keys(extras).length) {
+    return { axis: "eligibility", instruction: { intent: "instruction", axis: "eligibility", ...extras, reason } };
   }
   if (typeof spec.airborne === "number" && Number.isFinite(spec.airborne)) {
     return { axis: "airborne", instruction: { intent: "instruction", axis: "airborne", airborneMinutes: spec.airborne, reason } };

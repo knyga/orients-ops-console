@@ -10,6 +10,10 @@ export interface RosterCorrection {
   roster?: string[];
   /** Per-person override of the day's bonus gate. */
   eligibility?: Record<string, "counted" | "not_counted">;
+  /** Approver assertion about the early-departure (+200) bonus for this report:
+   *  true = pay it even without a Звіт start time (no-Звіт day), false = deny it
+   *  despite an early start. Absent = derive from the Звіт arrival time. */
+  early?: boolean;
   note: string;
   by: string;
   source: string;

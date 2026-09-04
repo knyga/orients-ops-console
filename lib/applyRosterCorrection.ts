@@ -41,6 +41,7 @@ export async function applyRosterDecision(args: {
     reportTs: entry.reportTs ?? "",
     ...(outcome.roster.length ? { roster: outcome.roster } : {}),
     ...(Object.keys(outcome.eligibility).length ? { eligibility: outcome.eligibility } : {}),
+    ...(outcome.early !== undefined ? { early: outcome.early } : {}),
     note: outcome.note,
     by: outcome.by,
     source: outcome.evidencePermalink || "slack",

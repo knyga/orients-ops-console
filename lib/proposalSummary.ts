@@ -6,19 +6,25 @@
  */
 import type { InstructionClassification } from "./instructionClassifyPrompt";
 
+const earlyPhrase = (early: boolean): string => (early ? "рахувати як ранній виїзд (+200)" : "без раннього виїзду");
+
 export function renderProposalSummary(date: string, c: InstructionClassification): string {
   switch (c.axis) {
     case "crew": {
-      if (c.roster && c.roster.length) return `склад ${date}: ${c.roster.join(", ")}`;
       const parts: string[] = [];
-      if (c.add?.length) parts.push(`додати до складу ${date}: ${c.add.join(", ")}`);
-      if (c.remove?.length) parts.push(`прибрати зі складу ${date}: ${c.remove.join(", ")}`);
+      if (c.roster && c.roster.length) parts.push(`склад ${date}: ${c.roster.join(", ")}`);
+      else {
+        if (c.add?.length) parts.push(`додати до складу ${date}: ${c.add.join(", ")}`);
+        if (c.remove?.length) parts.push(`прибрати зі складу ${date}: ${c.remove.join(", ")}`);
+      }
+      if (c.early !== undefined) parts.push(earlyPhrase(c.early));
       return parts.join("; ") || `склад ${date}`;
     }
     case "eligibility": {
       const parts: string[] = [];
       if (c.counted?.length) parts.push(`зарахувати ${date}: ${c.counted.join(", ")}`);
       if (c.notCounted?.length) parts.push(`не рахувати ${date}: ${c.notCounted.join(", ")}`);
+      if (c.early !== undefined) parts.push(earlyPhrase(c.early));
       return parts.join("; ") || `облік бонусу ${date}`;
     }
     case "day":

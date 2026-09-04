@@ -38,7 +38,9 @@ export function mergeCorrections(
       date: r.date,
       ...(r.reportTs ? { reportTs: r.reportTs } : {}),
       axis: hasCrew ? "crew" : "eligibility",
-      summary: hasCrew ? `склад: ${r.roster!.join(", ")}` : `облік: ${JSON.stringify(r.eligibility ?? {})}`,
+      summary:
+        (hasCrew ? `склад: ${r.roster!.join(", ")}` : `облік: ${JSON.stringify(r.eligibility ?? {})}`) +
+        (r.early === undefined ? "" : r.early ? "; ранній виїзд" : "; без раннього виїзду"),
       by: r.by,
       source: r.source,
       recordedAt: r.recordedAt,

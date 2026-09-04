@@ -21,6 +21,7 @@ export interface InstructionClassification {
   remove?: string[]; // crew: remove from the crew
   counted?: string[]; // eligibility: count for the bonus this day
   notCounted?: string[]; // eligibility: do NOT count this day (kept on crew)
+  early?: boolean; // crew/eligibility: count the trip as an early departure (+200) / deny it
   // day
   decision?: "accepted_exception" | "rejected";
   // dataset
@@ -60,6 +61,7 @@ export const CLASSIFY_INSTRUCTION_TOOL: Anthropic.Tool = {
       remove: { type: "array", items: { type: "string" }, description: "crew: people to remove" },
       counted: { type: "array", items: { type: "string" }, description: "eligibility: people to COUNT for the bonus this day" },
       notCounted: { type: "array", items: { type: "string" }, description: "eligibility: people NOT to count this day (kept on crew)" },
+      early: { type: "boolean", description: "crew/eligibility: true when the approver says the day counts as an early departure (ранній виїзд), false to deny it; omit otherwise" },
       decision: {
         type: "string",
         enum: ["accepted_exception", "rejected"],

@@ -45,6 +45,33 @@ describe("buildManualInstruction", () => {
   it("nothing actionable → null", () => {
     expect(buildManualInstruction({ reason: "" })).toBeNull();
   });
+  it("--early rides on the crew instruction when crew flags are present", () => {
+    const a = parseArgs(["--date", "2026-08-05", "--set-crew", "Андріан,Любомир", "--early"]);
+    expect(a.early).toBe(true);
+    const r = buildManualInstruction({ setCrew: a.setCrew, early: a.early, reason: "" });
+    expect(r?.axis).toBe("crew");
+    expect(r?.instruction.roster).toEqual(["Андріан", "Любомир"]);
+    expect(r?.instruction.early).toBe(true);
+  });
+  it("--count / --no-count → eligibility counted/notCounted (rides on a crew instruction when present)", () => {
+    const a = parseArgs(["--date", "2026-08-05", "--count", "Андріан,Любомир", "--no-count", "Влад"]);
+    expect(a.count).toEqual(["Андріан", "Любомир"]);
+    expect(a.noCount).toEqual(["Влад"]);
+    const r = buildManualInstruction({ count: a.count, noCount: a.noCount, reason: "" });
+    expect(r?.axis).toBe("eligibility");
+    expect(r?.instruction.counted).toEqual(["Андріан", "Любомир"]);
+    expect(r?.instruction.notCounted).toEqual(["Влад"]);
+    const c = buildManualInstruction({ addCrew: ["Тарас"], count: ["Тарас"], reason: "" });
+    expect(c?.axis).toBe("crew");
+    expect(c?.instruction.counted).toEqual(["Тарас"]);
+  });
+  it("--early / --no-early alone → eligibility instruction carrying only the flag", () => {
+    expect(parseArgs(["--no-early"]).early).toBe(false);
+    const r = buildManualInstruction({ early: false, reason: "" });
+    expect(r?.axis).toBe("eligibility");
+    expect(r?.instruction.early).toBe(false);
+    expect(r?.instruction.roster).toBeUndefined();
+  });
 });
 
 describe("buildManualInstruction loss axis", () => {

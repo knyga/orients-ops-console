@@ -21,6 +21,8 @@ export interface ClassifiedRosterReply {
 export interface RosterOutcome {
   roster: string[];
   eligibility: Record<string, "counted" | "not_counted">;
+  /** Approver early-departure assertion (see RosterCorrection.early); undefined = untouched. */
+  early?: boolean;
   note: string;
   by: string;
   evidencePermalink: string;

@@ -7,7 +7,7 @@
  *  day (crew / eligibility / day / dataset / video / airborne / loss). The operator
  *  running --write IS the confirmation, so it applies directly (no two-phase).
  *
- *  MANUAL (--date D + one of --set-crew/--add-crew/--remove-crew/--airborne/
+ *  MANUAL (--date D + one of --set-crew/--add-crew/--remove-crew/--count/--no-count [--early|--no-early]/--airborne/
  *  --loss found|lost / --accept / --reject): apply one specific correction the
  *  approver decided out of band. Used to clear a day the thread never stated as
  *  a clean instruction. A

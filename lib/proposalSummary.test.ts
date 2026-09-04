@@ -16,6 +16,14 @@ describe("renderProposalSummary", () => {
   it("crew set (roster)", () => {
     expect(renderProposalSummary("2026-06-25", instr({ axis: "crew", roster: ["Влад", "Тарас"] }))).toContain("склад");
   });
+  it("crew set + early departure", () => {
+    const t = renderProposalSummary("2026-08-05", instr({ axis: "crew", roster: ["Андріан", "Любомир"], early: true }));
+    expect(t).toContain("склад 2026-08-05: Андріан, Любомир");
+    expect(t).toContain("ранній виїзд");
+  });
+  it("early denied alone (eligibility axis)", () => {
+    expect(renderProposalSummary("2026-08-05", instr({ axis: "eligibility", early: false }))).toContain("без раннього виїзду");
+  });
   it("day accept", () => {
     expect(renderProposalSummary("2026-06-21", instr({ axis: "day", decision: "accepted_exception" }))).toContain("прийняти день");
   });

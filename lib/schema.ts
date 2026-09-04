@@ -71,6 +71,7 @@ export const rosterCorrections = pgTable(
     source: text("source").notNull(),
     recordedAt: text("recorded_at").notNull(),
     reportTs: text("report_ts").notNull().default(""), // ""=day-wide; a Звіт ts scopes it
+    early: boolean("early"),            // approver early-departure assertion | null = derive from Звіт
   },
   (t) => [primaryKey({ columns: [t.date, t.reportTs] })],
 );
