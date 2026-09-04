@@ -84,6 +84,15 @@ describe("applyThreadReply", () => {
     expect(threadTs).toBe(verdict.entry.ts);
     expect(m.recordEvidenceEvent).toHaveBeenCalledWith(expect.objectContaining({ kind: "claim", outcome: "escalated", proposalId: "p9" }));
   });
+  it("a failed audit write never fails the escalation — the echo still posts and the result is still escalated", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    m.recordEvidenceEvent.mockRejectedValue(new Error("db down"));
+    m.classifyThreadReply.mockResolvedValue({ intent: "claim", claim: { kind: "explanation", text: "дощ, запис не працював" }, reason: "" });
+    const r = await applyThreadReply({ ...base, target: verdict, replyText: "дощ, запис не працював" });
+    expect(r.handled).toBe("escalated");
+    expect(m.postMessage).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
   it("claim in an ask thread maps by gap type and echoes into the ask thread", async () => {
     m.classifyThreadReply.mockResolvedValue({ intent: "claim", claim: { kind: "explanation", text: "не було датасету" }, reason: "" });
     await applyThreadReply({ ...base, target: ask, replyText: "не було датасету" });

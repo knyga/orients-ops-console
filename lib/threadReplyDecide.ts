@@ -45,8 +45,14 @@ export function decideThreadReply(
   if (c.intent === "evidence" && c.evidence?.length) {
     return { type: "verify", evidence: c.evidence, ...(c.claim ? { claim: c.claim } : {}) };
   }
-  if (c.intent === "claim" && c.claim) {
-    if (status === "accepted") return { type: "silent", reason: "already-accepted" };
+  // Any claim escalates, regardless of the overall intent the model landed on
+  // (spec §3.3 step 4 keys on "claim present", before chat) — a claim riding
+  // along with a "chat"/"unclear" intent must still reach approvers, never be
+  // silently answered as chat. Only an explanation/deploy_window claim on an
+  // already-accepted day is a no-op; airborne/loss_found always escalate.
+  if (c.claim) {
+    const skip = (c.claim.kind === "explanation" || c.claim.kind === "deploy_window") && status === "accepted";
+    if (skip) return { type: "silent", reason: "already-accepted" };
     return { type: "escalate", claim: c.claim };
   }
   if (c.intent === "chat") return { type: "chat" };

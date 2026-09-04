@@ -29,10 +29,11 @@ export interface AnswerDecisionArgs {
  * CLI's batch loop is the sole caller of this path.
  */
 export async function applyAnswerDecision(a: AnswerDecisionArgs): Promise<void> {
-  if (a.outcome.escalate && a.outcome.claimText) {
+  if (a.outcome.escalate) {
+    const claimText = a.outcome.claimText ?? a.outcome.note;
     await escalateClaim({
       target: { kind: "ask", record: a.record, period: a.period },
-      claim: { kind: "explanation", text: a.outcome.claimText },
+      claim: { kind: "explanation", text: claimText },
       userName: a.userName,
       userId: a.userId,
       role: "pilot",

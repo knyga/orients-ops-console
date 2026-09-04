@@ -89,11 +89,17 @@ export async function escalateClaim(a: {
       entry.ts,
     );
   }
-  await recordEvidenceEvent({
-    threadTs: entry.ts, channel: entry.channel, date: entry.date, reportTs: entry.reportTs, byUserId: a.userId, byName: a.userName, role: a.role,
-    kind: "claim", evidence: { claim: a.claim, hints: a.hints ?? null }, outcome: "escalated", statusBefore: a.statusBefore ?? null, statusAfter: a.statusAfter ?? null,
-    sourceReplyTs: a.replyTs, proposalId: proposal.id,
-  });
+  try {
+    await recordEvidenceEvent({
+      threadTs: entry.ts, channel: entry.channel, date: entry.date, reportTs: entry.reportTs, byUserId: a.userId, byName: a.userName, role: a.role,
+      kind: "claim", evidence: { claim: a.claim, hints: a.hints ?? null }, outcome: "escalated", statusBefore: a.statusBefore ?? null, statusAfter: a.statusAfter ?? null,
+      sourceReplyTs: a.replyTs, proposalId: proposal.id,
+    });
+  } catch (err) {
+    // A valid escalation must never surface as a thread error just because the
+    // audit row failed to write — the proposal is already created and echoed.
+    console.error("escalateClaim: audit write failed:", err);
+  }
   return { created: true, proposalId: proposal.id };
 }
 

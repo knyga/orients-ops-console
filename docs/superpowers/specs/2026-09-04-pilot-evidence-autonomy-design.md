@@ -167,8 +167,8 @@ Exactly four: «так», «ні», an instruction with details (existing path),
 ## 6. Chat
 
 - Residual replies (`chat`) go through the existing agent loop (`lib/agent/loop.ts`) under a new surface **`verdict-thread`**.
-- `conversationKey = "verdict:" + thread_ts`. The namespace preserves the route.ts invariant that agent-thread keys never equal a verdict/ask ts (`agentThreadExists(rawTs)` cannot match).
-- **Stateless:** no `agent_threads` rows written; each question stands alone with the verdict text + live thread transcript (`lib/agent/threadContext.ts`) as context.
+- **Stateless — no conversation key at all.** The plan's earlier `verdict:<ts>` namespace was superseded by "no memory": no key is used, so no `agent_threads` row is ever written, and each question stands alone with the verdict text + live thread transcript (`lib/agent/threadContext.ts`) as context.
+- The route.ts invariant that agent-thread keys never equal a verdict/ask ts holds here trivially, because nothing is keyed — there is no `agentThreadExists(rawTs)` lookup to collide.
 - **Read tools only** + one new read tool **`field_verdict_status`** (date, reportTs → status, gaps in Ukrainian, numbers, links to the Звіт and thread). No write tools are registered on this surface, so a chat can never propose or apply.
 - Reply threaded, chunked via `lib/slackChunk.ts` if long. Placeholder pattern as §3.4.
 - Approvers and pilots alike; the approver gate on the agent surface (`lib/approvers.ts` refusal for non-approvers) does **not** apply here — the surface is read-only by construction.
@@ -203,7 +203,7 @@ New table **`evidence_events`** (audit; backs the web panel + CLI `--list`):
 ## 9. CLI + web (both required)
 
 - **CLI** `npm run field-evidence -- --thread <channelId:ts | permalink> --reply "<text>" [--as <name|userId>] [--write]` — runs the same `applyThreadReply` from the terminal. DRY-RUN by default: prints role, classification struct, dispatch action, verification outcome and the exact texts it would post. `--write` performs (verify + edit + ack / create proposal + echo / chat answer). `--list --start --end` prints evidence events + pilot-origin proposals, mirroring `GET /api/evidence`.
-- **Web**: `GET /api/evidence?start=&end=` (committed-DB read) and a **«Докази від пілотів»** panel on the Instructions tab: evidence events table (date, who, kind, outcome, before→after, link) and pilot-origin proposals with an «від пілота» badge in the existing pending-proposals list.
+- **Web**: `GET /api/evidence?period=<key>` (committed-DB read, house `parsePeriodKey` pattern like `/api/instructions`) and a **«Докази від пілотів»** panel on the Instructions tab: evidence events table (date, who, kind, outcome, before→after, link) and pilot-origin proposals with an «від пілота» badge in the existing pending-proposals list.
 - Agent read tool `field_verdict_status` is also reachable from `npm run agent -- "що бракує за 04.09?"`.
 
 ## 10. Idempotency, dedup, failure
@@ -244,12 +244,14 @@ Orchestration (mocked Slack/Claude/DB, `lib/runSprint.test.ts` style):
 
 Reserved for a human operator — not run by the implementing agent. End-to-end smoke on the test channel:
 
+0. Before deploying, run `npm run field-evidence -- --thread <permalink> --reply "<a real past reply>"` (dry-run) against 3–5 recent NEEDS_REVIEW threads and check the classification/action.
 1. Ensure `AGENT_RUN_SECRET`, `ANTHROPIC_API_KEY`, `SLACK_TOKEN`, `VIMEO_TOKEN`, `POSTGRES_URL` are set on Vercel; deploy.
 2. In `#orients-ops-console-test`, pick (or publish via `npm run field-publish -- --channel orients-ops-console-test --publish` on a small window) a NEEDS_REVIEW verdict.
 3. As a non-approver: reply «що ще бракує?» → expect «💬 Думаю…» edited into an answer, `evidence_events` row kind=chat.
 4. Reply «дощ, запис не працював» → expect the 🔎 echo tagging both approvers; `npm run field-evidence -- --list …` shows a pilot proposal. As an approver reply «так» → applied, ack names the approver.
 5. Reply with a Vimeo link → «🔎 Перевіряю…» edited into the shortfall/closed text.
 6. Check `npm run sent -- --start … --end … --format table` shows every post keyed by the reply ts (feature `evidence`).
+7. Post the Ukrainian announcement in #field-qa (from §12 step 3 of the rollout list): pilots reply in the verdict thread with Vimeo/#datasets links → the bot re-checks; explanations go to approvers; note that each link triggers a full re-check, so batch links in one message.
 
 ## 13. Files touched (expected)
 

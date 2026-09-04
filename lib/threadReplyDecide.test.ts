@@ -39,6 +39,14 @@ describe("decideThreadReply — priority", () => {
     expect(decideThreadReply(c({ intent: "claim", claim }), "pilot", false, "needs_review")).toEqual({ type: "escalate", claim });
     expect(decideThreadReply(c({ intent: "claim", claim }), "pilot", false, "accepted").type).toBe("silent");
   });
+  it("a claim present escalates even when the model landed on chat or unclear", () => {
+    expect(decideThreadReply(c({ intent: "chat", claim }), "pilot", false, "needs_review")).toEqual({ type: "escalate", claim });
+    expect(decideThreadReply(c({ intent: "unclear", claim }), "pilot", false, "needs_review")).toEqual({ type: "escalate", claim });
+  });
+  it("a loss_found claim escalates even on an already-accepted day (only explanation/deploy_window are skipped)", () => {
+    const lossFound = { kind: "loss_found" as const, text: "борт знайшли" };
+    expect(decideThreadReply(c({ intent: "claim", claim: lossFound }), "pilot", false, "accepted")).toEqual({ type: "escalate", claim: lossFound });
+  });
   it("chat → chat for both roles", () => {
     expect(decideThreadReply(c({ intent: "chat" }), "pilot", false, "needs_review")).toEqual({ type: "chat" });
     expect(decideThreadReply(c({ intent: "chat" }), "approver", true, "needs_review")).toEqual({ type: "chat" });

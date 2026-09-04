@@ -49,6 +49,22 @@ export async function verifyEvidence(a: VerifyArgs): Promise<VerifyResult> {
   const log = a.onLog ?? (() => {});
   const before = findRow((await readReportJson<{ days: DayVerdict[] }>("field-verdict", periodKey(a.period)))?.days, a.date, a.reportTs);
 
+  // Guard: computeVerdicts recomputes from the committed field-qa report. When
+  // that report doesn't exist yet, it still runs — every row gets airborne 0,
+  // lands NEEDS_REVIEW, and gets WRITTEN — and refreshPublishedDays would then
+  // rewrite the day's live Slack message with that nonsense. Bail before any
+  // of sync/recompute/refresh runs.
+  const fq = await readReportJson<{ days: unknown[] }>("field-qa", periodKey(a.period));
+  if (!fq) {
+    return {
+      outcome: "still_open",
+      text: "❌ Не вдалося перевірити: немає обробленого звіту #field-qa за цей період — спробуйте пізніше або напишіть затверджувачам.",
+      verifyLine: "звіт field-qa відсутній",
+      statusBefore: before?.status ?? null,
+      statusAfter: before?.status ?? null,
+    };
+  }
+
   const datasets = TRACKED_CHANNELS.find((c) => c.name === "datasets");
   if (datasets) await syncAllChannels({ mode: "incremental", window: 7, channels: [datasets], onLog: log });
 

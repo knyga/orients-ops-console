@@ -22,7 +22,12 @@ const row = (status: string, videoMinutes: number) => ({
 beforeEach(() => {
   syncAllChannels.mockReset().mockResolvedValue({});
   refreshPublishedDays.mockReset().mockResolvedValue({ refreshed: [], skipped: [] });
-  readReportJson.mockReset().mockResolvedValue({ days: [row("NEEDS_REVIEW", 48)] });
+  // Feature-aware: "field-verdict" reads (the `before` lookup) get the row
+  // fixture; "field-qa" reads (the guard) get a truthy stand-in so existing
+  // tests exercise the sync/recompute/refresh path as before.
+  readReportJson.mockReset().mockImplementation(async (feature: string) =>
+    feature === "field-qa" ? { days: [{ date: "2026-09-01" }] } : { days: [row("NEEDS_REVIEW", 48)] },
+  );
   computeVerdicts.mockReset().mockResolvedValue({ days: [row("ACCEPTED", 96)] });
   fetchVideosInPeriod.mockReset().mockResolvedValue([]);
   readChannelMessages.mockReset().mockResolvedValue([]);
@@ -49,6 +54,17 @@ describe("verifyEvidence", () => {
     readReportJson.mockResolvedValue(null);
     const r = await verifyEvidence({ date: "2026-09-01", reportTs: "1.1", period, hints: noHints, byName: "Тарас", trigger: "cli" });
     expect(r.statusBefore).toBeNull();
+  });
+  it("bails before any sync/recompute/refresh when there is no committed field-qa report", async () => {
+    readReportJson.mockImplementation(async (feature: string) => (feature === "field-qa" ? null : { days: [row("NEEDS_REVIEW", 48)] }));
+    const r = await verifyEvidence({ date: "2026-09-01", reportTs: "1.1", period, hints: noHints, byName: "Тарас", trigger: "webhook" });
+    expect(syncAllChannels).not.toHaveBeenCalled();
+    expect(computeVerdicts).not.toHaveBeenCalled();
+    expect(refreshPublishedDays).not.toHaveBeenCalled();
+    expect(r.outcome).toBe("still_open");
+    expect(r.text).toContain("немає обробленого звіту");
+    expect(r.statusBefore).toBe("NEEDS_REVIEW");
+    expect(r.statusAfter).toBe("NEEDS_REVIEW");
   });
   it("matches a Vimeo id exactly, not as a substring of a longer id", async () => {
     computeVerdicts.mockResolvedValue({ days: [row("NEEDS_REVIEW", 48)] });
