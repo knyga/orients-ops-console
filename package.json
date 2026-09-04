@@ -31,6 +31,7 @@
     "field-approvals": "node --conditions=react-server --import tsx scripts/field-approvals.ts",
     "field-roster": "node --conditions=react-server --import tsx scripts/field-roster.ts",
     "field-instructions": "node --conditions=react-server --import tsx scripts/field-instructions.ts",
+    "field-evidence": "node --conditions=react-server --import tsx scripts/field-evidence.ts",
     "field-crew": "node --conditions=react-server --import tsx scripts/field-crew.ts",
     "field-nightly": "node --conditions=react-server --import tsx scripts/field-nightly.ts",
     "drone-reminder": "node --conditions=react-server --import tsx scripts/droneReminder.ts",

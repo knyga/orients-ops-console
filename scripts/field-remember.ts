@@ -83,14 +83,19 @@ async function main(): Promise<void> {
 
     console.log(
       `• ${record.date} ${record.gapType} ⇒ ${
-        outcome.escalate ? "would ESCALATE to approvers (pilot-origin proposal)" : `state → ${outcome.state}`
+        outcome.escalate
+          ? args.write
+            ? "ESCALATING to approvers (pilot-origin proposal)"
+            : "would ESCALATE to approvers (pilot-origin proposal)"
+          : `state → ${outcome.state}`
       }: ${outcome.note}`,
     );
 
     if (args.write) {
       const deciding = replies.find((r) => r.permalink === outcome.evidencePermalink) ?? replies[replies.length - 1];
-      // The answer effect (escalation + ask-state advance) is shared with the
-      // events webhook path — one source of truth in lib/applyAnswer.
+      // The answer effect (escalation + ask-state advance) is applied here via
+      // lib/applyAnswer — this CLI path is separate from the events-webhook
+      // reply handler (lib/applyThreadReply.ts), which now owns live replies.
       await applyAnswerDecision({
         record,
         period,
