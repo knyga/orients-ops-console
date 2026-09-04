@@ -53,6 +53,17 @@ describe("collectDayNodes", () => {
     expect(n.reports[0].bonusTs).toBe("300.1");
     expect(n.reports[0].bonusText).toBeUndefined();
   });
+  it("marks verdictOverridden true when the published row carries an override, undefined otherwise", () => {
+    const overriddenPublished: PublishedLog = {
+      ...published,
+      "2026-09-03#100.1": { ...published["2026-09-03#100.1"], override: { decision: "rejected", by: "X", ackedAt: "2026-09-03T10:00:00Z" } },
+    };
+    const n = collectDayNodes({ date: "2026-09-03", channel: "field-qa", published: overriddenPublished, notified, outbound });
+    const r1 = n.reports.find((r) => r.reportTs === "100.1")!;
+    const r2 = n.reports.find((r) => r.reportTs === "100.2")!;
+    expect(r1.verdictOverridden).toBe(true);
+    expect(r2.verdictOverridden).toBeUndefined();
+  });
   it("ignores a links-zvit or bonus-thread row posted to a foreign channel", () => {
     const foreignOutbound: OutboundRowLike[] = [
       row({ key: "bonus-thread:2026-09-03#100.1", feature: "bonus", ts: "300.1", text: "💰 foreign", channel: "orients-ops-console-test" }),
@@ -109,6 +120,12 @@ describe("renderLinks", () => {
   it("zvit reply omits the Звіт", () => {
     expect(renderLinks({ kind: "zvit", reportTs: "100.2" }, nodes, url)).toBe(
       `${LINKS_MARKER}<${url("200.2")}|Вердикт> · <${url("50.0")}|Дрони> · <${url("500.1")}|Підсумок>`,
+    );
+  });
+  it("reminder still links «Вердикт» to an overridden report — the link TO it survives even though the verdict message itself is never edited", () => {
+    const overridden: DayNodes = { ...nodes, reports: [{ ...nodes.reports[0], verdictOverridden: true }, nodes.reports[1]] };
+    expect(renderLinks({ kind: "reminder", date: "2026-09-03" }, overridden, url)).toBe(
+      renderLinks({ kind: "reminder", date: "2026-09-03" }, nodes, url),
     );
   });
   it("single-report day has no ordinals; nothing to link → null", () => {
@@ -180,5 +197,12 @@ describe("planRelink", () => {
     expect(planRelink(undefinedBonus, { permalink: url, zvitReply: false }).some((e) => e.target.kind === "bonus")).toBe(false);
     const emptyBonus: DayNodes = { ...base, reports: [{ ...base.reports[0], bonusTs: "300.1", bonusText: "" }] };
     expect(planRelink(emptyBonus, { permalink: url, zvitReply: false }).some((e) => e.target.kind === "bonus")).toBe(false);
+  });
+  it("never edits an approver-overridden verdict message, but still edits the reminder and posts the Звіт reply", () => {
+    const overridden: DayNodes = { ...base, reports: [{ ...base.reports[0], verdictOverridden: true }] };
+    const edits = planRelink(overridden, { permalink: url, zvitReply: true });
+    expect(edits.some((e) => e.target.kind === "verdict")).toBe(false);
+    expect(edits.some((e) => e.target.kind === "reminder")).toBe(true);
+    expect(edits.some((e) => e.target.kind === "zvit" && e.op === "post")).toBe(true);
   });
 });

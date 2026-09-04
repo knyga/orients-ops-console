@@ -33,6 +33,12 @@ export interface ReportNodes {
   reportTs: string;
   verdictTs?: string;
   verdictText?: string;
+  /**
+   * true when an approver override is stamped on the published row — its DB
+   * text is the pre-strike render, so the verdict message is never edited
+   * (mirrors lib/backfillPublished's `overridden` skip).
+   */
+  verdictOverridden?: boolean;
   bonusTs?: string;
   bonusText?: string;
   zvitReplyTs?: string;
@@ -64,10 +70,14 @@ function sentRow(rows: OutboundRowLike[], pred: (r: OutboundRowLike) => boolean)
   return rows.find((r) => r.status === "sent" && r.ts && pred(r));
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** The one summary thread chunk whose text has a line starting with «*DD.MM » for `date`; null when none or ambiguous. */
 export function summaryChunkFor(date: string, rows: OutboundRowLike[], channel: string): string | null {
   const label = `*${date.slice(8, 10)}.${date.slice(5, 7)} `;
-  const re = new RegExp(`(^|\\n)\\${label}`);
+  const re = new RegExp(`(^|\\n)${escapeRegExp(label)}`);
   const hits = new Set(
     rows
       .filter((r) => r.feature === SUMMARY_FEATURE && r.status === "sent" && r.ts && r.channel === channel && !r.key.endsWith(":anchor") && re.test(r.text))
@@ -85,7 +95,7 @@ export function collectDayNodes(input: CollectInput): DayNodes {
     .map((e) => {
       const reportTs = e.reportTs as string;
       const key = reportKey(date, reportTs);
-      const node: ReportNodes = { reportTs, verdictTs: e.ts, verdictText: e.text };
+      const node: ReportNodes = { reportTs, verdictTs: e.ts, verdictText: e.text, ...(e.override != null ? { verdictOverridden: true } : {}) };
       const bonusTs = notified[key]?.threadTs;
       if (bonusTs) {
         node.bonusTs = bonusTs;
@@ -148,8 +158,13 @@ export interface RelinkEdit {
 
 /**
  * The edits/posts that bring every target's 🔗 line up to date. A target whose
- * current text is unknown or empty is skipped — never edit blind. The
- * Звіт-thread reply is POSTED only when `zvitReply` is on and the report
+ * current text is unknown or empty is skipped — never edit blind. A verdict
+ * whose report carries `verdictOverridden` is never edited at all: its stored
+ * text is the approver-override's pre-strike render (`published.text` is
+ * deliberately not rewritten by `applyApproval.ts` so a re-amend never
+ * double-strikes), so an edit here would clobber the live strike with the
+ * pristine body — links TO it (from the reminder, summary, etc.) still work.
+ * The Звіт-thread reply is POSTED only when `zvitReply` is on and the report
  * already has a verdict; an existing reply is always kept current.
  */
 export function planRelink(nodes: DayNodes, opts: { permalink: (ts: string) => string; zvitReply: boolean }): RelinkEdit[] {
@@ -162,7 +177,7 @@ export function planRelink(nodes: DayNodes, opts: { permalink: (ts: string) => s
   };
   if (nodes.reminderTs && nodes.reminderText) edit({ kind: "reminder", date: nodes.date }, nodes.reminderTs, nodes.reminderText);
   for (const r of nodes.reports) {
-    if (r.verdictTs && r.verdictText) edit({ kind: "verdict", date: nodes.date, reportTs: r.reportTs }, r.verdictTs, r.verdictText);
+    if (r.verdictTs && r.verdictText && !r.verdictOverridden) edit({ kind: "verdict", date: nodes.date, reportTs: r.reportTs }, r.verdictTs, r.verdictText);
     if (r.bonusTs && r.bonusText) edit({ kind: "bonus", date: nodes.date, reportTs: r.reportTs }, r.bonusTs, r.bonusText);
     const target: LinksTarget = { kind: "zvit", reportTs: r.reportTs };
     const line = renderLinks(target, nodes, opts.permalink);

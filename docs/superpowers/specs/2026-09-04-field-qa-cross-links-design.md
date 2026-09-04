@@ -135,3 +135,11 @@ Requires one new DB helper: `findSentByKey(key)` in `lib/outbound.ts` (reminder 
 ## Out of scope
 
 Editing summary chunks after they are posted; links inside per-person DMs; #datasets messages; emoji reactions on the Звіт; relinking triggered from the Slack events webhook.
+
+## Amendment (2026-09-04, final review)
+
+**Finding:** the "Link line" section above states the 🔗 region is edited even on an approver-overridden verdict, on the theory that it's disjoint from the strike region. That's wrong: `lib/applyApproval.ts` `amendPublishedVerdict` edits the LIVE Slack message to `~original~\n⛔ Оновлено → …` but, by design, writes `published.text` back unchanged (the *first-posted*, pre-strike text) — `formatOverride` needs that original text so a re-amend never double-strikes. So for an overridden report, `published.text` is not the live message body; it is stale by construction. `collectDayNodes` builds `verdictText` from `published[...].text`, so `planRelink` would have emitted `withLinksRegion(<pre-strike text>, line)` as the verdict's `newText` — a `chat.update` that visibly erases the approver's strike-through, restoring the pristine wording. The nightly refresh (`lib/backfillPublished.ts`) already special-cases this exact situation by skipping overridden entries.
+
+**Decision:** `planRelink` never emits a verdict-message edit for a report whose `ReportNodes.verdictOverridden` is true (set by `collectDayNodes` from `published[...].override != null`). Nothing else about that report changes — its Звіт-thread reply and bonus reply still get relinked, and day-level targets (reminder, summary) still link *to* the overridden verdict; only the edit of the verdict message itself is suppressed. `lib/applyApproval.ts` and the DB schema are untouched.
+
+**Follow-up (out of scope here):** the root cause is that the struck (post-override) text is never persisted anywhere — only the pre-strike original. A future change could persist the struck text separately (e.g. a `strikeText` column) so the 🔗-region rule could hold uniformly instead of carving out an exception. Not attempted in this pass.
