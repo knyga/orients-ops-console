@@ -3,6 +3,7 @@ import { computeBackfillPlan } from "./backfillPublished";
 import { formatDayMessage } from "./verdictPublish";
 import { reportKey, type DayVerdict } from "./fieldDayVerdict";
 import type { PublishedEntry, PublishedLog } from "./published";
+import { LINKS_MARKER, withLinksRegion } from "./linksRegion";
 
 const verdict = (over: Partial<DayVerdict>): DayVerdict => ({
   date: "2026-06-18",
@@ -116,5 +117,21 @@ describe("computeBackfillPlan", () => {
       [],
     );
     expect(plan.map((p) => p.date)).toEqual(["2026-06-01", "2026-06-09", "2026-06-18"]);
+  });
+});
+
+describe("computeBackfillPlan with a trailing 🔗 line", () => {
+  const links = `${LINKS_MARKER}<https://x/p1|Звіт> · <https://x/p2|Дрони>`;
+  it("treats a current render + 🔗 line as already-current (never strips links nightly)", () => {
+    const v = verdict({});
+    const plan = computeBackfillPlan(logOf(entry({ text: withLinksRegion(formatDayMessage(v), links) })), [v]);
+    expect(plan[0].action).toBe("skip");
+    expect(plan[0].reason).toBe("already-current");
+  });
+  it("re-appends the existing 🔗 line when the body needs a re-render", () => {
+    const v = verdict({});
+    const plan = computeBackfillPlan(logOf(entry({ text: withLinksRegion("✅ stale body", links) })), [v]);
+    expect(plan[0].action).toBe("update");
+    expect(plan[0].newText).toBe(withLinksRegion(formatDayMessage(v), links));
   });
 });

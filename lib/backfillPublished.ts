@@ -4,7 +4,8 @@
  * No DB/Slack/fs here — the CLI (scripts/field-backfill.ts) supplies the
  * DB-sourced published log + verdicts and performs the chat.update writes.
  *
- * An item is `update` only when its stored text differs from the fresh render.
+ * An item is `update` only when its stored text — minus the trailing 🔗 cross-link
+ * line, which is re-appended to the new render — differs from the fresh render.
  * Two cases are deliberately SKIPPED:
  *  - `overridden`: the live message is a struck approver amendment (+ a separate
  *    ack reply) — re-rendering the plain verdict would clobber it.
@@ -17,6 +18,7 @@
 import { formatDayMessage } from "./verdictPublish";
 import { reportKey, type DayVerdict } from "./fieldDayVerdict";
 import type { PublishedLog } from "./published";
+import { splitLinksRegion, withLinksRegion } from "./linksRegion";
 
 export type BackfillReason = "needs-update" | "already-current" | "overridden" | "no-verdict";
 
@@ -82,11 +84,14 @@ export function computeBackfillPlan(
         return { ...base, reportSeq: 1, reportCount: 1, newText: entry.text, action: "skip" as const, reason: "no-verdict" as const, status: null };
       }
       const withReportMeta = { ...base, reportSeq: verdict.reportSeq, reportCount: verdict.reportCount, status: verdict.status };
-      const newText = formatDayMessage(verdict);
+      // The 🔗 cross-link line is a disjoint region owned by lib/relinkDay, not
+      // by the formatter: compare and re-render WITHOUT it, then put it back.
+      const { rest: storedBody, linksLine } = splitLinksRegion(entry.text);
+      const newText = withLinksRegion(formatDayMessage(verdict), linksLine);
       if (overridden) {
         return { ...withReportMeta, newText, action: "skip" as const, reason: "overridden" as const };
       }
-      if (entry.text === newText) {
+      if (storedBody === formatDayMessage(verdict)) {
         return { ...withReportMeta, newText, action: "skip" as const, reason: "already-current" as const };
       }
       return { ...withReportMeta, newText, action: "update" as const, reason: "needs-update" as const };
