@@ -14,6 +14,8 @@ import { nextState, type ProposalAction, type ProposalAxis, type ProposalState }
 export type { ProposalAction, ProposalAxis, ProposalState } from "./proposalDecision";
 import { supersedes } from "./proposalDecision";
 
+export type ProposalOrigin = "approver" | "pilot";
+
 export interface Proposal {
   id: string;
   threadTs: string;
@@ -23,6 +25,9 @@ export interface Proposal {
   payload: unknown;
   summaryUk: string;
   proposedBy: string;
+  /** Who raised it: an approver's instruction, or a pilot's unverifiable claim
+   *  (only approvers may confirm a pilot-origin proposal). */
+  origin: ProposalOrigin;
   sourceReplyTs: string;
   state: ProposalState;
   createdAt: string;
@@ -37,6 +42,7 @@ export interface NewProposal {
   payload: unknown;
   summaryUk: string;
   proposedBy: string;
+  origin?: ProposalOrigin; // default "approver"
   sourceReplyTs: string;
 }
 
@@ -50,6 +56,7 @@ function toProposal(r: typeof schema.proposals.$inferSelect): Proposal {
     payload: r.payload,
     summaryUk: r.summaryUk,
     proposedBy: r.proposedBy,
+    origin: r.origin === "pilot" ? "pilot" : "approver",
     sourceReplyTs: r.sourceReplyTs,
     state: r.state as ProposalState,
     createdAt: r.createdAt,
@@ -85,7 +92,7 @@ export async function createProposal(input: NewProposal): Promise<{ created: boo
   const now = new Date().toISOString();
   const rows = await db
     .insert(schema.proposals)
-    .values({ ...input, state: "PROPOSED", createdAt: now, resolvedAt: null })
+    .values({ ...input, origin: input.origin ?? "approver", state: "PROPOSED", createdAt: now, resolvedAt: null })
     .onConflictDoNothing({ target: schema.proposals.sourceReplyTs })
     .returning();
   if (rows.length > 0) return { created: true, proposal: toProposal(rows[0]) };

@@ -144,6 +144,7 @@ export const proposals = pgTable(
     payload: jsonb("payload").notNull(), // the classified change
     summaryUk: text("summary_uk").notNull(), // Ukrainian echo of the change
     proposedBy: text("proposed_by").notNull(), // approver name
+    origin: text("origin").notNull().default("approver"), // approver|pilot — who raised it
     sourceReplyTs: text("source_reply_ts").notNull(), // the approver reply that triggered it
     state: text("state").notNull(), // PROPOSED|CONFIRMED|CANCELLED|SUPERSEDED
     createdAt: text("created_at").notNull(),
@@ -153,6 +154,35 @@ export const proposals = pgTable(
     uniqueIndex("proposals_source_reply_ts").on(t.sourceReplyTs),
     index("proposals_thread_ts_state").on(t.threadTs, t.state),
     index("proposals_date").on(t.date),
+  ],
+);
+
+/** Audit of every human reply the thread-reply handler acted on (pilot evidence
+ *  autonomy, 2026-09-04): what it was classified as and what happened. Unique on
+ *  source_reply_ts → a redelivered Slack event never records twice. */
+export const evidenceEvents = pgTable(
+  "evidence_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    threadTs: text("thread_ts").notNull(),
+    channel: text("channel").notNull(), // tracked channel NAME
+    date: text("date").notNull(),
+    reportTs: text("report_ts"), // null = day-level (ask thread / legacy)
+    byUserId: text("by_user_id").notNull(),
+    byName: text("by_name").notNull(),
+    role: text("role").notNull(), // approver|pilot
+    kind: text("kind").notNull(), // evidence|claim|chat|unclear
+    evidence: jsonb("evidence"), // ReplyHints + classified evidence items
+    outcome: text("outcome").notNull(), // closed|still_open|hard_fail|escalated|answered|silent
+    statusBefore: text("status_before"),
+    statusAfter: text("status_after"),
+    sourceReplyTs: text("source_reply_ts").notNull(),
+    proposalId: text("proposal_id"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("evidence_events_source_reply_ts").on(t.sourceReplyTs),
+    index("evidence_events_date").on(t.date),
   ],
 );
 
