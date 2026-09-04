@@ -352,8 +352,17 @@ export function coerceThreadReply(
     intent = "claim";
     claim = claim ?? { kind: "explanation", text: str(raw.reason) ?? "" };
   }
-  if (evidence.length) intent = "evidence";
-  else if (intent === "evidence") intent = claim ? "claim" : "unclear";
+
+  // An approver's decisive confirm/cancel/instruction outranks hint-forced evidence
+  // (spec §3.3 priority: confirm/cancel → instruction → verify) — a reply like
+  // «так, ось відео https://vimeo.com/42» must still apply the pending confirm, not
+  // get silently downgraded to evidence and lose the decision. Pilots never reach
+  // this branch with a decisive intent (their schema excludes confirm/cancel/
+  // instruction, and the block above already converted a raw "instruction" to a
+  // claim), so for them hint-forced evidence still wins over everything.
+  const isDecisive = intent === "confirm" || intent === "cancel" || intent === "instruction";
+  if (evidence.length && !isDecisive) intent = "evidence";
+  else if (!evidence.length && intent === "evidence") intent = claim ? "claim" : "unclear";
   if (intent === "claim" && !claim) intent = "unclear";
 
   return {

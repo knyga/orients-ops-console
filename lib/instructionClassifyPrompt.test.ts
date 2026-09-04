@@ -131,6 +131,32 @@ describe("coerceThreadReply — deterministic backstops", () => {
     expect(c.intent).toBe("unclear");
     expect(c.claim).toBeUndefined();
   });
+  it("an approver's confirm outranks hint-forced evidence (evidence stays attached)", () => {
+    const hints: ReplyHints = { ...noHints, vimeoLinks: [{ url: "https://vimeo.com/42", id: "42" }] };
+    const c = coerceThreadReply({ intent: "confirm", reason: "" }, "approver", "x", hints);
+    expect(c.intent).toBe("confirm");
+    expect(c.evidence).toEqual([{ kind: "video", links: ["https://vimeo.com/42"] }]);
+  });
+  it("an approver's instruction outranks hint-forced evidence (axis payload survives)", () => {
+    const hints: ReplyHints = { ...noHints, vimeoLinks: [{ url: "https://vimeo.com/42", id: "42" }] };
+    const c = coerceThreadReply(
+      { intent: "instruction", axis: "video", videoWaive: true, reason: "ok" },
+      "approver", null, hints,
+    );
+    expect(c.intent).toBe("instruction");
+    expect(c.axis).toBe("video");
+    expect(c.videoWaive).toBe(true);
+    expect(c.evidence).toEqual([{ kind: "video", links: ["https://vimeo.com/42"] }]);
+  });
+  it("a pilot has no instruction to outrank, so hint-forced evidence still wins", () => {
+    const hints: ReplyHints = { ...noHints, vimeoLinks: [{ url: "https://vimeo.com/42", id: "42" }] };
+    const c = coerceThreadReply(
+      { intent: "instruction", axis: "day", decision: "accepted_exception", reason: "прийняти" },
+      "pilot", null, hints,
+    );
+    expect(c.intent).toBe("evidence");
+    expect(c.claim?.kind).toBe("explanation");
+  });
 });
 
 describe("buildThreadReplyPrompt", () => {
