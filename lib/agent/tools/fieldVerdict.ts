@@ -6,14 +6,32 @@
 import { readReportJson } from "@/lib/reports";
 import { ukrainianGaps } from "@/lib/verdictPublish";
 import { TRACKED_CHANNELS } from "@/lib/slackChannels";
-import type { DayVerdict } from "@/lib/fieldDayVerdict";
+import type { DayVerdict, VerdictStatus, DatasetStatus } from "@/lib/fieldDayVerdict";
 import type { Tool } from "./types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const FIELD_QA_ID = TRACKED_CHANNELS.find((c) => c.name === "field-qa")?.id ?? "";
 
+const STATUS_LABEL: Record<VerdictStatus, string> = {
+  ACCEPTED: "✅ прийнято",
+  PENDING: "⏳ очікує",
+  NEEDS_REVIEW: "⚠️ потрібна перевірка",
+  ACCEPTED_EXCEPTION: "✅ прийнято (виняток)",
+  REJECTED: "⛔ відхилено",
+};
+
+const DATASET_LABEL: Record<DatasetStatus, string> = {
+  POSTED: "є",
+  WAIVED: "не потрібен (виняток)",
+  MISSING: "немає",
+  DECLINED: "причину відхилено",
+};
+
+// Same workspace-subdomain convention as permalinkFor in lib/slack.ts:144-149
+// (server-only there, so replicated locally rather than imported).
 function permalink(channelId: string, ts: string): string {
-  return `https://slack.com/archives/${channelId}/p${ts.replace(".", "")}`;
+  const workspace = process.env.SLACK_WORKSPACE || "orientsai";
+  return `https://${workspace}.slack.com/archives/${channelId}/p${ts.replace(".", "")}`;
 }
 
 export function renderVerdictStatus(days: DayVerdict[], date: string, fieldQaChannelId: string): string {
@@ -25,8 +43,8 @@ export function renderVerdictStatus(days: DayVerdict[], date: string, fieldQaCha
       const pct = d.ratio === null ? "—" : `${Math.round(d.ratio * 100)}%`;
       const gaps = ukrainianGaps(d);
       return [
-        `${head}: статус ${d.status}.`,
-        `Цифри: відео ${d.videoMinutes.toFixed(0)} хв = ${pct} від ${d.airborneMinutes.toFixed(0)} хв у повітрі; датасет: ${d.datasetStatus}; виїзд: ${d.deployMin ?? "невідомо"} хв.`,
+        `${head}: статус ${STATUS_LABEL[d.status]} (${d.status}).`,
+        `Цифри: відео ${d.videoMinutes.toFixed(0)} хв = ${pct} від ${d.airborneMinutes.toFixed(0)} хв у повітрі; датасет: ${DATASET_LABEL[d.datasetStatus]} (${d.datasetStatus}); виїзд: ${d.deployMin ?? "невідомо"} хв.`,
         gaps.length ? `Бракує: ${gaps.join("; ")}.` : `Прогалин немає.`,
         `Екіпаж: ${d.roster.join(", ") || "невідомий"}.`,
         d.reportTs ? `Звіт: ${permalink(fieldQaChannelId, d.reportTs)}` : "",
