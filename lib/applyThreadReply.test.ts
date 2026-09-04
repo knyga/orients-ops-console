@@ -90,6 +90,29 @@ describe("applyThreadReply", () => {
     expect(m.createProposal).toHaveBeenCalledWith(expect.objectContaining({ axis: "dataset", threadTs: "1781000000.000900", channel: "datasets" }));
     expect(m.postMessage.mock.calls[0][3]).toBe("1781000000.000900");
   });
+  it("ask-thread approver instruction outside dataset-waive/video is redirected, not applied", async () => {
+    m.classifyThreadReply.mockResolvedValue({ intent: "instruction", axis: "dataset", datasetStatus: "DECLINED", reason: "ні" });
+    const r = await applyThreadReply({ ...base, target: ask, userId: "U08G4HZQTTR", userName: "Bohdan Forostianyi", role: "approver", replyText: "не платимо" });
+    expect(m.applyClassifiedInstruction).not.toHaveBeenCalled();
+    expect(m.postMessage).toHaveBeenCalledTimes(1);
+    const [channelId, text, meta, threadTs] = m.postMessage.mock.calls[0];
+    expect(channelId).toBe("C08KG802THU");
+    expect(threadTs).toBe("1781000000.000900");
+    expect(meta.key).toBe(`instruction-ack:2026-09-01:ask-redirect:${base.replyTs}`);
+    expect(text).toContain("треді вердикту");
+    expect(r.handled).toBe("silent");
+  });
+  it("ask-thread approver dataset-waive instruction is allowed and delegated", async () => {
+    m.classifyThreadReply.mockResolvedValue({ intent: "instruction", axis: "dataset", datasetStatus: "WAIVED", reason: "ok" });
+    await applyThreadReply({ ...base, target: ask, userId: "U08G4HZQTTR", userName: "Bohdan Forostianyi", role: "approver", replyText: "виняток" });
+    expect(m.applyClassifiedInstruction).toHaveBeenCalledWith(expect.objectContaining({ entry: targetEntry(ask) }));
+  });
+  it("ask-thread approver day-axis instruction is redirected, not applied", async () => {
+    m.classifyThreadReply.mockResolvedValue({ intent: "instruction", axis: "day", decision: "accepted_exception", reason: "ok" });
+    const r = await applyThreadReply({ ...base, target: ask, userId: "U08G4HZQTTR", userName: "Bohdan Forostianyi", role: "approver", replyText: "прийняти" });
+    expect(m.applyClassifiedInstruction).not.toHaveBeenCalled();
+    expect(r.handled).toBe("silent");
+  });
   it("redelivered claim (createProposal created=false) posts nothing", async () => {
     m.createProposal.mockResolvedValue({ created: false, proposal: pendingPilot });
     m.classifyThreadReply.mockResolvedValue({ intent: "claim", claim: { kind: "explanation", text: "дощ" }, reason: "" });

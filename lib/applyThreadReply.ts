@@ -107,6 +107,27 @@ export async function applyThreadReply(a: ThreadReplyArgs): Promise<ThreadReplyR
   const action = decideThreadReply(c, a.role, pending.length > 0, publishedStatusHint(entry.text));
 
   if (action.type === "confirm" || action.type === "cancel" || action.type === "instruction") {
+    // An ask thread's "entry" is a SYNTHETIC one (the bot's own question message,
+    // keyed by the bare date). Only the two axes an ask thread is actually about
+    // — waiving the dataset it asked for, or accepting the video it asked about —
+    // are safe to apply there (both are ack-only posts, no message amendment).
+    // Anything else (day/crew/airborne/loss, or a dataset DECLINE) would target
+    // the wrong Slack message / published row — redirect instead of applying.
+    if (action.type === "instruction" && a.target.kind === "ask") {
+      const allowed = (c.axis === "dataset" && c.datasetStatus === "WAIVED") || c.axis === "video";
+      if (!allowed) {
+        const channel = TRACKED_CHANNELS.find((ch) => ch.name === entry.channel);
+        if (channel) {
+          await postMessage(
+            channel.id,
+            `ℹ️ Це можна зробити лише у треді вердикту за ${entry.date} (тут — лише «датасет не потрібен» / «відео зарахувати»).`,
+            { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "ask-redirect", a.replyTs), feature: "evidence", channel: channel.name, trigger },
+            entry.ts,
+          );
+        }
+        return { handled: "silent", intent: c.intent };
+      }
+    }
     // Approver-only by construction (decideThreadReply); the existing path owns echo/apply/acks.
     const res = await applyClassifiedInstruction({
       entry, period: a.target.period, approverName: a.userName, replyPermalink: a.replyPermalink, replyTs: a.replyTs, trigger,
