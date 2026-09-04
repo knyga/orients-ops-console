@@ -240,6 +240,17 @@ Orchestration (mocked Slack/Claude/DB, `lib/runSprint.test.ts` style):
 3. Enable in the webhook. Announce in #field-qa (Ukrainian, one message): reply in the verdict thread with video/dataset links, the bot re-checks; explanations go to approvers.
 4. Follow-up spec: `deploy` override axis (§5.2).
 
+### Manual smoke (operator)
+
+Reserved for a human operator — not run by the implementing agent. End-to-end smoke on the test channel:
+
+1. Ensure `AGENT_RUN_SECRET`, `ANTHROPIC_API_KEY`, `SLACK_TOKEN`, `VIMEO_TOKEN`, `POSTGRES_URL` are set on Vercel; deploy.
+2. In `#orients-ops-console-test`, pick (or publish via `npm run field-publish -- --channel orients-ops-console-test --publish` on a small window) a NEEDS_REVIEW verdict.
+3. As a non-approver: reply «що ще бракує?» → expect «💬 Думаю…» edited into an answer, `evidence_events` row kind=chat.
+4. Reply «дощ, запис не працював» → expect the 🔎 echo tagging both approvers; `npm run field-evidence -- --list …` shows a pilot proposal. As an approver reply «так» → applied, ack names the approver.
+5. Reply with a Vimeo link → «🔎 Перевіряю…» edited into the shortfall/closed text.
+6. Check `npm run sent -- --start … --end … --format table` shows every post keyed by the reply ts (feature `evidence`).
+
 ## 13. Files touched (expected)
 
 - `lib/instructionClassifyPrompt.ts`, `lib/instructionClassify.ts` — role-narrowed schema, struct output.
