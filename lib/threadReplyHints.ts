@@ -19,7 +19,7 @@ export function unwrapSlackLinks(text: string): string {
 const VIMEO_RE = /https?:\/\/(?:www\.)?vimeo\.com\/(?:[a-z]+\/[a-z]+\/)?(\d{6,})[^\s<>|]*/gi;
 const PERMALINK_RE = /https?:\/\/[^\s<>|]+\/archives\/([A-Z0-9]+)\/p(\d{16})[^\s<>|]*/g;
 const RANGE_RE = /(\d{1,2})[:.](\d{2})\s*[-–—]\s*(\d{1,2})[:.](\d{2})/g;
-const MINUTES_RE = /(\d{1,3})\s*(?:хв|мін|min)/gi;
+const MINUTES_RE = /(\d{1,3})\s*(?:хв|мін|min)(?![\p{L}])/giu;
 
 const pad = (n: string): string => n.padStart(2, "0");
 

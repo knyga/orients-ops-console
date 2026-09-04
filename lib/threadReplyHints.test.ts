@@ -29,6 +29,12 @@ describe("extractHints", () => {
   it("parses minute figures (хв/мін/min)", () => {
     expect(extractHints("у повітрі 140 хв, відео 35 min", DS).minuteFigures).toEqual([140, 35]);
   });
+  it("avoids false positives on мінус (not a minute figure)", () => {
+    expect(extractHints("50 мінус щось", DS).minuteFigures).toEqual([]);
+  });
+  it("avoids false positives on minutes/minimum (not minute figures)", () => {
+    expect(extractHints("5 minutes ago", DS).minuteFigures).toEqual([]);
+  });
   it("returns empty arrays for plain chat", () => {
     const h = extractHints("що ще бракує?", DS);
     expect(h).toEqual({ vimeoLinks: [], datasetPermalinks: [], timeRanges: [], minuteFigures: [] });
