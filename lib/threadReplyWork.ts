@@ -8,7 +8,7 @@ import "server-only";
 import { escalateClaim, targetEntry, type DeferredWork } from "./applyThreadReply";
 import { verifyEvidence } from "./evidenceVerify";
 import { runVerdictChat } from "./agent/verdictChat";
-import { recordEvidenceEvent } from "./evidenceEvents";
+import { hasEvidenceEvent, recordEvidenceEvent } from "./evidenceEvents";
 import { postMessage, updateMessage } from "./slack";
 import { chunkForSlack } from "./slackChunk";
 import { instructionAckKey } from "./outboundKeys";
@@ -26,6 +26,14 @@ export async function runDeferredWork(
   work: DeferredWork,
   opts: { placeholderTs?: string; onLog?: (m: string) => void },
 ): Promise<{ outcome: string; text: string }> {
+  // Effect-idempotency for a DUPLICATE internal invocation (a retried self-invoke,
+  // a re-POSTed /api/field/thread-reply): the audit row for this reply already
+  // exists, so the recompute + published refresh + escalation already ran and the
+  // placeholder already holds the answer. Return without ANY Slack/DB effect.
+  if (await hasEvidenceEvent(work.replyTs)) {
+    opts.onLog?.(`thread-reply work: reply ${work.replyTs} already recorded — skipping (duplicate invocation)`);
+    return { outcome: "duplicate", text: "" };
+  }
   const entry = targetEntry(work.target);
   const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
   if (!channel) throw new Error(`thread-reply work: untracked channel "${entry.channel}"`);

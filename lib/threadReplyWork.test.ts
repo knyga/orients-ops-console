@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-const m = vi.hoisted(() => ({ postMessage: vi.fn(), updateMessage: vi.fn(), verifyEvidence: vi.fn(), runVerdictChat: vi.fn(), recordEvidenceEvent: vi.fn(), escalateClaim: vi.fn() }));
+const m = vi.hoisted(() => ({ postMessage: vi.fn(), updateMessage: vi.fn(), verifyEvidence: vi.fn(), runVerdictChat: vi.fn(), recordEvidenceEvent: vi.fn(), hasEvidenceEvent: vi.fn(), escalateClaim: vi.fn() }));
 vi.mock("./slack", () => ({ postMessage: m.postMessage, updateMessage: m.updateMessage }));
 vi.mock("./evidenceVerify", () => ({ verifyEvidence: m.verifyEvidence }));
 vi.mock("./agent/verdictChat", () => ({ runVerdictChat: m.runVerdictChat }));
-vi.mock("./evidenceEvents", () => ({ recordEvidenceEvent: m.recordEvidenceEvent }));
+vi.mock("./evidenceEvents", () => ({ recordEvidenceEvent: m.recordEvidenceEvent, hasEvidenceEvent: m.hasEvidenceEvent }));
 vi.mock("./applyThreadReply", async (orig) => ({ ...(await (orig as () => Promise<Record<string, unknown>>)()), escalateClaim: m.escalateClaim }));
 
 import { runDeferredWork, workPlaceholderKey } from "./threadReplyWork";
@@ -23,6 +23,7 @@ beforeEach(() => {
   m.verifyEvidence.mockReset().mockResolvedValue({ outcome: "closed", text: "✅ Перевірив…", verifyLine: "l", statusBefore: "NEEDS_REVIEW", statusAfter: "ACCEPTED" });
   m.runVerdictChat.mockReset().mockResolvedValue("Бракує 12 хв");
   m.recordEvidenceEvent.mockReset().mockResolvedValue({ created: true });
+  m.hasEvidenceEvent.mockReset().mockResolvedValue(false);
   m.escalateClaim.mockReset().mockResolvedValue({ created: true, proposalId: "p1" });
 });
 
@@ -100,6 +101,19 @@ describe("runDeferredWork — post-deliver failures never clobber the result", (
     const hints = { vimeoLinks: [{ id: "9", url: "https://vimeo.com/9" }], datasetPermalinks: [], timeRanges: [], minuteFigures: [] } as DeferredWork["hints"];
     await runDeferredWork(work({ hints, claim: { kind: "explanation", text: "дощ" } }), { placeholderTs: "ph" });
     expect(m.escalateClaim).toHaveBeenCalledWith(expect.objectContaining({ hints }));
+  });
+});
+
+describe("runDeferredWork — duplicate invocation", () => {
+  it("an already-recorded reply short-circuits with NO Slack/DB effect at all", async () => {
+    m.hasEvidenceEvent.mockResolvedValue(true);
+    const r = await runDeferredWork(work({ claim: { kind: "explanation", text: "дощ" } }), { placeholderTs: "ph" });
+    expect(r).toEqual({ outcome: "duplicate", text: "" });
+    expect(m.verifyEvidence).not.toHaveBeenCalled();
+    expect(m.updateMessage).not.toHaveBeenCalled();
+    expect(m.postMessage).not.toHaveBeenCalled();
+    expect(m.escalateClaim).not.toHaveBeenCalled();
+    expect(m.recordEvidenceEvent).not.toHaveBeenCalled();
   });
 });
 

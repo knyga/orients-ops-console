@@ -177,7 +177,7 @@ Exactly four: «так», «ні», an instruction with details (existing path),
 
 - Replies in the bot's #datasets / #field-qa question threads go through the **same handler**. The ask record supplies `date` + `gapType`; the apply target is the published verdict for that date (dataset/video are day-shared axes, so multi-report days are fine).
 - Proposals from a question thread have `threadTs = askedTs`; the echo tags approvers **in the question thread**. Approver replies in question threads now reach the confirm path (today they fall through to `applyAnswerReply`).
-- `lib/applyAnswer.ts` no longer writes `accepted_exception` from an explanation. `data_provided` → verify; `accepted_exception` classification → pilot-origin proposal; `still_missing`/`unclear` → ask state only.
+- `lib/applyAnswer.ts` no longer writes `accepted_exception` from an explanation. `data_provided` → on the Slack path the reply is verified live (evidence); in the batch `field-remember` CLI it only advances the ask state — the nightly recompute performs the verification; `accepted_exception` classification → pilot-origin proposal; `still_missing`/`unclear` → ask state only.
 - `npm run field-remember` batch: prints the would-be actions; `--write` creates pilot-origin proposals (never resolutions).
 
 ## 8. Storage

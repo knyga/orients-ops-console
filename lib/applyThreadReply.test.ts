@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const m = vi.hoisted(() => ({
   postMessage: vi.fn(), classifyThreadReply: vi.fn(), createProposal: vi.fn(), readActiveProposals: vi.fn(),
-  applyClassifiedInstruction: vi.fn(), recordEvidenceEvent: vi.fn(),
+  applyClassifiedInstruction: vi.fn(), recordEvidenceEvent: vi.fn(), settleProposal: vi.fn(),
 }));
 vi.mock("./slack", () => ({ postMessage: m.postMessage }));
 vi.mock("./instructionClassify", () => ({ classifyThreadReply: m.classifyThreadReply }));
-vi.mock("./proposals", () => ({ createProposal: m.createProposal, readActiveProposals: m.readActiveProposals }));
+vi.mock("./proposals", () => ({ createProposal: m.createProposal, readActiveProposals: m.readActiveProposals, settleProposal: m.settleProposal }));
 vi.mock("./applyInstructionReply", () => ({ applyClassifiedInstruction: m.applyClassifiedInstruction }));
 vi.mock("./evidenceEvents", () => ({ recordEvidenceEvent: m.recordEvidenceEvent }));
 
@@ -30,6 +30,7 @@ beforeEach(() => {
   m.createProposal.mockReset().mockResolvedValue({ created: true, proposal: { ...pendingPilot } });
   m.applyClassifiedInstruction.mockReset().mockResolvedValue({ handled: "confirmed", applied: true, intent: "confirm" });
   m.recordEvidenceEvent.mockReset().mockResolvedValue({ created: true });
+  m.settleProposal.mockReset().mockResolvedValue("CANCELLED");
   m.classifyThreadReply.mockReset();
 });
 
@@ -91,6 +92,15 @@ describe("applyThreadReply", () => {
     const r = await applyThreadReply({ ...base, target: verdict, replyText: "дощ, запис не працював" });
     expect(r.handled).toBe("escalated");
     expect(m.postMessage).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+  it("a failed escalation echo CANCELS the unseen proposal and rethrows (no hidden confirmable proposal)", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    m.postMessage.mockRejectedValue(new Error("slack down"));
+    m.classifyThreadReply.mockResolvedValue({ intent: "claim", claim: { kind: "explanation", text: "дощ" }, reason: "" });
+    await expect(applyThreadReply({ ...base, target: verdict, replyText: "дощ" })).rejects.toThrow("slack down");
+    expect(m.settleProposal).toHaveBeenCalledWith(expect.objectContaining({ id: "p9" }), "cancel");
+    expect(m.recordEvidenceEvent).not.toHaveBeenCalled();
     spy.mockRestore();
   });
   it("claim in an ask thread maps by gap type and echoes into the ask thread", async () => {

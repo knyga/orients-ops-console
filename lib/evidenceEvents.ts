@@ -3,7 +3,7 @@
  * per human reply the bot acted on. NOT server-only: the CLI + web API import it.
  * Idempotent on sourceReplyTs (Slack redelivery).
  */
-import { and, gte, lte } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import { db, schema } from "./db";
 
 export type EvidenceRole = "approver" | "pilot";
@@ -60,6 +60,22 @@ export async function recordEvidenceEvent(ev: NewEvidenceEvent): Promise<{ creat
     .onConflictDoNothing({ target: schema.evidenceEvents.sourceReplyTs })
     .returning({ id: schema.evidenceEvents.id });
   return { created: rows.length > 0 };
+}
+
+/**
+ * Whether this reply has already been acted on. The audit row is written at the
+ * END of the deferred work, so this is the effect-idempotency guard for a
+ * DUPLICATE internal invocation of that work (the webhook self-invoke retried,
+ * an operator re-POSTing /api/field/thread-reply): without it the recompute,
+ * the published-message refresh and the claim escalation all run twice.
+ */
+export async function hasEvidenceEvent(sourceReplyTs: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.evidenceEvents.id })
+    .from(schema.evidenceEvents)
+    .where(eq(schema.evidenceEvents.sourceReplyTs, sourceReplyTs))
+    .limit(1);
+  return rows.length > 0;
 }
 
 export async function readEvidenceEventsInWindow(start: string, end: string): Promise<EvidenceEvent[]> {

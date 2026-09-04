@@ -14,7 +14,7 @@ import { decideThreadReply, publishedStatusHint } from "./threadReplyDecide";
 import { extractHints, type ReplyHints } from "./threadReplyHints";
 import { askClaimToInstruction, claimToInstruction, renderEscalationEcho } from "./claimProposal";
 import { applyClassifiedInstruction } from "./applyInstructionReply";
-import { createProposal, readActiveProposals } from "./proposals";
+import { createProposal, readActiveProposals, settleProposal } from "./proposals";
 import { renderProposalSummary } from "./proposalSummary";
 import { recordEvidenceEvent } from "./evidenceEvents";
 import { postMessage } from "./slack";
@@ -82,12 +82,27 @@ export async function escalateClaim(a: {
   if (!created) return { created: false, proposalId: proposal.id };
   const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
   if (channel) {
-    await postMessage(
-      channel.id,
-      renderEscalationEcho({ byName: a.userName, claimText: a.claim.text, summaryUk, verifyLine: a.verifyLine }),
-      { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "escalate", a.replyTs), feature: "evidence", channel: channel.name, trigger: a.trigger },
-      entry.ts,
-    );
+    try {
+      await postMessage(
+        channel.id,
+        renderEscalationEcho({ byName: a.userName, claimText: a.claim.text, summaryUk, verifyLine: a.verifyLine }),
+        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "escalate", a.replyTs), feature: "evidence", channel: channel.name, trigger: a.trigger },
+        entry.ts,
+      );
+    } catch (err) {
+      // The proposal is already PROPOSED but NOBODY saw it: the Slack event is
+      // claimed, so a redelivery hits `created: false` and returns early — and a
+      // later generic «так» in this thread would then apply a change no approver
+      // ever read. Cancel the unseen proposal and surface the failure (the
+      // route's failVisibly posts the notice); the pilot can re-raise the claim.
+      try {
+        await settleProposal(proposal, "cancel");
+      } catch (cancelErr) {
+        console.error("escalateClaim: cancelling the unseen proposal failed:", cancelErr);
+      }
+      console.error("escalateClaim: escalation echo post failed — proposal cancelled:", err);
+      throw err;
+    }
   }
   try {
     await recordEvidenceEvent({

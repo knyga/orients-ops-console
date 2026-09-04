@@ -58,7 +58,12 @@ export function evidenceOutcome(a: OutcomeArgs): { outcome: EvidenceOutcomeKind;
   }
   const d = a.day;
   const line = numbersLine(d);
-  if (d.status === "ACCEPTED" || d.status === "ACCEPTED_EXCEPTION") {
+  // ACCEPTED_EXCEPTION was an APPROVER's decision, not this evidence — thanking
+  // the replier for it would credit them with a day they did not clear.
+  if (d.status === "ACCEPTED_EXCEPTION") {
+    return { outcome: "closed", text: `✅ Перевірив: ${line} — день прийнято як виняток (рішення затверджувача).`, verifyLine: line };
+  }
+  if (d.status === "ACCEPTED") {
     return { outcome: "closed", text: `✅ Перевірив: ${line} — день прийнято. Дякую, ${a.byName}.`, verifyLine: line };
   }
   if (d.status === "REJECTED") {

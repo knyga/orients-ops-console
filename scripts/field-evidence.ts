@@ -18,9 +18,10 @@ import { decideThreadReply, publishedStatusHint } from "../lib/threadReplyDecide
 import { applyThreadReply, targetEntry, type ReplyTarget } from "../lib/applyThreadReply";
 import { runDeferredWork } from "../lib/threadReplyWork";
 import { computeVerdicts } from "../lib/computeVerdicts";
+import { findVerdictRow } from "../lib/evidenceVerify";
+import { evidenceOutcome } from "../lib/evidenceOutcome";
 import { permalinkFor } from "../lib/slack";
 import { TRACKED_CHANNELS } from "../lib/slackChannels";
-import { reportKey } from "../lib/fieldDayVerdict";
 import { parseArgs, resolveActor } from "./fieldEvidenceReport";
 
 async function main(): Promise<void> {
@@ -53,10 +54,16 @@ async function main(): Promise<void> {
     const action = decideThreadReply(c, actor.role, pending.length > 0, publishedStatusHint(entry.text));
     process.stdout.write(JSON.stringify({ target: { kind: target.kind, date: entry.date, reportTs: entry.reportTs, channel: entry.channel }, actor, hints, classification: c, action }, null, 2) + "\n");
     if (action.type === "verify") {
-      // Read-only preview of the recompute (no write, no Slack): what the fresh status would be.
+      // Read-only preview of the recompute (no write, no Slack): what the fresh
+      // status would be, and the exact text the bot would post. Both go through
+      // the same helpers the runtime uses (findVerdictRow + evidenceOutcome), so
+      // the preview can't drift from the real answer. Link diagnostics are the
+      // one exception — they need live Vimeo/#datasets lookups we skip here.
       const report = await computeVerdicts(target.period, { onLog: (m) => process.stderr.write(m + "\n") });
-      const fresh = report.days.find((d) => reportKey(d.date, d.reportTs) === reportKey(entry.date, entry.reportTs)) ?? report.days.find((d) => d.date === entry.date);
+      const fresh = findVerdictRow(report.days, entry.date, entry.reportTs);
       process.stdout.write(`fresh status (dry-run, not persisted): ${fresh?.status ?? "not found"} — video ${fresh?.videoMinutes ?? "?"} min, dataset ${fresh?.datasetStatus ?? "?"}\n`);
+      const preview = evidenceOutcome({ day: fresh, byName: actor.userName, hints, linkedVideos: [], datasetLinkDates: new Map() });
+      process.stdout.write(`would post (links not re-checked in dry-run): ${preview.text}\n`);
     }
     process.stdout.write("(dry-run — pass --write to perform)\n");
     return;

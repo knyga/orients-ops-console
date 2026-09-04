@@ -19,6 +19,12 @@ describe("evidenceOutcome", () => {
     expect(r.text).toContain("80%");
     expect(r.text).toContain("Тарас");
   });
+  it("ACCEPTED_EXCEPTION → closed, credited to the approver's decision and NOT to the replier", () => {
+    const r = evidenceOutcome({ day: day({ status: "ACCEPTED_EXCEPTION" }), byName: "Тарас", hints: noHints, linkedVideos: [], datasetLinkDates: new Map() });
+    expect(r.outcome).toBe("closed");
+    expect(r.text).toBe("✅ Перевірив: відео 48 хв = 40% від 120 хв у повітрі, датасет є — день прийнято як виняток (рішення затверджувача).");
+    expect(r.text).not.toContain("Дякую");
+  });
   it("NEEDS_REVIEW → still_open with the shortfall in minutes", () => {
     const r = evidenceOutcome({ day: day({}), byName: "Тарас", hints: noHints, linkedVideos: [], datasetLinkDates: new Map() });
     expect(r.outcome).toBe("still_open");

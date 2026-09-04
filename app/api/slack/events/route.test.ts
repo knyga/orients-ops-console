@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   personForSlackId: vi.fn(),
   permalinkFor: vi.fn(),
   postMessage: vi.fn(),
+  updateMessage: vi.fn(),
   formatWebhookFailureNotice: vi.fn(),
   formatDmHelp: vi.fn(),
   isAllowedSlackUser: vi.fn(),
@@ -47,6 +48,7 @@ vi.mock("@/lib/people", () => ({ personForSlackId: h.personForSlackId }));
 vi.mock("@/lib/slack", () => ({
   permalinkFor: h.permalinkFor,
   postMessage: h.postMessage,
+  updateMessage: h.updateMessage,
 }));
 vi.mock("@/lib/webhookNotice", () => ({ formatWebhookFailureNotice: h.formatWebhookFailureNotice }));
 vi.mock("@/lib/dmHelp", () => ({ formatDmHelp: h.formatDmHelp }));
@@ -814,6 +816,8 @@ describe("POST /api/slack/events — unified thread-reply branch (pilot evidence
   beforeEach(() => {
     h.applyThreadReply.mockResolvedValue({ handled: "silent", intent: "chit_chat" });
     h.workPlaceholderKey.mockReturnValue("instruction-ack:2026-09-01#1.1:verify-ph:300.002");
+    h.targetEntry.mockReturnValue(ENTRY);
+    h.updateMessage.mockResolvedValue("PLACEHOLDER_TS");
   });
 
   it("routes a NON-approver reply under a published verdict as role=pilot, mention token stripped", async () => {
@@ -874,6 +878,50 @@ describe("POST /api/slack/events — unified thread-reply branch (pilot evidence
     expect(opts.headers["x-agent-secret"]).toBe(AGENT_SECRET);
     expect(JSON.parse(opts.body)).toEqual({ work, placeholderTs: "PLACEHOLDER_TS" });
     expect(h.runDeferredWork).not.toHaveBeenCalled(); // the work runs in the other route, not here
+  });
+
+  it("no AGENT_RUN_SECRET → the placeholder is rewritten into a visible failure instead of freezing", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    delete process.env.AGENT_RUN_SECRET;
+    h.findPublishedByTs.mockResolvedValue({ entry: ENTRY, period: PERIOD });
+    h.isApprover.mockReturnValue(false);
+    h.applyThreadReply.mockResolvedValue({
+      handled: "deferred",
+      work: { kind: "verify", target: { kind: "verdict", entry: ENTRY, period: PERIOD }, replyTs: "300.002" },
+    });
+    const res = await POST(req(reply("залив", "U_PILOT")));
+    expect(await res.json()).toMatchObject({ handled: "verify", error: "dispatch-failed" });
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(h.updateMessage).toHaveBeenCalledTimes(1);
+    expect(h.updateMessage).toHaveBeenCalledWith(
+      "C_TRACKED",
+      "PLACEHOLDER_TS",
+      "❌ Не вдалося запустити перевірку — повідомте адміністратора.",
+      expect.objectContaining({ key: "instruction-ack:2026-09-01#1.1:verify-dispatch-failed:300.002", feature: "evidence", channel: "field-qa" }),
+    );
+    process.env.AGENT_RUN_SECRET = AGENT_SECRET;
+    spy.mockRestore();
+  });
+
+  it("a rejected self-invoke rewrites the placeholder too (the work never ran)", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    h.findPublishedByTs.mockResolvedValue({ entry: ENTRY, period: PERIOD });
+    h.isApprover.mockReturnValue(false);
+    h.applyThreadReply.mockResolvedValue({
+      handled: "deferred",
+      work: { kind: "verify", target: { kind: "verdict", entry: ENTRY, period: PERIOD }, replyTs: "300.002" },
+    });
+    global.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) as unknown as typeof fetch;
+    const res = await POST(req(reply("залив", "U_PILOT")));
+    expect(await res.json()).toMatchObject({ handled: "verify", deferred: true }); // Slack still gets its ack
+    await new Promise((r) => setTimeout(r, 0)); // let the waitUntil chain settle
+    expect(h.updateMessage).toHaveBeenCalledWith(
+      "C_TRACKED",
+      "PLACEHOLDER_TS",
+      "❌ Не вдалося запустити перевірку — повідомте адміністратора.",
+      expect.objectContaining({ key: "instruction-ack:2026-09-01#1.1:verify-dispatch-failed:300.002" }),
+    );
+    spy.mockRestore();
   });
 
   it("a throwing applyThreadReply posts the webhook-failure notice and still acks 200", async () => {

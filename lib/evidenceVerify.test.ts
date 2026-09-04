@@ -10,11 +10,12 @@ vi.mock("./reports", async (orig) => ({ ...(await (orig as () => Promise<Record<
 vi.mock("./vimeo", () => ({ fetchVideosInPeriod }));
 vi.mock("./slackMirror", () => ({ readChannelMessages }));
 
-import { verifyEvidence } from "./evidenceVerify";
+import { verifyEvidence, findVerdictRow } from "./evidenceVerify";
+import type { DayVerdict } from "./fieldDayVerdict";
 
 const period = { start: "2026-09-01", end: "2026-09-30" };
 const noHints = { vimeoLinks: [], datasetPermalinks: [], timeRanges: [], minuteFigures: [] };
-const row = (status: string, videoMinutes: number) => ({
+const row = (status: DayVerdict["status"], videoMinutes: number): DayVerdict => ({
   date: "2026-09-01", reportTs: "1.1", reportSeq: 1, reportCount: 1, status, airborneMinutes: 120, videoMinutes, ratio: videoMinutes / 120,
   datasetStatus: "POSTED", withinGrace: false, reasons: [], roster: ["Тарас"], unknownInitials: [], airborneReported: true, deployMin: 300,
 });
@@ -76,6 +77,30 @@ describe("verifyEvidence", () => {
     expect(r.text).toContain("SHORT");
     expect(r.text).not.toContain("LONG");
   });
+  it("a failing Vimeo diagnostics lookup never turns a completed recompute into a failure", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    fetchVideosInPeriod.mockRejectedValue(new Error("vimeo 502"));
+    const r = await verifyEvidence({
+      date: "2026-09-01", reportTs: "1.1", period,
+      hints: { ...noHints, vimeoLinks: [{ url: "https://vimeo.com/123456789", id: "123456789" }] },
+      byName: "Тарас", trigger: "webhook",
+    });
+    expect(r.outcome).toBe("closed"); // the recompute already flipped the day
+    expect(r.statusAfter).toBe("ACCEPTED");
+    expect(r.text).not.toContain("Можлива причина");
+    spy.mockRestore();
+  });
+  it("a failing #datasets permalink lookup is soft-failed the same way", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    readChannelMessages.mockRejectedValue(new Error("mirror down"));
+    const r = await verifyEvidence({
+      date: "2026-09-01", reportTs: "1.1", period,
+      hints: { ...noHints, datasetPermalinks: [{ url: "https://slack/p", ts: "9.9" }] },
+      byName: "Тарас", trigger: "webhook",
+    });
+    expect(r.outcome).toBe("closed");
+    spy.mockRestore();
+  });
   it("multi-report day: an unmatched reportTs finds nothing; a null reportTs falls back to the day's first row", async () => {
     computeVerdicts.mockResolvedValue({
       days: [row("NEEDS_REVIEW", 48), { ...row("ACCEPTED", 96), reportTs: "2.2", reportSeq: 2, reportCount: 2 }],
@@ -86,5 +111,43 @@ describe("verifyEvidence", () => {
 
     const dayLevel = await verifyEvidence({ date: "2026-09-01", reportTs: null, period, hints: noHints, byName: "Тарас", trigger: "webhook" });
     expect(dayLevel.statusAfter).toBe("NEEDS_REVIEW");
+  });
+  it("day-level target on a multi-report day answers about the report that is still OPEN, not the accepted one", async () => {
+    computeVerdicts.mockResolvedValue({
+      days: [row("ACCEPTED", 96), { ...row("NEEDS_REVIEW", 48), reportTs: "2.2", reportSeq: 2, reportCount: 2 }],
+    });
+    const r = await verifyEvidence({ date: "2026-09-01", reportTs: null, period, hints: noHints, byName: "Тарас", trigger: "webhook" });
+    expect(r.statusAfter).toBe("NEEDS_REVIEW");
+    expect(r.outcome).toBe("still_open");
+  });
+  it("day-level target with EVERY report accepted closes on the first row", async () => {
+    computeVerdicts.mockResolvedValue({
+      days: [row("ACCEPTED", 96), { ...row("ACCEPTED_EXCEPTION", 10), reportTs: "2.2", reportSeq: 2, reportCount: 2 }],
+    });
+    const r = await verifyEvidence({ date: "2026-09-01", reportTs: null, period, hints: noHints, byName: "Тарас", trigger: "webhook" });
+    expect(r.statusAfter).toBe("ACCEPTED");
+    expect(r.outcome).toBe("closed");
+  });
+});
+
+describe("findVerdictRow", () => {
+  const accepted = { ...row("ACCEPTED", 96), reportTs: "1.1" };
+  const open = { ...row("NEEDS_REVIEW", 48), reportTs: "2.2", reportSeq: 2, reportCount: 2 };
+
+  it("a named reportTs matches exactly and never borrows another report of the day", () => {
+    expect(findVerdictRow([accepted, open], "2026-09-01", "2.2")).toBe(open);
+    expect(findVerdictRow([accepted, open], "2026-09-01", "9.9")).toBeNull();
+  });
+  it("a day-level target (reportTs null) picks the first NOT-yet-accepted report", () => {
+    expect(findVerdictRow([accepted, open], "2026-09-01", null)).toBe(open);
+    expect(findVerdictRow([{ ...accepted, status: "ACCEPTED_EXCEPTION" }, open], "2026-09-01", null)).toBe(open);
+  });
+  it("all reports accepted → the first row", () => {
+    const both: DayVerdict[] = [accepted, { ...open, status: "ACCEPTED_EXCEPTION" }];
+    expect(findVerdictRow(both, "2026-09-01", null)).toBe(accepted);
+  });
+  it("no row for the date → null", () => {
+    expect(findVerdictRow([accepted], "2026-09-02", null)).toBeNull();
+    expect(findVerdictRow(undefined, "2026-09-01", null)).toBeNull();
   });
 });

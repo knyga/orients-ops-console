@@ -46,10 +46,10 @@ import { TRACKED_CHANNELS } from "@/lib/slackChannels";
 import { findPublishedByTs } from "@/lib/published";
 import { findAskByTs } from "@/lib/asks";
 import { approverFor, isApprover } from "@/lib/approvers";
-import { applyThreadReply, type DeferredWork, type ReplyTarget } from "@/lib/applyThreadReply";
+import { applyThreadReply, targetEntry, type DeferredWork, type ReplyTarget } from "@/lib/applyThreadReply";
 import { PLACEHOLDER_UK, workPlaceholderKey } from "@/lib/threadReplyWork";
 import { personForSlackId } from "@/lib/people";
-import { permalinkFor, postMessage } from "@/lib/slack";
+import { permalinkFor, postMessage, updateMessage } from "@/lib/slack";
 import { formatWebhookFailureNotice } from "@/lib/webhookNotice";
 import { formatDmHelp } from "@/lib/dmHelp";
 import { isAllowedSlackUser, AGENT_REFUSAL_UK } from "@/lib/agent/access";
@@ -58,7 +58,8 @@ import { readPendingProposal, claimApply, setState } from "@/lib/agentProposals"
 import { applyProposal } from "@/lib/proposalExecutor";
 import { canDriveProposal, gateProposalApply } from "@/lib/proposalGate";
 import { selfOrigin } from "@/lib/selfOrigin";
-import { contentRev, dmHelpKey, agentReplyKey, webhookFailureKey } from "@/lib/outboundKeys";
+import { contentRev, dmHelpKey, agentReplyKey, instructionAckKey, webhookFailureKey } from "@/lib/outboundKeys";
+import { reportKey } from "@/lib/fieldDayVerdict";
 import { parseSlackEvent, stripBotMention, hasLeadingMention, type SlackEventBody } from "@/lib/slackEventParse";
 import { claimSlackEvent } from "@/lib/slackEventClaim";
 import { agentThreadExists, appendTurn } from "@/lib/agentThread";
@@ -191,20 +192,45 @@ async function deferThreadWork(req: Request, channelId: string, channelName: str
   // genuine Slack redelivery never reaches here: the event_id claim above stops
   // it, and a dedup hit returns the ORIGINAL ts (which we'd rightly re-use).
   if (!placeholderTs) return ack({ handled: work.kind, skipped: "placeholder-send-skipped" });
+  // A dispatch that never lands would leave «🔎 Перевіряю…» in the thread forever
+  // (nothing else ever edits that message), so every failure path — no secret,
+  // a rejected fetch, a non-ok/redirected response — rewrites the placeholder
+  // into a visible failure. Best-effort: a failed edit only logs.
+  const entry = targetEntry(work.target);
+  const unfreezePlaceholder = async (): Promise<void> => {
+    try {
+      await updateMessage(channelId, placeholderTs, "❌ Не вдалося запустити перевірку — повідомте адміністратора.", {
+        key: instructionAckKey(reportKey(entry.date, entry.reportTs), `${work.kind}-dispatch-failed`, work.replyTs),
+        feature: "evidence",
+        channel: channelName,
+        trigger: "webhook",
+      });
+    } catch (err) {
+      console.error("slack events: thread-work placeholder unfreeze failed:", err);
+    }
+  };
   const secret = process.env.AGENT_RUN_SECRET;
-  if (secret) {
-    waitUntil(
-      fetch(`${selfOrigin(req)}/api/field/thread-reply`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-agent-secret": secret },
-        body: JSON.stringify({ work, placeholderTs }),
-      })
-        .then((res) => console[res.ok && !res.redirected ? "log" : "error"](`slack events: thread-work self-invoke → ${res.status}`))
-        .catch((err) => console.error("slack events: thread-work self-invoke failed:", err)),
-    );
-  } else {
+  if (!secret) {
     console.error("slack events: AGENT_RUN_SECRET not set — cannot dispatch thread work");
+    await unfreezePlaceholder();
+    return ack({ handled: work.kind, error: "dispatch-failed" });
   }
+  waitUntil(
+    fetch(`${selfOrigin(req)}/api/field/thread-reply`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-agent-secret": secret },
+      body: JSON.stringify({ work, placeholderTs }),
+    })
+      .then(async (res) => {
+        const ok = res.ok && !res.redirected;
+        console[ok ? "log" : "error"](`slack events: thread-work self-invoke → ${res.status}`);
+        if (!ok) await unfreezePlaceholder();
+      })
+      .catch(async (err) => {
+        console.error("slack events: thread-work self-invoke failed:", err);
+        await unfreezePlaceholder();
+      }),
+  );
   return ack({ handled: work.kind, deferred: true });
 }
 

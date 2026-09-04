@@ -145,7 +145,7 @@ export async function applyClassifiedInstruction(args: ClassifiedInstructionArgs
   // A fresh instruction → record PROPOSED (superseding a prior one on the SAME axis only) + echo for confirmation.
   if (c.intent === "instruction" && c.axis) {
     const summary = renderProposalSummary(entry.date, c);
-    const { created } = await createProposal({
+    const { created, proposal } = await createProposal({
       threadTs: entry.ts,
       channel: entry.channel,
       date: entry.date,
@@ -166,12 +166,26 @@ export async function applyClassifiedInstruction(args: ClassifiedInstructionArgs
       // and a content key made the second echo dedup into silence (2026-09-04).
       // A redelivery of this reply is already stopped above (`created` false).
       const text = `📝 Зрозумів: ${summary}.${also} Підтвердьте «так»/👍 або «ні».`;
-      await postMessage(
-        channel.id,
-        text,
-        { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "propose", replyTs), feature: "instruction", channel: channel.name, trigger },
-        entry.ts,
-      );
+      try {
+        await postMessage(
+          channel.id,
+          text,
+          { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "propose", replyTs), feature: "instruction", channel: channel.name, trigger },
+          entry.ts,
+        );
+      } catch (err) {
+        // A PROPOSED row nobody saw is worse than no proposal: the Slack event is
+        // already claimed, a redelivery returns `created: false`, and a later
+        // generic «так» would apply a change never read in the thread. Cancel it
+        // and rethrow so the caller surfaces the failure.
+        try {
+          await settleProposal(proposal, "cancel");
+        } catch (cancelErr) {
+          console.error("applyClassifiedInstruction: cancelling the unseen proposal failed:", cancelErr);
+        }
+        console.error("applyClassifiedInstruction: proposal echo post failed — proposal cancelled:", err);
+        throw err;
+      }
     }
     return { handled: "proposed", intent: c.intent };
   }

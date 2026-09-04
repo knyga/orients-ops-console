@@ -28,6 +28,15 @@ export function resolveActor(as: string | undefined): { userId: string; userName
   const found = personByQuery(as);
   // An ambiguous match is NOT silently resolved to one candidate — treat it like
   // "unknown" and let the operator be explicit (pass a Slack id or a fuller name).
-  if ("person" in found) return { userId: found.person.slackId ?? "U_CLI", userName: found.person.name, role: "pilot" };
+  if ("person" in found) {
+    // `--as "Oleksandr K"` names an APPROVER by their roster name: role must
+    // follow the person, not the shape of the argument. Otherwise the CLI twin
+    // classifies an approver's instruction under the pilot schema (no
+    // confirm/cancel/instruction intents) and can only ever escalate it.
+    const slackId = found.person.slackId;
+    const viaSlack = slackId ? approverFor(slackId) : undefined;
+    if (slackId && viaSlack) return { userId: slackId, userName: viaSlack.name, role: "approver" };
+    return { userId: slackId ?? "U_CLI", userName: found.person.name, role: "pilot" };
+  }
   return { userId: "U_CLI", userName: as, role: "pilot" };
 }
