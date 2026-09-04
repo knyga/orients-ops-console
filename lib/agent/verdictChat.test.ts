@@ -28,7 +28,13 @@ describe("runVerdictChat", () => {
   it("expands Slack permalinks in the question (skipping this thread) and injects the block", async () => {
     m.expandSlackLinks.mockResolvedValue("Вміст посилань зі Slack, згаданих у запиті:\nПосилання: https://x\n[Влад · t]: 1 шт Азимут");
     await runVerdictChat({ question: "звіт був: https://x", verdictText: "v", channelId: "C1", threadTs: "1.1", excludeTs: [] });
-    expect(m.expandSlackLinks).toHaveBeenCalledWith("звіт був: https://x", { skipThread: { channelId: "C1", threadTs: "1.1" } });
+    expect(m.expandSlackLinks).toHaveBeenCalledWith("звіт був: https://x", {
+      skipThread: { channelId: "C1", threadTs: "1.1" },
+      allowedChannelIds: ["C1"],
+    });
+    // the tool handed to the loop is the channel-bound variant
+    const tool = (m.runAgent.mock.calls[0][1].tools as { name: string; description: string }[]).find((t) => t.name === "slack_read_link")!;
+    expect(tool.description).toContain("<#C1>");
     expect(m.runAgent.mock.calls[0][0]).toContain("1 шт Азимут");
   });
   it("degrades to the bare question when the thread fetch fails", async () => {

@@ -10,4 +10,12 @@ describe("auth-gate matcher bypass", () => {
       expect(config.matcher[0]).toContain(prefix);
     }
   });
+
+  it("does NOT exempt /api/slack-link (a console data route that merely shares the api/slack prefix)", () => {
+    // The bypass alternative is `api/slack(?:/|$)`; `api/slack-link` must still hit the cookie gate.
+    const re = new RegExp(`^${config.matcher[0].replace(/^\/\(/, "/(")}$`);
+    expect(re.test("/api/slack/events")).toBe(false);
+    expect(re.test("/api/slack-link")).toBe(true);
+    expect(re.test("/api/field-loss")).toBe(true);
+  });
 });

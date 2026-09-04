@@ -40,7 +40,7 @@ describe("resolveSlackLink", () => {
       { ts: "1788531440.845259", user: "U2", text: "відповідь", threadTs: "1786084309.782289" },
     ]);
     const r = await resolveSlackLink(REPLY);
-    expect(h.fetchThreadMessages).toHaveBeenCalledWith(CH, "1786084309.782289");
+    expect(h.fetchThreadMessages).toHaveBeenCalledWith(CH, "1786084309.782289", { maxPages: 2 });
     expect(r.rendered).toContain("]: корінь");
     expect(r.rendered).toMatch(/→ \[.*\]: відповідь/);
   });
@@ -55,6 +55,33 @@ describe("resolveSlackLink", () => {
     const r = await resolveSlackLink(MSG);
     expect(r.thread.messages).toHaveLength(3);
     expect(r.rendered).toContain("3 повідомлень");
+  });
+
+  it("takes the thread root from Slack's metadata, not from a URL thread_ts that disagrees", async () => {
+    // Crafted link: message A's ts + thread B's thread_ts. Slack says A is a plain message.
+    h.fetchMessageByTs.mockResolvedValueOnce({ ts: "1788531440.845259", user: "U2", text: "A" });
+    const r = await resolveSlackLink(REPLY);
+    expect(h.fetchThreadMessages).not.toHaveBeenCalled();
+    expect(r.thread.messages.map((m) => m.text)).toEqual(["A"]);
+  });
+
+  it("discards a fetched thread that does not contain the linked ts", async () => {
+    h.fetchMessageByTs.mockResolvedValueOnce({ ts: "1788531440.845259", user: "U2", text: "A", threadTs: "1786084309.782289" });
+    h.fetchThreadMessages.mockResolvedValueOnce([{ ts: "1786084309.782289", user: "U1", text: "B-root" }]);
+    const r = await resolveSlackLink(REPLY);
+    expect(r.thread.messages.map((m) => m.text)).toEqual(["A"]);
+  });
+
+  it("refuses a link outside allowedChannelIds without fetching", async () => {
+    await expect(resolveSlackLink(MSG, { allowedChannelIds: ["C_OTHER"] })).rejects.toThrow(/інший канал/);
+    expect(h.fetchMessageByTs).not.toHaveBeenCalled();
+    h.fetchMessageByTs.mockResolvedValueOnce({ ts: "1785736825.822439", user: "U1", text: "ok" });
+    await expect(resolveSlackLink(MSG, { allowedChannelIds: [CH] })).resolves.toBeTruthy();
+  });
+
+  it("gives up on a link after the per-link timeout", async () => {
+    h.fetchMessageByTs.mockReturnValueOnce(new Promise(() => {}));
+    await expect(resolveSlackLink(MSG, { timeoutMs: 20 })).rejects.toThrow(/не встиг/);
   });
 
   it("rejects a non-permalink with a Ukrainian SlackLinkError", async () => {
@@ -91,6 +118,14 @@ describe("expandSlackLinks", () => {
       skipThread: { channelId: CH, threadTs: "1786084309.782289" },
     });
     expect(out).toBeNull();
+    expect(h.fetchMessageByTs).not.toHaveBeenCalled();
+  });
+
+  it("with allowedChannelIds, a foreign-channel link becomes a per-link refusal (no fetch)", async () => {
+    const out = await expandSlackLinks(`див. https://orientsai.slack.com/archives/CPRIVATE1/p1785736825822439`, {
+      allowedChannelIds: [CH],
+    });
+    expect(out).toContain("не вдалося прочитати: посилання веде в інший канал");
     expect(h.fetchMessageByTs).not.toHaveBeenCalled();
   });
 

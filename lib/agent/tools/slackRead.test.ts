@@ -11,7 +11,7 @@ vi.mock("../slackLinkContext", () => {
   return { resolveSlackLink: h.resolveSlackLink, SlackLinkError };
 });
 
-import { slackReadTools } from "./slackRead";
+import { slackReadTools, makeSlackReadTools } from "./slackRead";
 import { SlackLinkError } from "../slackLinkContext";
 
 const tool = slackReadTools[0];
@@ -24,7 +24,7 @@ describe("slack_read_link", () => {
     expect(tool.kind).toBe("read");
     h.resolveSlackLink.mockResolvedValueOnce({ rendered: "RENDERED" });
     const r = await tool.run!({ url: " https://orientsai.slack.com/archives/C1/p1785736825822439 " });
-    expect(h.resolveSlackLink).toHaveBeenCalledWith("https://orientsai.slack.com/archives/C1/p1785736825822439");
+    expect(h.resolveSlackLink).toHaveBeenCalledWith("https://orientsai.slack.com/archives/C1/p1785736825822439", {});
     expect(r).toEqual({ ok: true, content: "RENDERED" });
   });
   it("turns a SlackLinkError into a non-throwing Ukrainian tool result", async () => {
@@ -32,6 +32,13 @@ describe("slack_read_link", () => {
     const r = await tool.run!({ url: "https://x" });
     expect(r.ok).toBe(false);
     expect(r.content).toContain("Не вдалося прочитати посилання: бот не в цьому каналі");
+  });
+  it("a channel-bound variant passes allowedChannelIds through and says so in the description", async () => {
+    const bound = makeSlackReadTools({ allowedChannelIds: ["C_FQA"] })[0];
+    expect(bound.description).toContain("<#C_FQA>");
+    h.resolveSlackLink.mockResolvedValueOnce({ rendered: "R" });
+    await bound.run!({ url: "https://x" });
+    expect(h.resolveSlackLink).toHaveBeenCalledWith("https://x", { allowedChannelIds: ["C_FQA"] });
   });
   it("asks for a url when none is given", async () => {
     const r = await tool.run!({});

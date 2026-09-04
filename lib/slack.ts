@@ -357,11 +357,15 @@ export interface ThreadMessage {
 export async function fetchThreadMessages(
   channelId: string,
   threadTs: string,
+  opts: { /** Stop after this many 200-message pages (default: all). */ maxPages?: number } = {},
 ): Promise<ThreadMessage[]> {
   token();
   const out: ThreadMessage[] = [];
   let cursor: string | undefined;
+  let pages = 0;
   do {
+    if (opts.maxPages !== undefined && pages >= opts.maxPages) break;
+    pages += 1;
     const params = new URLSearchParams({ channel: channelId, ts: threadTs, limit: "200" });
     if (cursor) params.set("cursor", cursor);
     const page = await call<RawHistoryResponse>("conversations.replies", params);

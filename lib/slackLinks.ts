@@ -49,9 +49,13 @@ export function parseSlackPermalink(url: string): SlackLinkRef | null {
 /** Every distinct Slack message permalink in `text`, in order of appearance,
  *  with Slack's `<url|label>` / `<url>` wrapping stripped. */
 export function extractSlackPermalinks(text: string): SlackLinkRef[] {
+  // `<target|label>`: only the TARGET is a link. Drop the label first, otherwise
+  // a URL used as a label (or a different URL in the label) is scanned as a
+  // second, unintended link and eats the auto-expansion budget.
+  const unlabelled = text.replace(/<(https?:\/\/[^|>\s]+)\|[^>]*>/g, "<$1>");
   const seen = new Set<string>();
   const out: SlackLinkRef[] = [];
-  for (const m of text.matchAll(PERMALINK_RE)) {
+  for (const m of unlabelled.matchAll(PERMALINK_RE)) {
     const ref = parseSlackPermalink(m[0]);
     if (!ref) continue;
     const key = `${ref.channelId}:${ref.ts}`;
@@ -102,6 +106,8 @@ const DEFAULT_MAX_CHARS = 8_000;
  * Render a resolved link as a transcript block. A threaded link shows the whole
  * thread (parent first) with the linked message marked `→`; the linked message
  * is never dropped by the caps — older siblings go first, then newer ones.
+ * `maxChars` bounds the message BODY (each line ≤ maxChars, all lines together
+ * ≤ maxChars); the one-line header and the «пропущено» notices add ≲150 chars.
  */
 export function renderLinkedThread(t: LinkedThread, opts: RenderLinkedOptions = {}): string {
   const maxMessages = opts.maxMessages ?? DEFAULT_MAX_MESSAGES;
@@ -126,9 +132,11 @@ export function renderLinkedThread(t: LinkedThread, opts: RenderLinkedOptions = 
   }
   // The shed loop stops at one message; a single oversized message (Slack allows
   // ~40k chars) must still respect the budget or 3 links could inject ~120k chars.
-  const lines = msgs.map(line).map((l) =>
-    l.length > maxChars ? `${l.slice(0, maxChars)}… (обрізано, ${l.length - maxChars} символів)` : l,
-  );
+  const lines = msgs.map(line).map((l) => {
+    if (l.length <= maxChars) return l;
+    const suffix = `… (обрізано, ${l.length} символів разом)`;
+    return `${l.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
+  });
   const isThread = t.messages.length > 1;
   const head = isThread
     ? `Тред у Slack (<#${t.channelId}>, ${t.messages.length} повідомлень; «→» — повідомлення за посиланням):`

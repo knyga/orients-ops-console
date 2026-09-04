@@ -61,6 +61,10 @@ describe("extractSlackPermalinks", () => {
     expect(refs[0].threadTs).toBe("1786084309.782289");
     expect(refs[0].url).toBe(REPLY);
   });
+  it("a <target|label> wrapper yields only the target, even when the label is another link", () => {
+    const refs = extractSlackPermalinks(`див. <${MSG}|${REPLY}> ок`);
+    expect(refs.map((r) => r.ts)).toEqual(["1785736825.822439"]);
+  });
   it("returns [] for text without links", () => {
     expect(extractSlackPermalinks("що там по джирі?")).toEqual([]);
   });
@@ -110,7 +114,8 @@ describe("renderLinkedThread", () => {
       { channelId: "C1", messages: [{ ts: "1.000000", user: "U", text: "x".repeat(500) }], linkedTs: "1.000000" },
       { maxChars: 100 },
     );
-    expect(out.length).toBeLessThan(250);
+    const body = out.split("\n").slice(1).join("\n");
+    expect(body.length).toBeLessThanOrEqual(100);
     expect(out).toContain("… (обрізано,");
   });
   it("shows a placeholder for an empty text (file-only message)", () => {
