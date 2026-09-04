@@ -574,7 +574,9 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const replyPermalink = permalinkFor(channel.id, parsed.replyTs);
-  const replyText = parsed.replyText;
+  // The sibling `message` event of an @mention carries the raw `<@BOT>` token —
+  // strip it so the classifier sees the same text either way.
+  const replyText = stripBotMention(parsed.replyText);
   const userId = parsed.userId;
   const threadTs = parsed.threadTs;
   const replyTs = parsed.replyTs;

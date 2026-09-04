@@ -43,21 +43,49 @@ export async function runDeferredWork(
     for (let i = 1; i < chunks.length; i++) await postMessage(channel.id, chunks[i], { ...meta, key: `${meta.key}:${i + 1}` }, entry.ts);
   };
 
+  /**
+   * Bookkeeping that runs AFTER the result is already in the thread (the claim
+   * escalation, the audit row). It must never fail the run: the placeholder now
+   * holds the real answer and the recompute may already have flipped pay state,
+   * so a throw here would let the caller's catch clobber a delivered result with
+   * «не вдалося перевірити». Instead we log and APPEND a visible warning, then
+   * return normally — the route's catch is left for pre-deliver failures only.
+   */
+  const afterDeliver = async (step: () => Promise<unknown>): Promise<void> => {
+    try {
+      await step();
+    } catch (err) {
+      console.error("thread-reply work: post-deliver step failed:", err);
+      try {
+        await postMessage(
+          channel.id,
+          "⚠️ Результат надіслано, але не вдалося зберегти його в журналі — повідомте затверджувачам.",
+          { key: instructionAckKey(reportKey(entry.date, entry.reportTs), `${work.kind}-post-failed`, work.replyTs), feature: "evidence", channel: channel.name, trigger: work.trigger },
+          entry.ts,
+        );
+      } catch (postErr) {
+        console.error("thread-reply work: post-deliver warning post failed:", postErr);
+      }
+    }
+  };
+
   if (work.kind === "verify") {
     const r = await verifyEvidence({ date: entry.date, reportTs: entry.reportTs, period: work.target.period, hints: work.hints, byName: work.userName, trigger: work.trigger, onLog: opts.onLog });
     await deliver(r.text);
-    if (r.outcome !== "closed" && work.claim) {
-      await escalateClaim({
-        target: work.target, claim: work.claim, userName: work.userName, userId: work.userId, role: work.role, replyTs: work.replyTs, trigger: work.trigger,
-        verifyLine: r.verifyLine, statusBefore: r.statusBefore, statusAfter: r.statusAfter,
-      });
-    } else {
-      await recordEvidenceEvent({
-        threadTs: entry.ts, channel: entry.channel, date: entry.date, reportTs: entry.reportTs, byUserId: work.userId, byName: work.userName, role: work.role,
-        kind: "evidence", evidence: { hints: work.hints, claim: work.claim ?? null }, outcome: r.outcome, statusBefore: r.statusBefore, statusAfter: r.statusAfter,
-        sourceReplyTs: work.replyTs, proposalId: null,
-      });
-    }
+    await afterDeliver(async () => {
+      if (r.outcome !== "closed" && work.claim) {
+        await escalateClaim({
+          target: work.target, claim: work.claim, userName: work.userName, userId: work.userId, role: work.role, replyTs: work.replyTs, trigger: work.trigger,
+          verifyLine: r.verifyLine, statusBefore: r.statusBefore, statusAfter: r.statusAfter, hints: work.hints,
+        });
+      } else {
+        await recordEvidenceEvent({
+          threadTs: entry.ts, channel: entry.channel, date: entry.date, reportTs: entry.reportTs, byUserId: work.userId, byName: work.userName, role: work.role,
+          kind: "evidence", evidence: { hints: work.hints, claim: work.claim ?? null }, outcome: r.outcome, statusBefore: r.statusBefore, statusAfter: r.statusAfter,
+          sourceReplyTs: work.replyTs, proposalId: null,
+        });
+      }
+    });
     return { outcome: r.outcome, text: r.text };
   }
 
@@ -66,9 +94,11 @@ export async function runDeferredWork(
     excludeTs: [work.replyTs, ...(opts.placeholderTs ? [opts.placeholderTs] : [])],
   });
   await deliver(answer);
-  await recordEvidenceEvent({
-    threadTs: entry.ts, channel: entry.channel, date: entry.date, reportTs: entry.reportTs, byUserId: work.userId, byName: work.userName, role: work.role,
-    kind: "chat", evidence: null, outcome: "answered", statusBefore: null, statusAfter: null, sourceReplyTs: work.replyTs, proposalId: null,
-  });
+  await afterDeliver(() =>
+    recordEvidenceEvent({
+      threadTs: entry.ts, channel: entry.channel, date: entry.date, reportTs: entry.reportTs, byUserId: work.userId, byName: work.userName, role: work.role,
+      kind: "chat", evidence: null, outcome: "answered", statusBefore: null, statusAfter: null, sourceReplyTs: work.replyTs, proposalId: null,
+    }),
+  );
   return { outcome: "answered", text: answer };
 }

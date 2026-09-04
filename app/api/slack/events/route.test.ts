@@ -6,8 +6,11 @@ const h = vi.hoisted(() => ({
   findAskByTs: vi.fn(),
   approverFor: vi.fn(),
   isApprover: vi.fn(),
-  applyInstructionReply: vi.fn(),
-  applyAnswerReply: vi.fn(),
+  applyThreadReply: vi.fn(),
+  targetEntry: vi.fn(),
+  workPlaceholderKey: vi.fn(),
+  runDeferredWork: vi.fn(),
+  personForSlackId: vi.fn(),
   permalinkFor: vi.fn(),
   postMessage: vi.fn(),
   formatWebhookFailureNotice: vi.fn(),
@@ -34,8 +37,13 @@ vi.mock("@/lib/approvers", () => ({
   approverFor: h.approverFor,
   isApprover: h.isApprover,
 }));
-vi.mock("@/lib/applyInstructionReply", () => ({ applyInstructionReply: h.applyInstructionReply }));
-vi.mock("@/lib/applyAnswer", () => ({ applyAnswerReply: h.applyAnswerReply }));
+vi.mock("@/lib/applyThreadReply", () => ({ applyThreadReply: h.applyThreadReply, targetEntry: h.targetEntry }));
+vi.mock("@/lib/threadReplyWork", () => ({
+  PLACEHOLDER_UK: { verify: "🔎 Перевіряю…", chat: "💬 Думаю…" },
+  workPlaceholderKey: h.workPlaceholderKey,
+  runDeferredWork: h.runDeferredWork,
+}));
+vi.mock("@/lib/people", () => ({ personForSlackId: h.personForSlackId }));
 vi.mock("@/lib/slack", () => ({
   permalinkFor: h.permalinkFor,
   postMessage: h.postMessage,
@@ -792,5 +800,93 @@ describe("POST /api/slack/events — plain thread-reply agent branch + requester
     const sentBody = JSON.parse(opts.body);
     expect(sentBody.conversationKey).toBe("M1");
     expect(sentBody.surface).toBe("mention");
+  });
+});
+
+describe("POST /api/slack/events — unified thread-reply branch (pilot evidence autonomy)", () => {
+  const VERDICT_TS = "1781000000.000100";
+  const ENTRY = { date: "2026-09-01", reportTs: "1.1", channel: "field-qa", text: "⚠️ …", postedAt: "x", ts: VERDICT_TS };
+  const PERIOD = { start: "2026-09-01", end: "2026-09-30" };
+
+  const reply = (text: string, user: string) =>
+    actionableEvent({ threadTs: VERDICT_TS, user, text, channel: "C_TRACKED", eventId: `Ev-${user}-${text.length}` });
+
+  beforeEach(() => {
+    h.applyThreadReply.mockResolvedValue({ handled: "silent", intent: "chit_chat" });
+    h.workPlaceholderKey.mockReturnValue("instruction-ack:2026-09-01#1.1:verify-ph:300.002");
+  });
+
+  it("routes a NON-approver reply under a published verdict as role=pilot, mention token stripped", async () => {
+    h.findPublishedByTs.mockResolvedValue({ entry: ENTRY, period: PERIOD });
+    h.isApprover.mockReturnValue(false);
+    const res = await POST(req(reply("<@U0BOT> залив відео", "U_PILOT")));
+    expect(res.status).toBe(200);
+    expect(h.applyThreadReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "pilot",
+        replyText: "залив відео",
+        userId: "U_PILOT",
+        userName: "<@U_PILOT>",
+        target: expect.objectContaining({ kind: "verdict", entry: ENTRY, period: PERIOD }),
+      }),
+    );
+  });
+
+  it("routes an APPROVER reply as role=approver with the approver's name", async () => {
+    h.findPublishedByTs.mockResolvedValue({ entry: ENTRY, period: PERIOD });
+    h.isApprover.mockReturnValue(true);
+    h.approverFor.mockReturnValue({ name: "Oleksandr K" });
+    await POST(req(reply("зарахуй день", "U_APPROVER")));
+    expect(h.applyThreadReply).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "approver", userName: "Oleksandr K" }),
+    );
+  });
+
+  it("routes a reply under an ASK thread with target.kind = ask", async () => {
+    h.findPublishedByTs.mockResolvedValue(null);
+    h.findAskByTs.mockResolvedValue({ record: { date: "2026-09-02", channel: "field-qa" }, period: PERIOD });
+    h.isApprover.mockReturnValue(false);
+    const res = await POST(req(reply("датасет залив", "U_PILOT")));
+    expect((await res.json()).date).toBe("2026-09-02");
+    expect(h.applyThreadReply).toHaveBeenCalledWith(
+      expect.objectContaining({ target: expect.objectContaining({ kind: "ask", record: { date: "2026-09-02", channel: "field-qa" } }) }),
+    );
+  });
+
+  it("a deferred verify posts the placeholder and fires /api/field/thread-reply", async () => {
+    h.findPublishedByTs.mockResolvedValue({ entry: ENTRY, period: PERIOD });
+    h.isApprover.mockReturnValue(false);
+    const work = { kind: "verify", target: { kind: "verdict", entry: ENTRY, period: PERIOD }, replyTs: "300.002" };
+    h.applyThreadReply.mockResolvedValue({ handled: "deferred", work });
+    const res = await POST(req(reply("залив", "U_PILOT")));
+    const json = await res.json();
+    expect(json).toMatchObject({ handled: "verify", deferred: true });
+    expect(h.postMessage).toHaveBeenCalledTimes(1);
+    expect(h.postMessage).toHaveBeenCalledWith(
+      "C_TRACKED",
+      "🔎 Перевіряю…",
+      expect.objectContaining({ key: "instruction-ack:2026-09-01#1.1:verify-ph:300.002", feature: "evidence", channel: "field-qa" }),
+      VERDICT_TS,
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, opts] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe("https://bot.example/api/field/thread-reply");
+    expect(opts.headers["x-agent-secret"]).toBe(AGENT_SECRET);
+    expect(JSON.parse(opts.body)).toEqual({ work, placeholderTs: "PLACEHOLDER_TS" });
+    expect(h.runDeferredWork).not.toHaveBeenCalled(); // the work runs in the other route, not here
+  });
+
+  it("a throwing applyThreadReply posts the webhook-failure notice and still acks 200", async () => {
+    h.findPublishedByTs.mockResolvedValue({ entry: ENTRY, period: PERIOD });
+    h.isApprover.mockReturnValue(false);
+    h.applyThreadReply.mockRejectedValue(new Error("ANTHROPIC_API_KEY is not set"));
+    h.formatWebhookFailureNotice.mockReturnValue("⚠️ помилка сервера");
+    const res = await POST(req(reply("залив", "U_PILOT")));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toMatchObject({ handled: "thread-reply", date: "2026-09-01", error: "ANTHROPIC_API_KEY is not set" });
+    expect(h.formatWebhookFailureNotice).toHaveBeenCalledWith("ANTHROPIC_API_KEY is not set");
+    expect(h.postMessage).toHaveBeenCalledWith("C_TRACKED", "⚠️ помилка сервера", expect.objectContaining({ feature: "webhook-failure" }), VERDICT_TS);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

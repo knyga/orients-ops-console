@@ -20,17 +20,25 @@ interface Body { work: DeferredWork; placeholderTs: string }
 export async function POST(req: Request): Promise<Response> {
   const secret = process.env.AGENT_RUN_SECRET;
   if (!secret || req.headers.get("x-agent-secret") !== secret) return new Response("unauthorized", { status: 401 });
-  const { work, placeholderTs } = (await req.json()) as Body;
+  // Parsed INSIDE the try so a malformed body is reported the same way as a
+  // failed run (and never throws an unhandled 500 at the fire-and-forget caller).
+  let body: Body | null = null;
   try {
-    const r = await runDeferredWork(work, { placeholderTs });
+    body = (await req.json()) as Body;
+    const r = await runDeferredWork(body.work, { placeholderTs: body.placeholderTs });
     return Response.json({ ok: true, outcome: r.outcome });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("thread-reply work failed:", err);
+    if (!body) return Response.json({ ok: false, error: message });
+    const { work, placeholderTs } = body;
     const entry = targetEntry(work.target);
     const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
+    // Fixed Ukrainian text — the raw error message stays in the server log. Only
+    // PRE-deliver failures reach here (runDeferredWork swallows everything after
+    // the result is posted), so overwriting the placeholder is safe.
     const uk = work.kind === "verify"
-      ? `❌ Не вдалося перевірити: ${message}. Спробуйте пізніше або напишіть затверджувачам.`
+      ? "❌ Не вдалося перевірити — спробуйте пізніше або напишіть затверджувачам."
       : "Сталася помилка під час обробки запиту.";
     if (channel) {
       try {
@@ -41,6 +49,6 @@ export async function POST(req: Request): Promise<Response> {
         console.error("thread-reply work: placeholder edit failed:", editErr);
       }
     }
-    return Response.json({ ok: true, error: message });
+    return Response.json({ ok: false, error: message });
   }
 }

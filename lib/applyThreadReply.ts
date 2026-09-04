@@ -70,7 +70,7 @@ export function targetEntry(t: ReplyTarget): PublishedEntry {
 
 export async function escalateClaim(a: {
   target: ReplyTarget; claim: ClaimItem; userName: string; userId: string; role: ReplyRole; replyTs: string; trigger: SendTrigger;
-  verifyLine?: string; statusBefore?: string | null; statusAfter?: string | null;
+  verifyLine?: string; statusBefore?: string | null; statusAfter?: string | null; hints?: ReplyHints;
 }): Promise<{ created: boolean; proposalId: string | null }> {
   const entry = targetEntry(a.target);
   const mapped = a.target.kind === "ask" ? askClaimToInstruction(a.target.record.gapType, a.claim, a.userName) : claimToInstruction(a.claim, a.userName);
@@ -91,7 +91,7 @@ export async function escalateClaim(a: {
   }
   await recordEvidenceEvent({
     threadTs: entry.ts, channel: entry.channel, date: entry.date, reportTs: entry.reportTs, byUserId: a.userId, byName: a.userName, role: a.role,
-    kind: "claim", evidence: { claim: a.claim }, outcome: "escalated", statusBefore: a.statusBefore ?? null, statusAfter: a.statusAfter ?? null,
+    kind: "claim", evidence: { claim: a.claim, hints: a.hints ?? null }, outcome: "escalated", statusBefore: a.statusBefore ?? null, statusAfter: a.statusAfter ?? null,
     sourceReplyTs: a.replyTs, proposalId: proposal.id,
   });
   return { created: true, proposalId: proposal.id };

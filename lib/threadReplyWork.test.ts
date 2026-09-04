@@ -56,6 +56,53 @@ describe("runDeferredWork — verify", () => {
   });
 });
 
+describe("runDeferredWork — delivery", () => {
+  it("throws when the placeholder edit is SKIPPED (stuck pending row → empty ts)", async () => {
+    m.updateMessage.mockResolvedValue("");
+    await expect(runDeferredWork(work({}), { placeholderTs: "ph" })).rejects.toThrow(/placeholder edit was skipped/);
+  });
+  it("chunks an oversized answer: chunk 1 into the placeholder, the rest threaded under the root", async () => {
+    const long = `${"я ".repeat(1265)}\nхвіст`; // 3806 bytes → exactly two chunks
+    m.runVerdictChat.mockResolvedValue(long);
+    await runDeferredWork(work({ kind: "chat", replyText: "?" }), { placeholderTs: "ph" });
+    expect(m.updateMessage).toHaveBeenCalledTimes(1);
+    expect(m.postMessage).toHaveBeenCalledWith(
+      "C08GY2NKF9D",
+      expect.stringContaining("хвіст"),
+      expect.objectContaining({ key: "instruction-ack:2026-09-01#1.1:chat:1781000500.000100:2" }),
+      "1781000000.000100",
+    );
+  });
+});
+
+describe("runDeferredWork — post-deliver failures never clobber the result", () => {
+  it("a failing audit write appends a warning instead of throwing", async () => {
+    m.recordEvidenceEvent.mockRejectedValue(new Error("neon down"));
+    const r = await runDeferredWork(work({}), { placeholderTs: "ph" });
+    expect(r.outcome).toBe("closed");
+    expect(m.updateMessage).toHaveBeenCalledWith("C08GY2NKF9D", "ph", "✅ Перевірив…", expect.anything());
+    expect(m.postMessage).toHaveBeenCalledWith(
+      "C08GY2NKF9D",
+      expect.stringContaining("не вдалося зберегти його в журналі"),
+      expect.objectContaining({ key: "instruction-ack:2026-09-01#1.1:verify-post-failed:1781000500.000100" }),
+      "1781000000.000100",
+    );
+  });
+  it("a failing escalation appends the same warning and still returns the outcome", async () => {
+    m.verifyEvidence.mockResolvedValue({ outcome: "still_open", text: "🔎 …", verifyLine: "l", statusBefore: "NEEDS_REVIEW", statusAfter: "NEEDS_REVIEW" });
+    m.escalateClaim.mockRejectedValue(new Error("proposal insert failed"));
+    const r = await runDeferredWork(work({ claim: { kind: "explanation", text: "дощ" } }), { placeholderTs: "ph" });
+    expect(r.outcome).toBe("still_open");
+    expect(m.postMessage).toHaveBeenCalledWith("C08GY2NKF9D", expect.stringContaining("журналі"), expect.anything(), "1781000000.000100");
+  });
+  it("passes the pilot's hints to escalateClaim so the audit row keeps them", async () => {
+    m.verifyEvidence.mockResolvedValue({ outcome: "still_open", text: "🔎 …", verifyLine: "l", statusBefore: "NEEDS_REVIEW", statusAfter: "NEEDS_REVIEW" });
+    const hints = { vimeoLinks: [{ id: "9", url: "https://vimeo.com/9" }], datasetPermalinks: [], timeRanges: [], minuteFigures: [] } as DeferredWork["hints"];
+    await runDeferredWork(work({ hints, claim: { kind: "explanation", text: "дощ" } }), { placeholderTs: "ph" });
+    expect(m.escalateClaim).toHaveBeenCalledWith(expect.objectContaining({ hints }));
+  });
+});
+
 describe("runDeferredWork — chat", () => {
   it("answers via runVerdictChat with the verdict text, excluding the reply + placeholder, chunked into the placeholder", async () => {
     await runDeferredWork(work({ kind: "chat", replyText: "що бракує?" }), { placeholderTs: "ph" });
