@@ -115,14 +115,14 @@ function plausibleFlightDate(nameDate: string, uploadDate: string): boolean {
 }
 
 /**
- * The flight day a video belongs to. Uploads lag the flight by up to the grace
- * window, so the flight date is taken from the video NAME — two observed formats,
- * `Recording YYYY-MM-DD …` and `WIN_YYYYMMDD_…`. A name date is trusted only when
- * it is plausibly recent relative to the upload (see plausibleFlightDate); falls
- * back to the Kyiv upload date when the name carries no plausible calendar date.
- * See docs/.../field-day-acceptance spec + memory video-name-carries-flight-date.
+ * The plausible calendar date recognized IN THE VIDEO'S NAME (not the upload
+ * date) — two observed formats, `Recording YYYY-MM-DD …` and `WIN_YYYYMMDD_…`.
+ * A name date is trusted only when it is plausibly recent relative to the
+ * upload (see plausibleFlightDate). Returns null when the name carries no
+ * plausible calendar date, so callers can tell "no date in the name" apart
+ * from "named, but for a different day" (see videoFlightDate below).
  */
-export function videoFlightDate(name: string, createdTime: string): string {
+export function videoNameDate(name: string, createdTime: string): string | null {
   const uploadDate = videoUploadDate(createdTime);
   // Try every date-like run; return the first that is a real, plausible calendar
   // date, so a spurious leading digit run before the true date doesn't force the
@@ -133,7 +133,17 @@ export function videoFlightDate(name: string, createdTime: string): string {
       : validDate(Number(m[4]), Number(m[5]), Number(m[6]));
     if (iso && plausibleFlightDate(iso, uploadDate)) return iso;
   }
-  return uploadDate;
+  return null;
+}
+
+/**
+ * The flight day a video belongs to. Uploads lag the flight by up to the grace
+ * window, so the flight date is taken from the video NAME when recognizable
+ * (see videoNameDate); falls back to the Kyiv upload date otherwise.
+ * See docs/.../field-day-acceptance spec + memory video-name-carries-flight-date.
+ */
+export function videoFlightDate(name: string, createdTime: string): string {
+  return videoNameDate(name, createdTime) ?? videoUploadDate(createdTime);
 }
 
 interface DayAccumulator {

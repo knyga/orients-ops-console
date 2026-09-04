@@ -63,4 +63,31 @@ describe("evidenceOutcome", () => {
     expect(r.outcome).toBe("still_open");
     expect(r.text).toContain("не знайшов");
   });
+  it("ratio passes but the 2-minute floor doesn't → shortfall against the floor, not just the ratio", () => {
+    const r = evidenceOutcome({
+      day: day({ airborneMinutes: 2, videoMinutes: 1.5, ratio: 0.75 }),
+      byName: "Тарас", hints: noHints, linkedVideos: [], datasetLinkDates: new Map(),
+    });
+    expect(r.outcome).toBe("still_open");
+    expect(r.text).toContain("бракує 1 хв");
+  });
+  it("zero airborne minutes → no zero shortfall line, telemetry gap surfaces instead", () => {
+    const r = evidenceOutcome({
+      day: day({ airborneMinutes: 0, videoMinutes: 0, ratio: null }),
+      byName: "Тарас", hints: noHints, linkedVideos: [], datasetLinkDates: new Map(),
+    });
+    expect(r.outcome).toBe("still_open");
+    expect(r.text).not.toContain("бракує");
+    expect(r.text).toContain("телеметрією");
+  });
+  it("a dotted DD.MM.YYYY name isn't recognized by the date parser → treated as no date, not mis-dated", () => {
+    const hints: ReplyHints = { ...noHints, vimeoLinks: [{ url: "https://vimeo.com/3", id: "3" }] };
+    const r = evidenceOutcome({
+      day: day({}), byName: "Тарас", hints,
+      linkedVideos: [{ id: "3", name: "IMG_28.08.2026.mp4", created_time: "2026-09-03T10:00:00Z", link: "https://vimeo.com/3" }],
+      datasetLinkDates: new Map(),
+    });
+    expect(r.text).toContain("без дати в назві");
+    expect(r.text).toContain("YYYY-MM-DD");
+  });
 });

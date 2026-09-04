@@ -4,8 +4,9 @@
  * posts, with DETERMINISTIC cause hints (a Vimeo video named without the date,
  * a #datasets message dated another day). Never model text.
  */
-import { MIN_RATIO, videoFlightDate } from "./reconcile";
+import { MIN_RATIO, videoNameDate, videoUploadDate } from "./reconcile";
 import { ukrainianGaps } from "./verdictPublish";
+import { MIN_VIDEO_MIN } from "./fieldDayVerdict";
 import type { DayVerdict } from "./fieldDayVerdict";
 import type { ReplyHints } from "./threadReplyHints";
 
@@ -32,14 +33,17 @@ function causeHints(a: OutcomeArgs, date: string): string[] {
   for (const l of a.hints.vimeoLinks) {
     const v = a.linkedVideos.find((x) => x.id === l.id);
     if (!v) { out.push(`відео ${l.url} не знайдено в акаунті Vimeo`); continue; }
-    const attributed = videoFlightDate(v.name, v.created_time);
-    if (attributed === date) continue;
-    const nameHasDate = /\d{1,2}[.\-_]\d{1,2}([.\-_]\d{2,4})?|\d{4}-\d{2}-\d{2}/.test(v.name);
-    out.push(
-      nameHasDate
-        ? `відео «${v.name}» датоване ${ddmm(attributed)}, не цим днем`
-        : `відео «${v.name}» без дати в назві — зараховано на ${ddmm(attributed)} (дата завантаження); перейменуйте, додавши ${ddmm(date)}`,
-    );
+    const named = videoNameDate(v.name, v.created_time);
+    if (named === null) {
+      const uploadDate = videoUploadDate(v.created_time);
+      out.push(
+        `відео «${v.name}» без дати в назві — зараховано на ${ddmm(uploadDate)} (дата завантаження); перейменуйте, додавши дату у форматі YYYY-MM-DD — ${date} (${ddmm(date)})`,
+      );
+      continue;
+    }
+    if (named !== date) {
+      out.push(`відео «${v.name}» датоване ${ddmm(named)}, не цим днем`);
+    }
   }
   for (const p of a.hints.datasetPermalinks) {
     const d = a.datasetLinkDates.get(p.ts);
@@ -66,9 +70,9 @@ export function evidenceOutcome(a: OutcomeArgs): { outcome: EvidenceOutcomeKind;
     };
   }
   const parts: string[] = [`🔎 Перевірив: ${line}.`];
-  const videoOk = d.ratio !== null && d.ratio >= MIN_RATIO;
-  if (!videoOk) {
-    const need = Math.max(0, Math.ceil(d.airborneMinutes * MIN_RATIO - d.videoMinutes));
+  const videoOk = d.ratio !== null && d.ratio >= MIN_RATIO && d.videoMinutes >= MIN_VIDEO_MIN;
+  if (!videoOk && d.airborneMinutes > 0) {
+    const need = Math.max(0, Math.ceil(Math.max(d.airborneMinutes * MIN_RATIO, MIN_VIDEO_MIN) - d.videoMinutes));
     parts.push(`бракує ${need} хв відео.`);
   }
   const otherGaps = ukrainianGaps(d).filter((g) => !g.startsWith("відео"));

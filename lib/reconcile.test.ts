@@ -3,6 +3,7 @@ import {
   aggregateByDay,
   summarize,
   videoFlightDate,
+  videoNameDate,
   videoUploadDate,
   type FlightDay,
   type ReconVideo,
@@ -172,5 +173,26 @@ describe("videoFlightDate", () => {
 
   it("skips an implausible date-run and uses a later plausible one in the name", () => {
     expect(videoFlightDate("20100912_WIN_20260616_17_39", "2026-06-18T09:00:00Z")).toBe("2026-06-16");
+  });
+});
+
+describe("videoNameDate", () => {
+  it("returns the plausible date recognized in the name", () => {
+    expect(videoNameDate("2026-08-30 політ", "2026-09-03T10:00:00Z")).toBe("2026-08-30");
+  });
+
+  it("returns null when the name carries no plausible calendar date", () => {
+    expect(videoNameDate("DJI_0001", "2026-09-03T10:00:00Z")).toBeNull();
+  });
+
+  it("agrees with videoFlightDate: name date present → same as before", () => {
+    expect(videoFlightDate("2026-08-30 політ", "2026-09-03T10:00:00Z")).toBe(
+      videoNameDate("2026-08-30 політ", "2026-09-03T10:00:00Z"),
+    );
+  });
+
+  it("agrees with videoFlightDate: no name date → falls back to the upload date", () => {
+    expect(videoNameDate("DJI_0001", "2026-09-03T10:00:00Z")).toBeNull();
+    expect(videoFlightDate("DJI_0001", "2026-09-03T10:00:00Z")).toBe("2026-09-03");
   });
 });
