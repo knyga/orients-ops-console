@@ -155,6 +155,27 @@ export const rosterAckKey = (date: string, rev: string): string =>
   `roster-ack:${date}:${rev}`;
 
 /**
+ * Cross-link (🔗) edits — spec 2026-09-04-field-qa-cross-links-design.md. The
+ * edit is keyed by the TARGET message + a content hash of the rendered link
+ * line, so an unchanged cluster re-derives the same key and dedups at the
+ * chokepoint, while a new node (new line) re-edits. The Звіт-thread reply is
+ * the one POST (keyed by the Звіт ts, so a day never gets two), edited under
+ * its own content-rev key afterwards.
+ */
+export const LINKS_FEATURE = "links";
+export type LinksTarget =
+  | { kind: "reminder"; date: string }
+  | { kind: "verdict" | "bonus"; date: string; reportTs: string }
+  | { kind: "zvit"; reportTs: string };
+export const linksTargetKey = (t: LinksTarget): string =>
+  t.kind === "reminder" ? `reminder:${t.date}` :
+  t.kind === "zvit" ? `zvit:${t.reportTs}` :
+  `${t.kind}:${t.date}#${t.reportTs}`;
+export const linksEditKey = (t: LinksTarget, rev: string): string => `links-edit:${linksTargetKey(t)}:${rev}`;
+export const linksZvitKey = (reportTs: string): string => `links-zvit:${reportTs}`;
+export const linksZvitEditKey = (reportTs: string, rev: string): string => `links-zvit-edit:${reportTs}:${rev}`;
+
+/**
  * Decide the reserve outcome. We win (and should send) when our INSERT landed,
  * OR when the only existing row is a prior FAILED attempt (retry). We lose (skip
  * the send) when a sent/pending/skipped row already holds the key.
