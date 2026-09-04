@@ -47,6 +47,24 @@ describe("collectDayNodes", () => {
     expect(n.reports.map((r) => r.reportTs)).toEqual(["100.0"]);
     expect(collectDayNodes({ date: "2026-09-02", channel: "orients-ops-console-test", published, notified, outbound }).reports).toEqual([]);
   });
+  it("bonusTs without a bonus-thread row leaves bonusText undefined (never a body-wiping edit)", () => {
+    const localNotified: NotifiedLog = { "2026-09-03#100.1": { date: "2026-09-03", reportTs: "100.1", threadTs: "300.1", dms: [] } };
+    const n = collectDayNodes({ date: "2026-09-03", channel: "field-qa", published, notified: localNotified, outbound: [] });
+    expect(n.reports[0].bonusTs).toBe("300.1");
+    expect(n.reports[0].bonusText).toBeUndefined();
+  });
+  it("ignores a links-zvit or bonus-thread row posted to a foreign channel", () => {
+    const foreignOutbound: OutboundRowLike[] = [
+      row({ key: "bonus-thread:2026-09-03#100.1", feature: "bonus", ts: "300.1", text: "💰 foreign", channel: "orients-ops-console-test" }),
+      row({ key: "links-zvit:100.1", feature: "links", ts: "400.1", text: "🔗 foreign", channel: "orients-ops-console-test" }),
+    ];
+    const n = collectDayNodes({ date: "2026-09-03", channel: "field-qa", published, notified, outbound: foreignOutbound });
+    const r1 = n.reports.find((r) => r.reportTs === "100.1")!;
+    expect(r1.bonusTs).toBe("300.1"); // threadTs comes from `notified`, which carries no channel
+    expect(r1.bonusText).toBeUndefined();
+    expect(r1.zvitReplyTs).toBeUndefined();
+    expect(r1.zvitReplyText).toBeUndefined();
+  });
 });
 
 describe("summaryChunkFor", () => {
@@ -147,5 +165,20 @@ describe("planRelink", () => {
     expect(planRelink(noVerdict, { permalink: url, zvitReply: true }).map((e) => e.target.kind)).toEqual(["reminder"]);
     const unknownText: DayNodes = { date: "2026-09-03", reminderTs: "50.0", reports: [{ reportTs: "100.1", verdictTs: "200.1", verdictText: "v" }] };
     expect(planRelink(unknownText, { permalink: url, zvitReply: false }).map((e) => e.target.kind)).toEqual(["verdict"]);
+  });
+  it("emits a bonus edit that preserves the original 💰 body, never wiping it down to the bare link line", () => {
+    const withBonus: DayNodes = { ...base, reports: [{ ...base.reports[0], bonusTs: "300.1", bonusText: "💰 Бонуси за 2026-09-03 (попередньо): разом 700 грн" }] };
+    const bonusLine = renderLinks({ kind: "bonus", date: "2026-09-03", reportTs: "100.1" }, withBonus, url)!;
+    const e = planRelink(withBonus, { permalink: url, zvitReply: false }).find((x) => x.target.kind === "bonus")!;
+    expect(e).toBeDefined();
+    expect(e.key).toBe(`links-edit:bonus:2026-09-03#100.1:${contentRev(bonusLine)}`);
+    expect(e.newText.startsWith("💰 Бонуси за 2026-09-03 (попередньо): разом 700 грн")).toBe(true);
+    expect(e.newText).not.toBe(bonusLine); // must never collapse to the bare 🔗 line
+  });
+  it("never edits a bonus node whose text is undefined or empty (unknown current text is skipped, not blind-edited)", () => {
+    const undefinedBonus: DayNodes = { ...base, reports: [{ ...base.reports[0], bonusTs: "300.1" }] };
+    expect(planRelink(undefinedBonus, { permalink: url, zvitReply: false }).some((e) => e.target.kind === "bonus")).toBe(false);
+    const emptyBonus: DayNodes = { ...base, reports: [{ ...base.reports[0], bonusTs: "300.1", bonusText: "" }] };
+    expect(planRelink(emptyBonus, { permalink: url, zvitReply: false }).some((e) => e.target.kind === "bonus")).toBe(false);
   });
 });

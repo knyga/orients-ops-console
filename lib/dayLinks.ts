@@ -89,9 +89,10 @@ export function collectDayNodes(input: CollectInput): DayNodes {
       const bonusTs = notified[key]?.threadTs;
       if (bonusTs) {
         node.bonusTs = bonusTs;
-        node.bonusText = sentRow(outbound, (r) => r.key === bonusThreadKey(key))?.text ?? "";
+        const bonusRow = sentRow(outbound, (r) => r.key === bonusThreadKey(key) && r.channel === channel);
+        if (bonusRow) node.bonusText = bonusRow.text;
       }
-      const zvit = sentRow(outbound, (r) => r.key === linksZvitKey(reportTs));
+      const zvit = sentRow(outbound, (r) => r.key === linksZvitKey(reportTs) && r.channel === channel);
       if (zvit) {
         node.zvitReplyTs = zvit.ts as string;
         node.zvitReplyText = zvit.text;
@@ -147,9 +148,9 @@ export interface RelinkEdit {
 
 /**
  * The edits/posts that bring every target's 🔗 line up to date. A target whose
- * current text is unknown (message not in the stores) is skipped — never edit
- * blind. The Звіт-thread reply is POSTED only when `zvitReply` is on and the
- * report already has a verdict; an existing reply is always kept current.
+ * current text is unknown or empty is skipped — never edit blind. The
+ * Звіт-thread reply is POSTED only when `zvitReply` is on and the report
+ * already has a verdict; an existing reply is always kept current.
  */
 export function planRelink(nodes: DayNodes, opts: { permalink: (ts: string) => string; zvitReply: boolean }): RelinkEdit[] {
   const out: RelinkEdit[] = [];
@@ -159,10 +160,10 @@ export function planRelink(nodes: DayNodes, opts: { permalink: (ts: string) => s
     if (next === current || line === null) return;
     out.push({ target, op: "edit", ts, threadTs: null, newText: next, key: linksEditKey(target, contentRev(line)) });
   };
-  if (nodes.reminderTs && nodes.reminderText !== undefined) edit({ kind: "reminder", date: nodes.date }, nodes.reminderTs, nodes.reminderText);
+  if (nodes.reminderTs && nodes.reminderText) edit({ kind: "reminder", date: nodes.date }, nodes.reminderTs, nodes.reminderText);
   for (const r of nodes.reports) {
-    if (r.verdictTs && r.verdictText !== undefined) edit({ kind: "verdict", date: nodes.date, reportTs: r.reportTs }, r.verdictTs, r.verdictText);
-    if (r.bonusTs && r.bonusText !== undefined) edit({ kind: "bonus", date: nodes.date, reportTs: r.reportTs }, r.bonusTs, r.bonusText);
+    if (r.verdictTs && r.verdictText) edit({ kind: "verdict", date: nodes.date, reportTs: r.reportTs }, r.verdictTs, r.verdictText);
+    if (r.bonusTs && r.bonusText) edit({ kind: "bonus", date: nodes.date, reportTs: r.reportTs }, r.bonusTs, r.bonusText);
     const target: LinksTarget = { kind: "zvit", reportTs: r.reportTs };
     const line = renderLinks(target, nodes, opts.permalink);
     if (r.zvitReplyTs && r.zvitReplyText !== undefined) {
