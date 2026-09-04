@@ -21,6 +21,7 @@ import { chunkForSlack } from "@/lib/slackChunk";
 import { agentReplyKey } from "@/lib/outboundKeys";
 import type { ProposalKind } from "@/lib/proposalExecutor";
 import { fetchThreadContext } from "@/lib/agent/threadContext";
+import { expandSlackLinks } from "@/lib/agent/slackLinkContext";
 import { alertApprovers } from "@/lib/opsAlert";
 
 export const runtime = "nodejs";
@@ -98,6 +99,14 @@ export async function POST(req: Request): Promise<Response> {
         console.error("agent run: thread-context fetch failed:", err);
       }
     }
+    // Slack permalinks pasted into the question are read deterministically and
+    // prepended as a context block (the model also has slack_read_link for links
+    // it meets later). Links into the current thread are skipped — that thread
+    // is already injected above. Best-effort: never throws.
+    const links = await expandSlackLinks(body.question, {
+      skipThread: { channelId: body.channelId, threadTs: body.threadTs },
+    });
+    if (links) question = `${links}\n\n${question}`;
     // A thread turn carries the thread's permalink so a created ticket links
     // back to its source (attached to the proposal deterministically, not by
     // the model). Pure string build — works even when the context fetch failed.

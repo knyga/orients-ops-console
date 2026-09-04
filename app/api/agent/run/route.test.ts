@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   insertPending: vi.fn(),
   updateMessage: vi.fn(),
   fetchThreadContext: vi.fn(),
+  expandSlackLinks: vi.fn(),
 }));
 
 vi.mock("@/lib/agent/slackTurn", () => ({ runSlackTurn: h.runSlackTurn }));
@@ -20,6 +21,7 @@ vi.mock("@/lib/slack", () => ({
   permalinkFor: (c: string, ts: string) => `https://orientsai.slack.com/archives/${c}/p${ts.replace(".", "")}`,
 }));
 vi.mock("@/lib/agent/threadContext", () => ({ fetchThreadContext: h.fetchThreadContext }));
+vi.mock("@/lib/agent/slackLinkContext", () => ({ expandSlackLinks: h.expandSlackLinks }));
 
 import { POST } from "./route";
 
@@ -28,6 +30,7 @@ beforeEach(() => {
   Object.values(h).forEach((f) => f.mockReset());
   h.loadTranscript.mockResolvedValue([]);
   h.fetchThreadContext.mockResolvedValue(null);
+  h.expandSlackLinks.mockResolvedValue(null);
   process.env.AGENT_RUN_SECRET = SECRET;
 });
 
@@ -246,5 +249,19 @@ describe("POST /api/agent/run", () => {
       inThread: true,
     });
     expect(h.updateMessage).toHaveBeenCalledWith("C1", "2", "answer", expect.anything());
+  });
+
+  it("a Slack permalink in the question is expanded and prepended; the current thread is skipped", async () => {
+    h.expandSlackLinks.mockResolvedValue("Вміст посилань зі Slack, згаданих у запиті:\nПосилання: https://x\n[A · t]: linked text");
+    h.runSlackTurn.mockResolvedValue({ kind: "text", text: "ok" });
+    const question = "що тут? https://orientsai.slack.com/archives/C9/p1785736825822439";
+    await POST(req({ ...base, surface: "mention", conversationKey: "111.222", channelId: "C-issue-log", threadTs: "111.222", incomingTs: "111.900", placeholderTs: "111.901", question }));
+    expect(h.expandSlackLinks).toHaveBeenCalledWith(question, { skipThread: { channelId: "C-issue-log", threadTs: "111.222" } });
+    const sent = h.runSlackTurn.mock.calls[0][0] as string;
+    expect(sent.startsWith("Вміст посилань зі Slack")).toBe(true);
+    expect(sent).toContain("linked text");
+    expect(sent.endsWith(question)).toBe(true);
+    // memory keeps the original question only
+    expect(h.appendTurn).toHaveBeenCalledWith("111.222", question, "ok");
   });
 });
