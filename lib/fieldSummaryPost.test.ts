@@ -137,6 +137,26 @@ describe("assembleSummaryDays", () => {
     expect(d.weekend).toBe(true);
   });
 
+  it("a counted bonus day's early flag (approver early override on a no-Звіт day) wins over the missing start time", async () => {
+    mocks.readReportJson.mockImplementation(async (feature: string) => {
+      if (feature === "field-verdict") return { days: [verdictDay({ date: "2026-08-05", reportTs: null, status: "ACCEPTED_EXCEPTION", roster: ["Андріан", "Любомир"], deployWindow: null, deployMin: null, hasZvit: false })] };
+      if (feature === "field-bonus") return { days: [{ date: "2026-08-05", reportTs: null, roster: ["Андріан", "Любомир"], paidRoster: ["Андріан", "Любомир"], counted: true, early: true }] };
+      return null;
+    });
+    const [d] = await assembleSummaryDays(period);
+    expect(d.early).toBe(true);
+  });
+
+  it("an uncounted bonus day still derives early from the Звіт start (bonus early is false only because it is unpaid)", async () => {
+    mocks.readReportJson.mockImplementation(async (feature: string) => {
+      if (feature === "field-verdict") return { days: [verdictDay({ date: "2026-08-22", status: "NEEDS_REVIEW", deployWindow: { start: "12:00", end: "18:00" } })] };
+      if (feature === "field-bonus") return { days: [{ date: "2026-08-22", reportTs: "1787677696.151879", roster: ["Андріан"], paidRoster: [], counted: false, early: false }] };
+      return null;
+    });
+    const [d] = await assembleSummaryDays(period);
+    expect(d.early).toBe(true);
+  });
+
   it("carries the report position for multi-report days", async () => {
     mocks.readReportJson.mockImplementation(async (feature: string) =>
       feature === "field-verdict" ? { days: [verdictDay({ reportSeq: 2, reportCount: 2 })] } : null,

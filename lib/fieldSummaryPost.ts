@@ -61,7 +61,7 @@ export async function assembleSummaryDays(period: Period): Promise<SummaryDay[]>
     throw new Error(`немає збереженого field-verdict за ${key} — запустіть \`npm run field-verdict -- --start ${period.start} --end ${period.end} --write\`.`);
   }
   const fieldQa = await readReportJson<{ days: FieldQaDay[] }>("field-qa", key);
-  const bonus = await readReportJson<{ days: Pick<DayBonus, "date" | "reportTs" | "roster" | "paidRoster">[] }>("field-bonus", key);
+  const bonus = await readReportJson<{ days: Pick<DayBonus, "date" | "reportTs" | "roster" | "paidRoster" | "counted" | "early">[] }>("field-bonus", key);
   const fieldQaChannel = TRACKED_CHANNELS.find((c) => c.name === "field-qa");
   if (!fieldQaChannel) throw new Error("#field-qa is not a tracked channel");
   const published = await readPublished(period);
@@ -93,7 +93,10 @@ export async function assembleSummaryDays(period: Period): Promise<SummaryDay[]>
       airborneReported: v.airborneReported !== false,
       videoMinutes: v.videoMinutes,
       status: v.status as SummaryStatus,
-      early: sm != null && sm <= EARLY_CUTOFF_MIN,
+      // A counted bonus day carries the approver's early override (a no-Звіт day
+      // has no start time); an unpaid day's bonus `early` is false only because
+      // it is unpaid, so fall back to the Звіт start there.
+      early: b?.counted ? b.early : sm != null && sm <= EARLY_CUTOFF_MIN,
       weekend: isWeekend(v.date),
       droneCounts: (qa?.droneReport ?? []).filter((e) => e.isPerson).map((e) => ({ name: e.name, count: e.count })),
       droneReportKnown: Array.isArray(qa?.droneReport),
