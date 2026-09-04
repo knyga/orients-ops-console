@@ -4,7 +4,8 @@
  *   npm run field-evidence -- --thread <channelId:ts | permalink> --reply "<text>" [--as <userId|name>]        # classify + decide, print
  *   npm run field-evidence -- --thread … --reply "…" --write                                                  # perform (verify/escalate/chat/apply)
  *   npm run field-evidence -- --list --start YYYY-MM-DD --end YYYY-MM-DD                                      # audit (mirrors GET /api/evidence)
- * Needs ANTHROPIC_API_KEY (+ SLACK_TOKEN, VIMEO_TOKEN, POSTGRES_URL for --write). Runs under --conditions=react-server.
+ * Needs ANTHROPIC_API_KEY + POSTGRES_URL (DB lookups in every mode); VIMEO_TOKEN too whenever the action is
+ * `verify` (recompute preview), dry-run included; SLACK_TOKEN only for --write. Runs under --conditions=react-server.
  */
 import { parseThreadRef } from "../lib/agent/threadContext";
 import { findPublishedByTs } from "../lib/published";
