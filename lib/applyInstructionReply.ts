@@ -1,10 +1,21 @@
 /**
- * Single-reply confirm-first path for the events webhook. Classifies ONE approver
- * verdict-thread reply and either: confirms/cancels the pending proposal, or
- * records a NEW proposal and echoes it for confirmation, or (unclear/question)
- * stays silent. SERVER-ONLY (Claude classify + Slack + DB). One Claude call per
- * event (fits the 3s budget). Idempotent: proposal `source_reply_ts` uniqueness +
- * the pure state machine make a redelivered event a no-op.
+ * Single-reply confirm-first path for the events webhook, split in two (pilot
+ * evidence autonomy, Task 8):
+ *   - `applyInstructionReply` — the classify-and-delegate wrapper: classifies ONE
+ *     approver verdict-thread reply via Claude, then hands off to the function
+ *     below. Still the entry point for the CLI sweep (approver-only replies).
+ *   - `applyClassifiedInstruction` — the confirm / cancel / instruction branches
+ *     on an ALREADY-classified reply: confirms/cancels the pending proposal(s),
+ *     or records a NEW proposal and echoes it for confirmation, or (unclear/
+ *     question) stays silent. `lib/applyThreadReply.ts` (Task 9) — the unified
+ *     handler for ANY human reply (approver or pilot) — calls this directly
+ *     with its own classification, skipping the Claude call above. On confirm
+ *     of a pilot-origin proposal the CONFIRMER (an approver) is recorded as
+ *     `by`, not the pilot who raised the claim.
+ * SERVER-ONLY (Claude classify + Slack + DB). One Claude call per event (fits
+ * the 3s budget) on the `applyInstructionReply` path. Idempotent: proposal
+ * `source_reply_ts` uniqueness + the pure state machine make a redelivered
+ * event a no-op.
  *
  * The apply happens ONLY on confirmation (via lib/applyInstruction), which owns
  * the per-axis ack — so this handler posts the proposal echo + the cancel note,
