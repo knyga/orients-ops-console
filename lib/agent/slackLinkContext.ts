@@ -36,7 +36,7 @@ function ukSlackError(err: unknown): string {
   if (/not_in_channel|channel_not_found/.test(msg)) return "бот не в цьому каналі — додайте його (/invite) і повторіть";
   if (/thread_not_found|message_not_found/.test(msg)) return "повідомлення не знайдено (видалене або ts неправильний)";
   if (/missing_scope/.test(msg)) return "боту бракує Slack-дозволу читати цей канал";
-  if (/SLACK_TOKEN/.test(msg)) return "на сервері не налаштований SLACK_TOKEN";
+  if (/SLACK_TOKEN/.test(msg)) return "SLACK_TOKEN не налаштований";
   return err instanceof SlackError ? `Slack: ${msg}` : msg;
 }
 

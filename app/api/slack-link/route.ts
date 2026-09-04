@@ -7,7 +7,6 @@
  * machine endpoint — `/api/slack/*` is the webhook namespace, this is not under it).
  */
 import { resolveSlackLink, SlackLinkError } from "@/lib/agent/slackLinkContext";
-import { SlackError } from "@/lib/slack";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,11 +26,12 @@ export async function GET(req: Request): Promise<Response> {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // resolveSlackLink rethrows every Slack failure as SlackLinkError (Ukrainian):
+    // bad URL → 400, missing server config → 500, anything Slack rejected → 502.
     if (err instanceof SlackLinkError) {
-      const status = /не посилання/.test(message) ? 400 : 502;
+      const status = /не посилання/.test(message) ? 400 : /SLACK_TOKEN/.test(message) ? 500 : 502;
       return Response.json({ error: message }, { status });
     }
-    if (err instanceof SlackError) return Response.json({ error: message }, { status: err.status === 500 ? 500 : 502 });
     return Response.json({ error: message }, { status: 500 });
   }
 }

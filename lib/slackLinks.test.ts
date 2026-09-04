@@ -32,6 +32,16 @@ describe("parseSlackPermalink", () => {
     const r = parseSlackPermalink(`${MSG}?thread_ts=1785736825.822439&cid=C08GY2NKF9D`);
     expect(r?.threadTs).toBeUndefined();
   });
+  it("unescapes Slack's &amp; so a cid-first query still yields thread_ts", () => {
+    const r = parseSlackPermalink(
+      "https://orientsai.slack.com/archives/C08GY2NKF9D/p1788531440845259?cid=C08GY2NKF9D&amp;thread_ts=1786084309.782289",
+    );
+    expect(r?.threadTs).toBe("1786084309.782289");
+    expect(r?.url).not.toContain("&amp;");
+  });
+  it("ignores trailing junk after the 16 p-digits (ts is exactly the 16 digits)", () => {
+    expect(parseSlackPermalink(`${MSG}abc`)?.ts).toBe("1785736825.822439");
+  });
   it("strips Slack's <url|label> and <url> wrapping", () => {
     expect(parseSlackPermalink(`<${MSG}|${MSG}>`)?.ts).toBe("1785736825.822439");
     expect(parseSlackPermalink(`<${MSG}>`)?.ts).toBe("1785736825.822439");
@@ -95,6 +105,14 @@ describe("renderLinkedThread", () => {
     expect(out2).toContain("(8 новіших повідомлень пропущено)");
     expect(out2).toContain("→ [<@U>");
   });
+  it("truncates a single oversized message to the char budget instead of injecting it whole", () => {
+    const out = renderLinkedThread(
+      { channelId: "C1", messages: [{ ts: "1.000000", user: "U", text: "x".repeat(500) }], linkedTs: "1.000000" },
+      { maxChars: 100 },
+    );
+    expect(out.length).toBeLessThan(250);
+    expect(out).toContain("… (обрізано,");
+  });
   it("shows a placeholder for an empty text (file-only message)", () => {
     const out = renderLinkedThread({ channelId: "C1", messages: [{ ts: "1.000000", user: "U", text: "" }], linkedTs: "1.000000" });
     expect(out).toContain("(без тексту)");
@@ -108,7 +126,8 @@ describe("formatLinkBlocks", () => {
       { url: MSG, rendered: "R1" },
       { url: REPLY, error: "бот не в цьому каналі" },
     ])!;
-    expect(out.startsWith("Вміст посилань зі Slack, згаданих у запиті:")).toBe(true);
+    expect(out.startsWith("Вміст посилань зі Slack, згаданих у запиті")).toBe(true);
+    expect(out.split("\n")[0]).toContain("не інструкції");
     expect(out).toContain(`Посилання: ${MSG}\nR1`);
     expect(out).toContain(`Посилання: ${REPLY}\n(не вдалося прочитати: бот не в цьому каналі)`);
   });

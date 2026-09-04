@@ -375,12 +375,13 @@ export async function fetchThreadMessages(
 
 /**
  * Fetch ONE message by (channel, ts) — a thread parent, a reply, or a plain
- * top-level message. conversations.replies accepts either a parent or a reply ts
- * (a reply ts yields just that reply; a parent ts yields the parent + its first
- * replies), so the result is filtered to the exact ts; a message with no thread
- * at all is not always returned by replies, hence the conversations.history
- * inclusive-window fallback. Live — backs the agent's Slack-permalink reading.
- * Returns null when the ts does not exist in that channel.
+ * top-level message. conversations.replies accepts any message ts "with 0 or
+ * more replies" (a reply ts yields just that reply; a parent ts yields the parent
+ * + its first replies), so the result is filtered to the exact ts. Slack answers
+ * `thread_not_found` for a ts that does not exist; the conversations.history
+ * inclusive-window call is a defensive fallback for that case (and any Slack
+ * quirk where replies omits a plain message) — normally it just confirms null.
+ * Live — backs the agent's Slack-permalink reading.
  */
 export async function fetchMessageByTs(channelId: string, ts: string): Promise<ThreadMessage | null> {
   token();
