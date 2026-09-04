@@ -19,7 +19,7 @@ vi.mock("./applyInstruction", () => ({ applyInstruction }));
 vi.mock("./proposals", () => ({ createProposal, readActiveProposals, settleProposal }));
 vi.mock("./instructionClassify", () => ({ classifyInstruction }));
 
-import { applyInstructionReply } from "./applyInstructionReply";
+import { applyInstructionReply, applyClassifiedInstruction } from "./applyInstructionReply";
 import type { PublishedEntry } from "./published";
 
 const period = { start: "2026-07-01", end: "2026-07-31" };
@@ -42,6 +42,7 @@ const activeProposal = {
   payload: { intent: "instruction", axis: "dataset", datasetStatus: "DECLINED", reason: "x" },
   summaryUk: "датасет ⛔ причину відхилено",
   proposedBy: "Oleksandr K",
+  origin: "approver" as const,
   sourceReplyTs: "1781000100.000100",
   state: "PROPOSED" as const,
   createdAt: "2026-07-02T05:00:00.000Z",
@@ -311,5 +312,26 @@ describe("applyInstructionReply — stacked applies see each other's effects", (
       replyPermalink: "https://slack/ok", replyTs: "1781000300.000700",
     });
     expect(applyInstruction.mock.calls[1][0].entry.text).toBe(entry(null).text);
+  });
+});
+
+describe("applyClassifiedInstruction — pilot-origin proposals", () => {
+  it("records the CONFIRMER as `by` when the pending proposal is pilot-origin", async () => {
+    const pilotProposal = { ...activeProposal, origin: "pilot" as const, proposedBy: "Тарас", axis: "day" as const, payload: { intent: "instruction", axis: "day", decision: "accepted_exception", reason: "дощ" } };
+    settleProposal.mockResolvedValue("CONFIRMED");
+    const res = await applyClassifiedInstruction({
+      entry: entry("2.0"), period, approverName: "Bohdan Forostianyi", replyPermalink: "p", replyTs: "1781000300.000100",
+      classification: { intent: "confirm", reason: "" }, pending: [pilotProposal],
+    });
+    expect(res.handled).toBe("confirmed");
+    expect(applyInstruction).toHaveBeenCalledWith(expect.objectContaining({ by: "Bohdan Forostianyi" }));
+  });
+  it("keeps the proposer as `by` for an approver-origin proposal", async () => {
+    settleProposal.mockResolvedValue("CONFIRMED");
+    await applyClassifiedInstruction({
+      entry: entry("2.0"), period, approverName: "Bohdan Forostianyi", replyPermalink: "p", replyTs: "1781000300.000100",
+      classification: { intent: "confirm", reason: "" }, pending: [{ ...activeProposal, origin: "approver" as const }],
+    });
+    expect(applyInstruction).toHaveBeenCalledWith(expect.objectContaining({ by: "Oleksandr K" }));
   });
 });

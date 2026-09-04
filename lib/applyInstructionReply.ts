@@ -23,6 +23,7 @@ import { reportKey } from "./fieldDayVerdict";
 import { findPublishedByTs, type PublishedEntry } from "./published";
 import type { InstructionClassification } from "./instructionClassifyPrompt";
 import type { Period } from "./period";
+import type { Proposal, ProposalOrigin } from "./proposals";
 
 export interface InstructionReplyResult {
   handled: "confirmed" | "cancelled" | "proposed" | "noop";
@@ -42,13 +43,24 @@ export interface InstructionReplyArgs {
   trigger?: SendTrigger;
 }
 
-export async function applyInstructionReply(args: InstructionReplyArgs): Promise<InstructionReplyResult> {
-  const { entry, period, replyText, approverName, replyPermalink, replyTs, trigger = "webhook" } = args;
-  const channel = TRACKED_CHANNELS.find((ch) => ch.name === entry.channel);
+export interface ClassifiedInstructionArgs extends Omit<InstructionReplyArgs, "replyText"> {
+  classification: InstructionClassification;
+  pending: Proposal[];
+  /** Who raised a NEW proposal from this reply; default "approver". */
+  origin?: ProposalOrigin;
+}
 
+export async function applyInstructionReply(args: InstructionReplyArgs): Promise<InstructionReplyResult> {
+  const { entry, replyText } = args;
   const pending = await readActiveProposals(entry.ts); // oldest first, possibly several axes
   const pendingEcho = pending.length ? pending.map((p) => p.summaryUk).join("; ") : null;
   const c = await classifyInstruction(entry.text, replyText, pendingEcho);
+  return applyClassifiedInstruction({ ...args, classification: c, pending });
+}
+
+export async function applyClassifiedInstruction(args: ClassifiedInstructionArgs): Promise<InstructionReplyResult> {
+  const { entry, period, approverName, replyPermalink, replyTs, trigger = "webhook", classification: c, pending, origin = "approver" } = args;
+  const channel = TRACKED_CHANNELS.find((ch) => ch.name === entry.channel);
 
   // Confirm → apply EVERY pending proposal (day accept + crew fix + … stack up under one «так»).
   if (pending.length && c.intent === "confirm") {
@@ -72,7 +84,7 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
           period,
           axis: p.axis,
           instruction: p.payload as InstructionClassification,
-          by: p.proposedBy,
+          by: p.origin === "pilot" ? approverName : p.proposedBy,
           evidence: replyPermalink,
           trigger,
           // The instructing reply's ts: a re-instruction of an earlier state
@@ -130,6 +142,7 @@ export async function applyInstructionReply(args: InstructionReplyArgs): Promise
       payload: c,
       summaryUk: summary,
       proposedBy: approverName,
+      origin,
       sourceReplyTs: replyTs,
     });
     if (!created) return { handled: "noop", intent: c.intent }; // redelivery of the same reply
