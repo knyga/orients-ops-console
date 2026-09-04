@@ -230,7 +230,7 @@ export function formatDayMessage(day: DayVerdict): string {
  * derived purely from the verdict's structured fields (never the English
  * `reasons` strings). Shared by the NEEDS_REVIEW, ACCEPTED_EXCEPTION, and REJECTED renders.
  */
-function ukrainianGaps(day: DayVerdict): string[] {
+export function ukrainianGaps(day: DayVerdict): string[] {
   const air = day.airborneMinutes.toFixed(0);
   const vid = day.videoMinutes.toFixed(0);
   const pct = day.ratio === null ? "—" : `${(day.ratio * 100).toFixed(0)}%`;
