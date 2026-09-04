@@ -17,6 +17,7 @@ import { fieldLossTools } from "./tools/fieldLoss";
 import { calendarTools } from "./tools/calendar";
 import { sprintTools } from "./tools/sprint";
 import { fieldSummaryTools } from "./tools/fieldSummary";
+import { fieldVerdictTools } from "./tools/fieldVerdict";
 import { isAuthError, alertApprovers } from "../opsAlert";
 
 const MODEL = "claude-sonnet-5";
@@ -105,7 +106,7 @@ function toolUsesOf(content: unknown[]): ToolUseBlock[] {
 }
 
 export async function runAgent(userText: string, opts: RunAgentOptions = {}): Promise<AgentResult> {
-  const tools = opts.tools ?? [...jiraTools, ...fieldLossTools, ...calendarTools, ...sprintTools, ...fieldSummaryTools];
+  const tools = opts.tools ?? [...jiraTools, ...fieldLossTools, ...calendarTools, ...sprintTools, ...fieldSummaryTools, ...fieldVerdictTools];
   const client = (opts.client ?? new Anthropic()) as AnthropicLike;
   const maxIters = opts.maxIters ?? MAX_ITERS;
   const now = opts.now ?? (() => Date.now());
