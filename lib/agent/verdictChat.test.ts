@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-const m = vi.hoisted(() => ({ runAgent: vi.fn(), fetchThreadContext: vi.fn() }));
+const m = vi.hoisted(() => ({ runAgent: vi.fn(), fetchThreadContext: vi.fn(), expandSlackLinks: vi.fn() }));
 vi.mock("./loop", () => ({ runAgent: m.runAgent }));
 vi.mock("./threadContext", () => ({ fetchThreadContext: m.fetchThreadContext }));
+vi.mock("./slackLinkContext", () => ({ expandSlackLinks: m.expandSlackLinks }));
 import { runVerdictChat } from "./verdictChat";
 
 beforeEach(() => {
   process.env.ANTHROPIC_API_KEY = "k";
   m.runAgent.mockReset().mockResolvedValue({ kind: "text", text: "**Бракує** 12 хв" });
   m.fetchThreadContext.mockReset().mockResolvedValue("Контекст треду (Slack):\n[Тарас]: залив");
+  m.expandSlackLinks.mockReset().mockResolvedValue(null);
 });
 
 describe("runVerdictChat", () => {
@@ -20,7 +22,20 @@ describe("runVerdictChat", () => {
     expect(opts.history).toBeUndefined();
     expect((opts.tools as { kind: string; name: string }[]).every((t) => t.kind === "read")).toBe(true);
     expect((opts.tools as { name: string }[]).map((t) => t.name)).toContain("field_verdict_status");
+    expect((opts.tools as { name: string }[]).map((t) => t.name)).toContain("slack_read_link");
     expect(out).toBe("*Бракує* 12 хв");
+  });
+  it("expands Slack permalinks in the question (skipping this thread) and injects the block", async () => {
+    m.expandSlackLinks.mockResolvedValue("Вміст посилань зі Slack, згаданих у запиті:\nПосилання: https://x\n[Влад · t]: 1 шт Азимут");
+    await runVerdictChat({ question: "звіт був: https://x", verdictText: "v", channelId: "C1", threadTs: "1.1", excludeTs: [] });
+    expect(m.expandSlackLinks).toHaveBeenCalledWith("звіт був: https://x", {
+      skipThread: { channelId: "C1", threadTs: "1.1" },
+      allowedChannelIds: ["C1"],
+    });
+    // the tool handed to the loop is the channel-bound variant
+    const tool = (m.runAgent.mock.calls[0][1].tools as { name: string; description: string }[]).find((t) => t.name === "slack_read_link")!;
+    expect(tool.description).toContain("<#C1>");
+    expect(m.runAgent.mock.calls[0][0]).toContain("1 шт Азимут");
   });
   it("degrades to the bare question when the thread fetch fails", async () => {
     m.fetchThreadContext.mockRejectedValue(new Error("boom"));

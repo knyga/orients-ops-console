@@ -18,6 +18,7 @@
 import { runAgent } from "../lib/agent/loop";
 import { parseThreadRef, fetchThreadContext } from "../lib/agent/threadContext";
 import { permalinkFor } from "../lib/slack";
+import { expandSlackLinks } from "../lib/agent/slackLinkContext";
 
 async function main(): Promise<void> {
   try { process.loadEnvFile(); } catch { /* rely on ambient env */ }
@@ -59,6 +60,10 @@ async function main(): Promise<void> {
     if (ctx) message = `${ctx}\n\n${prompt}`;
     else console.error("(thread has no messages — running without context)");
   }
+  // Same deterministic permalink expansion as the Slack surface (needs SLACK_TOKEN;
+  // a missing token just yields a per-link «не вдалося прочитати» note).
+  const links = await expandSlackLinks(prompt, { skipThread: channelId ? { channelId, threadTs } : undefined });
+  if (links) message = `${links}\n\n${message}`;
 
   const res = await runAgent(message, { sourceUrl, channelId, threadTs, inThread: Boolean(threadTs) });
   if (res.kind === "text" || res.kind === "error") {

@@ -17,6 +17,7 @@
     "jira-write": "node --conditions=react-server --import tsx scripts/jira-write.ts",
     "calendar-write": "node --conditions=react-server --import tsx scripts/calendar-write.ts",
     "agent": "node --conditions=react-server --import tsx scripts/agent.ts",
+    "slack-link": "node --conditions=react-server --import tsx scripts/slack-link.ts",
     "fieldops": "node --conditions=react-server --import tsx scripts/fieldops.ts",
     "field-qa": "node --conditions=react-server --import tsx scripts/fieldQa.ts",
     "policy": "node --conditions=react-server --import tsx scripts/policy.ts",

@@ -344,6 +344,9 @@ export interface ThreadMessage {
   user?: string;
   botId?: string;
   text: string;
+  /** Set when the message lives in a thread (parent: equals `ts`; reply: the root). */
+  threadTs?: string;
+  replyCount?: number;
 }
 
 /**
@@ -354,20 +357,59 @@ export interface ThreadMessage {
 export async function fetchThreadMessages(
   channelId: string,
   threadTs: string,
+  opts: { /** Stop after this many 200-message pages (default: all). */ maxPages?: number } = {},
 ): Promise<ThreadMessage[]> {
   token();
   const out: ThreadMessage[] = [];
   let cursor: string | undefined;
+  let pages = 0;
   do {
+    if (opts.maxPages !== undefined && pages >= opts.maxPages) break;
+    pages += 1;
     const params = new URLSearchParams({ channel: channelId, ts: threadTs, limit: "200" });
     if (cursor) params.set("cursor", cursor);
     const page = await call<RawHistoryResponse>("conversations.replies", params);
     for (const m of page.messages ?? []) {
-      out.push({ ts: m.ts, user: m.user, botId: m.bot_id, text: m.text ?? "" });
+      out.push({ ts: m.ts, user: m.user, botId: m.bot_id, text: m.text ?? "", threadTs: m.thread_ts, replyCount: m.reply_count });
     }
     cursor = page.response_metadata?.next_cursor || undefined;
   } while (cursor);
   return out;
+}
+
+/**
+ * Fetch ONE message by (channel, ts) — a thread parent, a reply, or a plain
+ * top-level message. conversations.replies accepts any message ts "with 0 or
+ * more replies" (a reply ts yields just that reply; a parent ts yields the parent
+ * + its first replies), so the result is filtered to the exact ts. Slack answers
+ * `thread_not_found` for a ts that does not exist; the conversations.history
+ * inclusive-window call is a defensive fallback for that case (and any Slack
+ * quirk where replies omits a plain message) — normally it just confirms null.
+ * Live — backs the agent's Slack-permalink reading.
+ */
+export async function fetchMessageByTs(channelId: string, ts: string): Promise<ThreadMessage | null> {
+  token();
+  const toMsg = (m: RawHistoryMessage): ThreadMessage => ({
+    ts: m.ts, user: m.user, botId: m.bot_id, text: m.text ?? "", threadTs: m.thread_ts, replyCount: m.reply_count,
+  });
+  try {
+    const page = await call<RawHistoryResponse>(
+      "conversations.replies",
+      new URLSearchParams({ channel: channelId, ts, limit: "1" }),
+    );
+    const hit = (page.messages ?? []).find((m) => m.ts === ts);
+    if (hit) return toMsg(hit);
+  } catch (err) {
+    // `thread_not_found` is Slack's answer for a ts that is not a thread member —
+    // fall through to history; anything else (auth, channel access) is real.
+    if (!(err instanceof SlackError && /thread_not_found/.test(err.message))) throw err;
+  }
+  const page = await call<RawHistoryResponse>(
+    "conversations.history",
+    new URLSearchParams({ channel: channelId, latest: ts, oldest: ts, inclusive: "true", limit: "1" }),
+  );
+  const hit = (page.messages ?? []).find((m) => m.ts === ts);
+  return hit ? toMsg(hit) : null;
 }
 
 /** Download a Slack file (e.g. the stats-bot image) as base64. Needs files:read. */
