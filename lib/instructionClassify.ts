@@ -9,11 +9,17 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   CLASSIFY_INSTRUCTION_TOOL,
   buildInstructionPrompt,
+  buildThreadReplyPrompt,
   classifyInstructionTool,
+  classifyThreadReplyTool,
+  coerceThreadReply,
   type InstructionAxis,
   type InstructionClassification,
   type InstructionIntent,
+  type ReplyRole,
+  type ThreadReplyClassification,
 } from "./instructionClassifyPrompt";
+import type { ReplyHints } from "./threadReplyHints";
 
 const MODEL = "claude-sonnet-4-6";
 const VALID_INTENT: InstructionIntent[] = ["confirm", "cancel", "instruction", "unclear"];
@@ -89,4 +95,33 @@ export async function classifyInstruction(
     lossState,
     reason: String(input.reason ?? ""),
   };
+}
+
+/** One forced tool call over a thread reply from ANY human (role-narrowed schema + deterministic backstop). */
+export async function classifyThreadReply(
+  verdictMessage: string,
+  reply: string,
+  pendingEcho: string | null,
+  role: ReplyRole,
+  hints: ReplyHints,
+): Promise<ThreadReplyClassification> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new InstructionClassifyError("ANTHROPIC_API_KEY is not set on the server.");
+  const client = new Anthropic();
+  const tool = classifyThreadReplyTool(role, pendingEcho);
+  let message: Anthropic.Message;
+  try {
+    message = await client.messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      tools: [tool],
+      tool_choice: { type: "tool", name: tool.name },
+      messages: [{ role: "user", content: buildThreadReplyPrompt(verdictMessage, reply, pendingEcho, role, hints) }],
+    });
+  } catch (error) {
+    throw new InstructionClassifyError(`Claude request failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (message.stop_reason === "refusal") throw new InstructionClassifyError("Claude declined the classification.");
+  const toolUse = message.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+  if (!toolUse) throw new InstructionClassifyError("Claude returned no tool_use block.");
+  return coerceThreadReply(toolUse.input as Record<string, unknown>, role, pendingEcho, hints);
 }
