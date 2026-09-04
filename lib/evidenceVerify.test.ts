@@ -50,4 +50,25 @@ describe("verifyEvidence", () => {
     const r = await verifyEvidence({ date: "2026-09-01", reportTs: "1.1", period, hints: noHints, byName: "Тарас", trigger: "cli" });
     expect(r.statusBefore).toBeNull();
   });
+  it("matches a Vimeo id exactly, not as a substring of a longer id", async () => {
+    computeVerdicts.mockResolvedValue({ days: [row("NEEDS_REVIEW", 48)] });
+    fetchVideosInPeriod.mockResolvedValue([
+      { name: "SHORT", created_time: "2026-09-01T10:00:00Z", link: "https://vimeo.com/123", duration: 60, description: null, pictures: { sizes: [] } },
+      { name: "LONG", created_time: "2026-09-01T10:00:00Z", link: "https://vimeo.com/123456789", duration: 60, description: null, pictures: { sizes: [] } },
+    ]);
+    const r = await verifyEvidence({ date: "2026-09-01", reportTs: "1.1", period, hints: { ...noHints, vimeoLinks: [{ url: "https://vimeo.com/123", id: "123" }] }, byName: "Тарас", trigger: "webhook" });
+    expect(r.text).toContain("SHORT");
+    expect(r.text).not.toContain("LONG");
+  });
+  it("multi-report day: an unmatched reportTs finds nothing; a null reportTs falls back to the day's first row", async () => {
+    computeVerdicts.mockResolvedValue({
+      days: [row("NEEDS_REVIEW", 48), { ...row("ACCEPTED", 96), reportTs: "2.2", reportSeq: 2, reportCount: 2 }],
+    });
+    const missing = await verifyEvidence({ date: "2026-09-01", reportTs: "9.9", period, hints: noHints, byName: "Тарас", trigger: "webhook" });
+    expect(missing.statusAfter).toBeNull();
+    expect(missing.text).toContain("не знайшов");
+
+    const dayLevel = await verifyEvidence({ date: "2026-09-01", reportTs: null, period, hints: noHints, byName: "Тарас", trigger: "webhook" });
+    expect(dayLevel.statusAfter).toBe("NEEDS_REVIEW");
+  });
 });

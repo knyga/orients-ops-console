@@ -35,9 +35,15 @@ export interface VerifyResult {
   statusAfter: string | null;
 }
 
-const findRow = (days: DayVerdict[] | undefined, date: string, reportTs: string | null): DayVerdict | null =>
-  days?.find((d) => reportKey(d.date, d.reportTs) === reportKey(date, reportTs)) ??
-  days?.find((d) => d.date === date) ?? null;
+const findRow = (days: DayVerdict[] | undefined, date: string, reportTs: string | null): DayVerdict | null => {
+  const exact = days?.find((d) => reportKey(d.date, d.reportTs) === reportKey(date, reportTs));
+  if (exact) return exact;
+  // A date-only fallback is safe only for a day-level target (no reportTs) —
+  // an ask thread or a legacy entry. When the target names a specific report
+  // and no row matches it exactly, another report on the same day must never
+  // stand in for it.
+  return reportTs === null ? (days?.find((d) => d.date === date) ?? null) : null;
+};
 
 export async function verifyEvidence(a: VerifyArgs): Promise<VerifyResult> {
   const log = a.onLog ?? (() => {});
@@ -55,7 +61,8 @@ export async function verifyEvidence(a: VerifyArgs): Promise<VerifyResult> {
   if (a.hints.vimeoLinks.length) {
     const videos = await fetchVideosInPeriod(a.period.start, a.period.end);
     for (const l of a.hints.vimeoLinks) {
-      const v = videos.find((x) => x.link.includes(`/${l.id}`));
+      const idBoundary = new RegExp(`/${l.id}(?!\\d)`);
+      const v = videos.find((x) => idBoundary.test(x.link));
       if (v) linkedVideos.push({ id: l.id, name: v.name, created_time: v.created_time, link: v.link });
     }
   }
