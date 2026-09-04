@@ -2,13 +2,14 @@
  * CLI: ingest the human replies to the bot's S5 questions and REMEMBER the
  * outcome — DRY-RUN BY DEFAULT. For each ASKED question it reads the threaded
  * replies from the local Slack mirror, classifies each (Claude), and decides the
- * outcome: an accepted exception is written to the resolutions store (so the next
- * verdict run flips that day NEEDS_REVIEW → ACCEPTED_EXCEPTION); a data-provided
- * or still-missing reply just advances the ask state.
+ * outcome: an accepted-exception explanation is ESCALATED as a pilot-origin
+ * proposal for the approvers (never written directly); a data-provided or
+ * still-missing reply just advances the ask state (a data-provided answer is
+ * verified live by the next verdict recompute, not written here).
  *
  * Usage:
  *   npm run field-remember -- --start 2026-06-01 --end 2026-06-19          # dry-run (classify + print)
- *   npm run field-remember -- --start … --end … --write                   # apply (write resolutions + states)
+ *   npm run field-remember -- --start … --end … --write                   # apply (escalate + advance ask states)
  * Defaults to the current Europe/Kyiv month. Run `npm run slack-sync` first so
  * the threaded replies are mirrored. Classification needs ANTHROPIC_API_KEY.
  *
@@ -19,6 +20,7 @@ import { applyAnswerDecision } from "../lib/applyAnswer";
 import { readChannelMessages } from "../lib/slackMirror";
 import { readAsks } from "../lib/asks";
 import { FIELD_TIMEZONE } from "../lib/reconcile";
+import { personForSlackId } from "../lib/people";
 import {
   decideOutcome,
   parseArgs,
@@ -50,7 +52,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  let resolutionsWritten = 0;
+  let escalated = 0;
   let transitions = 0;
 
   // Replies arrive after the flight period (the bot asks "now", people answer
@@ -80,24 +82,33 @@ async function main(): Promise<void> {
     if (!outcome) continue;
 
     console.log(
-      `  ⇒ ${args.write ? "applying" : "would apply"}: ask→${outcome.state}` +
-        (outcome.writeException ? `, +resolution exception for ${record.date}` : "") +
-        ` — ${outcome.note}`,
+      `• ${record.date} ${record.gapType} ⇒ ${
+        outcome.escalate ? "would ESCALATE to approvers (pilot-origin proposal)" : `state → ${outcome.state}`
+      }: ${outcome.note}`,
     );
 
     if (args.write) {
-      // The answer effect (resolution + ask-state advance) is shared with the
-      // events webhook — one source of truth in lib/applyAnswer.
-      await applyAnswerDecision({ record, period, outcome });
-      if (outcome.writeException) resolutionsWritten += 1;
+      const deciding = replies.find((r) => r.permalink === outcome.evidencePermalink) ?? replies[replies.length - 1];
+      // The answer effect (escalation + ask-state advance) is shared with the
+      // events webhook path — one source of truth in lib/applyAnswer.
+      await applyAnswerDecision({
+        record,
+        period,
+        outcome,
+        replyTs: deciding.ts,
+        userId: deciding.authorId,
+        userName: personForSlackId(deciding.authorId)?.name ?? deciding.author,
+        trigger: "cli",
+      });
+      if (outcome.escalate) escalated += 1;
       transitions += 1;
     }
   }
 
   if (args.write) {
-    process.stderr.write(`field-remember: applied ${transitions} state change(s), wrote ${resolutionsWritten} exception(s).\n`);
+    process.stderr.write(`field-remember: applied ${transitions} state change(s), escalated ${escalated} to approvers.\n`);
   } else {
-    process.stderr.write("field-remember: DRY RUN — no resolutions or ask states were written. Re-run with --write to apply.\n");
+    process.stderr.write("field-remember: DRY RUN — nothing was escalated or written. Re-run with --write to apply.\n");
   }
 }
 

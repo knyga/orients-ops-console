@@ -21,19 +21,18 @@ describe("decideOutcome", () => {
     expect(decideOutcome([])).toBeNull();
   });
 
-  it("accepted_exception → RESOLVED + writeException, with that reply's evidence", () => {
-    const o = decideOutcome([reply("still_missing"), reply("accepted_exception", "форс-мажор", "link2")]);
-    expect(o).toEqual({ state: "RESOLVED", writeException: true, note: "форс-мажор", evidencePermalink: "link2" });
+  it("an accepted_exception explanation ESCALATES instead of writing an exception", () => {
+    const o = decideOutcome([{ classification: { resolved: true, type: "accepted_exception", note: "дощ" }, permalink: "p" }]);
+    expect(o).toMatchObject({ state: "ESCALATED", escalate: true, claimText: "дощ" });
   });
 
-  it("data_provided (no exception) → RESOLVED without writeException", () => {
-    const o = decideOutcome([reply("unclear"), reply("data_provided", "drive link", "link3")]);
-    expect(o?.state).toBe("RESOLVED");
-    expect(o?.writeException).toBe(false);
+  it("data_provided → ANSWERED (the nightly recompute verifies), no escalation", () => {
+    const o = decideOutcome([{ classification: { resolved: true, type: "data_provided", note: "залив" }, permalink: "p" }]);
+    expect(o).toMatchObject({ state: "ANSWERED", escalate: false });
   });
 
   it("only still_missing/unclear → ANSWERED using the last reply's note", () => {
     const o = decideOutcome([reply("unclear", "a"), reply("still_missing", "немає", "lastlink")]);
-    expect(o).toEqual({ state: "ANSWERED", writeException: false, note: "немає", evidencePermalink: "lastlink" });
+    expect(o).toEqual({ state: "ANSWERED", escalate: false, note: "немає", evidencePermalink: "lastlink" });
   });
 });

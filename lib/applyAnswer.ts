@@ -1,69 +1,47 @@
 /**
- * Shared S6 effect: remember the outcome of a human's reply to one of the bot's
- * S5 questions. SERVER-ONLY (classifies via Claude). One source of truth for the
- * answer effect, called by BOTH the `field-remember` CLI (batch decide →
- * applyAnswerDecision) and the `/api/slack/events` webhook (one reply →
- * applyAnswerReply). Idempotent via the ask state machine.
+ * S6 effect, aligned with pilot evidence autonomy (2026-09-04): a reply to one
+ * of the bot's gap questions never writes an exception on its own. An
+ * explanation becomes a pilot-origin proposal for the approvers (escalateClaim);
+ * provided data is left to the live recompute. Called by the `field-remember`
+ * CLI (batch). The webhook path goes through lib/applyThreadReply directly.
  */
 import "server-only";
-import { classifyAnswer } from "./answerClassify";
 import { setAskState, writeAsks, type AskRecord } from "./asks";
-import { upsertResolution } from "./resolutions";
+import { escalateClaim } from "./applyThreadReply";
 import type { Period } from "./period";
-import { decideOutcome, type Outcome } from "../scripts/fieldRememberReport";
-
-/** The gap key for an ask record (`${gapType}:${date}`) — matches lib/asks keying. */
-function gapKeyFor(record: AskRecord): string {
-  return `${record.gapType}:${record.date}`;
-}
+import type { Outcome } from "../scripts/fieldRememberReport";
 
 export interface AnswerDecisionArgs {
   record: AskRecord;
   period: Period;
   outcome: Outcome;
+  /** The deciding reply (for the proposal's sourceReplyTs + attribution). */
+  replyTs: string;
+  userId: string;
+  userName: string;
+  trigger?: "cli" | "webhook";
 }
 
 /**
- * The answer effect: when the outcome is an accepted exception, write it to the
- * resolutions store (so the next verdict flips that day NEEDS_REVIEW →
- * ACCEPTED_EXCEPTION); always advance the ask's state. Persists the single ask
- * record (upsert) so the CLI's batch loop and the webhook share one write path.
+ * The answer effect: when the outcome is an escalation, raise a pilot-origin
+ * proposal for the approvers (never write a resolution directly); always
+ * advance the ask's state. Persists the single ask record (upsert) so the
+ * CLI's batch loop is the sole caller of this path.
  */
-export async function applyAnswerDecision(args: AnswerDecisionArgs): Promise<void> {
-  const { record, period, outcome } = args;
-
-  if (outcome.writeException) {
-    // A no-dataset reason waives the dataset axis; a low-video reason forgives the video axis.
-    const axis = record.gapType === "no_dataset" ? "dataset" : "video";
-    await upsertResolution({
-      date: record.date,
-      axis,
-      decision: "accepted_exception",
-      note: outcome.note,
-      source: outcome.evidencePermalink || "slack",
-      recordedAt: new Date().toISOString(),
+export async function applyAnswerDecision(a: AnswerDecisionArgs): Promise<void> {
+  if (a.outcome.escalate && a.outcome.claimText) {
+    await escalateClaim({
+      target: { kind: "ask", record: a.record, period: a.period },
+      claim: { kind: "explanation", text: a.outcome.claimText },
+      userName: a.userName,
+      userId: a.userId,
+      role: "pilot",
+      replyTs: a.replyTs,
+      trigger: a.trigger ?? "cli",
     });
   }
 
-  const key = gapKeyFor(record);
-  const updated = setAskState({ [key]: record }, key, outcome.state, outcome.note);
-  await writeAsks(period, updated);
-}
-
-export interface AnswerReplyArgs {
-  record: AskRecord;
-  period: Period;
-  replyText: string;
-  replyPermalink: string;
-}
-
-/**
- * Single-reply path for the events webhook: classify one reply to the bot's
- * question and apply the outcome (a reply that resolves nothing is a no-op).
- */
-export async function applyAnswerReply(args: AnswerReplyArgs): Promise<void> {
-  const classification = await classifyAnswer(args.record.question, args.replyText);
-  const outcome = decideOutcome([{ classification, permalink: args.replyPermalink }]);
-  if (!outcome) return;
-  await applyAnswerDecision({ record: args.record, period: args.period, outcome });
+  const key = `${a.record.gapType}:${a.record.date}`;
+  const updated = setAskState({ [key]: a.record }, key, a.outcome.state, a.outcome.note);
+  await writeAsks(a.period, updated);
 }

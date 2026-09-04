@@ -1,7 +1,7 @@
 /**
  * Pure CLI shaping for the remember command (S6): arg parsing, period resolution,
  * and the outcome decision that turns a thread's classified replies into an ask
- * state transition + (optionally) a resolutions-store exception. No
+ * state transition + (optionally) a pilot-origin escalation for approvers. No
  * server/Next/fs imports — unit-tested.
  */
 import type { AskState } from "../lib/asks";
@@ -30,12 +30,14 @@ export interface ClassifiedReply {
 export interface Outcome {
   /** New ask state to set. */
   state: AskState;
-  /** Write an accepted-exception resolution for the day. */
-  writeException: boolean;
-  /** Summary note carried to the ask record / resolution. */
+  /** Create a pilot-origin proposal for approvers (never write a resolution directly). */
+  escalate: boolean;
+  /** Summary note carried to the ask record. */
   note: string;
   /** Evidence permalink (the deciding reply), when any. */
   evidencePermalink: string;
+  /** The claim text to escalate, when `escalate` is true. */
+  claimText?: string;
 }
 
 export function parseArgs(argv: string[]): RememberArgs {
@@ -66,10 +68,12 @@ export function resolvePeriod(args: RememberArgs, today: string): Period {
 
 /**
  * Decide a thread's outcome from its classified replies (pure):
- *  - any accepted_exception → RESOLVED + write a resolutions-store exception.
- *  - else any data_provided → RESOLVED (the gap was filled; no exception needed).
- *  - else any reply at all   → ANSWERED (human responded but gap unresolved).
- *  - no replies              → null (leave the ask untouched).
+ *  - any accepted_exception → ESCALATED (a pilot-origin proposal for approvers;
+ *    never a direct resolution write).
+ *  - else any data_provided → ANSWERED (the gap may be filled; the next verdict
+ *    recompute verifies it live — no exception needed).
+ *  - else any reply at all  → ANSWERED (human responded but gap unresolved).
+ *  - no replies             → null (leave the ask untouched).
  * The first matching reply (in order) is the deciding evidence.
  */
 export function decideOutcome(replies: ClassifiedReply[]): Outcome | null {
@@ -77,12 +81,23 @@ export function decideOutcome(replies: ClassifiedReply[]): Outcome | null {
 
   const exception = replies.find((r) => r.classification.type === "accepted_exception");
   if (exception) {
-    return { state: "RESOLVED", writeException: true, note: exception.classification.note, evidencePermalink: exception.permalink };
+    return {
+      state: "ESCALATED",
+      escalate: true,
+      note: exception.classification.note,
+      evidencePermalink: exception.permalink,
+      claimText: exception.classification.note,
+    };
   }
   const provided = replies.find((r) => r.classification.type === "data_provided");
   if (provided) {
-    return { state: "RESOLVED", writeException: false, note: provided.classification.note, evidencePermalink: provided.permalink };
+    return {
+      state: "ANSWERED",
+      escalate: false,
+      note: `дані надано — перевірка при наступному розрахунку: ${provided.classification.note}`,
+      evidencePermalink: provided.permalink,
+    };
   }
   const last = replies[replies.length - 1];
-  return { state: "ANSWERED", writeException: false, note: last.classification.note, evidencePermalink: last.permalink };
+  return { state: "ANSWERED", escalate: false, note: last.classification.note, evidencePermalink: last.permalink };
 }
