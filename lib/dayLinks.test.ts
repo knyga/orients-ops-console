@@ -1,6 +1,6 @@
 // lib/dayLinks.test.ts
 import { describe, expect, it } from "vitest";
-import { collectDayNodes, planRelink, renderLinks, summaryChunkFor, type DayNodes, type OutboundRowLike } from "./dayLinks";
+import { collectDayNodes, latestTextForTs, planRelink, renderLinks, summaryChunkFor, type DayNodes, type OutboundRowLike } from "./dayLinks";
 import { LINKS_MARKER, withLinksRegion } from "./linksRegion";
 import { contentRev } from "./outboundKeys";
 import type { PublishedLog } from "./published";
@@ -8,7 +8,7 @@ import type { NotifiedLog } from "./bonusNotified";
 
 const url = (ts: string) => `https://w.slack.com/archives/C1/p${ts.replace(".", "")}`;
 const row = (o: Partial<OutboundRowLike> & { key: string }): OutboundRowLike => ({
-  feature: "x", status: "sent", ts: "9.9", text: "", channel: "field-qa", ...o,
+  feature: "x", status: "sent", ts: "9.9", text: "", channel: "field-qa", sentAt: null, ...o,
 });
 
 const published: PublishedLog = {
@@ -75,6 +75,48 @@ describe("collectDayNodes", () => {
     expect(r1.bonusText).toBeUndefined();
     expect(r1.zvitReplyTs).toBeUndefined();
     expect(r1.zvitReplyText).toBeUndefined();
+  });
+  it("uses the newest SENT row sharing a ts as the current text — a links edit row wins over the original reminder/bonus/zvit-reply post", () => {
+    const withEdits: OutboundRowLike[] = [
+      ...outbound,
+      row({ key: "links-edit:reminder:2026-09-03:abc", feature: "links", ts: "50.0", text: "🛸 Звіт по дронах за 03.09\n<@U1> — …\n🔗 <url|Звіт>", sentAt: "2026-09-03T09:00:00Z" }),
+      row({ key: "links-edit:bonus:2026-09-03#100.1:abc", feature: "links", ts: "300.1", text: "💰 Бонуси за 2026-09-03 (попередньо): разом 700 грн\n🔗 <url|Звіт>", sentAt: "2026-09-03T09:00:00Z" }),
+      row({ key: "links-zvit-edit:100.2:abc", feature: "links", ts: "400.2", text: "🔗 <url|Вердикт> · <url|Дрони>", sentAt: "2026-09-03T09:00:00Z" }),
+    ];
+    const n = collectDayNodes({ date: "2026-09-03", channel: "field-qa", published, notified, outbound: withEdits });
+    expect(n.reminderText).toBe("🛸 Звіт по дронах за 03.09\n<@U1> — …\n🔗 <url|Звіт>");
+    expect(n.reports[0].bonusText).toBe("💰 Бонуси за 2026-09-03 (попередньо): разом 700 грн\n🔗 <url|Звіт>");
+    expect(n.reports[1].zvitReplyText).toBe("🔗 <url|Вердикт> · <url|Дрони>");
+  });
+  it("ignores an edit row sharing a ts but posted to a foreign channel when picking the current text", () => {
+    const foreignEdit: OutboundRowLike[] = [
+      ...outbound,
+      row({ key: "links-edit:reminder:2026-09-03:abc", feature: "links", ts: "50.0", text: "🔗 foreign edit", channel: "orients-ops-console-test", sentAt: "2026-09-03T09:00:00Z" }),
+    ];
+    const n = collectDayNodes({ date: "2026-09-03", channel: "field-qa", published, notified, outbound: foreignEdit });
+    expect(n.reminderText).toBe("🛸 Звіт по дронах за 03.09\n<@U1> — …");
+  });
+});
+
+describe("latestTextForTs", () => {
+  it("picks the newest sent row by sentAt sharing the ts, ignoring non-sent rows and other ts", () => {
+    const rows: OutboundRowLike[] = [
+      row({ key: "a", ts: "1.1", text: "post", sentAt: "2026-09-01T00:00:00Z" }),
+      row({ key: "b", ts: "1.1", text: "edit", sentAt: "2026-09-02T00:00:00Z" }),
+      row({ key: "c", ts: "1.1", text: "not-sent", status: "failed", sentAt: "2026-09-03T00:00:00Z" }),
+      row({ key: "d", ts: "9.9", text: "other-ts", sentAt: "2026-09-04T00:00:00Z" }),
+    ];
+    expect(latestTextForTs(rows, "1.1")).toBe("edit");
+  });
+  it("treats a null sentAt as oldest", () => {
+    const rows: OutboundRowLike[] = [
+      row({ key: "a", ts: "1.1", text: "post", sentAt: null }),
+      row({ key: "b", ts: "1.1", text: "edit", sentAt: "2026-09-01T00:00:00Z" }),
+    ];
+    expect(latestTextForTs(rows, "1.1")).toBe("edit");
+  });
+  it("returns undefined when no sent row shares the ts", () => {
+    expect(latestTextForTs([row({ key: "a", ts: "1.1", text: "x" })], "2.2")).toBeUndefined();
   });
 });
 
@@ -165,6 +207,19 @@ describe("planRelink", () => {
       reports: [{ ...base.reports[0], verdictText: withLinksRegion(base.reports[0].verdictText!, verdictLine), zvitReplyTs: "400.1", zvitReplyText: zvitLine }],
     };
     expect(planRelink(current, { permalink: url, zvitReply: true })).toEqual([]);
+  });
+  it("regression: no reminder edit when the current 🔗 line lives in a links EDIT row rather than the reminder's original post row", () => {
+    const reminderLine = renderLinks({ kind: "reminder", date: "2026-09-03" }, base, url)!;
+    const localPublished: PublishedLog = {
+      "2026-09-03#100.1": { date: "2026-09-03", reportTs: "100.1", channel: "field-qa", text: base.reports[0].verdictText!, ts: "200.1", postedAt: "" },
+    };
+    const localOutbound: OutboundRowLike[] = [
+      row({ key: "drone-reminder:2026-09-03", feature: "drone-reminder", ts: "50.0", text: base.reminderText!, sentAt: "2026-09-03T06:00:00Z" }),
+      row({ key: "links-edit:reminder:2026-09-03:abc", feature: "links", ts: "50.0", text: withLinksRegion(base.reminderText!, reminderLine), sentAt: "2026-09-03T09:00:00Z" }),
+    ];
+    const nodes = collectDayNodes({ date: "2026-09-03", channel: "field-qa", published: localPublished, notified: {}, outbound: localOutbound });
+    const edits = planRelink(nodes, { permalink: url, zvitReply: false });
+    expect(edits.some((e) => e.target.kind === "reminder")).toBe(false);
   });
   it("edits a stale Звіт reply under its own edit key", () => {
     const stale: DayNodes = { ...base, reports: [{ ...base.reports[0], zvitReplyTs: "400.1", zvitReplyText: `${LINKS_MARKER}<old|Вердикт>` }] };

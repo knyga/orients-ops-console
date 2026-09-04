@@ -68,19 +68,25 @@ export async function planRelinkForPeriod(
   // same-month window, but a cross-month window's range key was never
   // written under); read every month the period touches and merge.
   const months = monthsCovering(period);
-  const [publishedLogs, notifiedLogs, reminders, summaries, bonusRows] = await Promise.all([
+  const [publishedLogs, notifiedLogs, reminders, summaries, bonusRows, linksRows] = await Promise.all([
     Promise.all(months.map((m) => readPublished(m))),
     Promise.all(months.map((m) => readNotified(m))),
     readOutboundByFeature(DRONE_REMINDER_FEATURE),
     readOutboundByFeature("field-summary"),
     readOutboundByFeature("bonus"),
+    readOutboundByFeature(LINKS_FEATURE),
   ]);
   const published: Awaited<ReturnType<typeof readPublished>> = Object.assign({}, ...publishedLogs);
   const notified: Awaited<ReturnType<typeof readNotified>> = Object.assign({}, ...notifiedLogs);
   const reportTss = Object.values(published).map((e) => e.reportTs).filter((t): t is string => Boolean(t));
   const zvitRows = (await Promise.all(reportTss.map((t) => findSentByKey(linksZvitKey(t))))).filter((r): r is NonNullable<typeof r> => r !== null);
-  const outbound: OutboundRowLike[] = [...reminders, ...summaries, ...bonusRows, ...zvitRows].map((r) => ({
-    key: r.key, feature: r.feature, status: r.status, ts: r.ts, text: r.text, channel: r.channel,
+  // `linksRows` (every "links"-feature row: reminder/verdict/bonus/zvit-reply
+  // edits + the zvit-reply post) is what makes an edit's CURRENT text visible
+  // to collectDayNodes/latestTextForTs — without it the planner only ever saw
+  // a target's ORIGINAL post row and would re-plan an edit that had already
+  // landed under its own key.
+  const outbound: OutboundRowLike[] = [...reminders, ...summaries, ...bonusRows, ...zvitRows, ...linksRows].map((r) => ({
+    key: r.key, feature: r.feature, status: r.status, ts: r.ts, text: r.text, channel: r.channel, sentAt: r.sentAt,
   }));
 
   const candidates = new Set<string>(dates ?? []);
@@ -109,6 +115,15 @@ export async function relinkDays(period: Period, dates: string[] | null, opts: R
     for (const e of day.edits) {
       if (!opts.publish) { log(`field-links (dry-run): would ${e.op} ${e.key}`); continue; }
       try {
+        // Defence in depth: with the planner now reading a target's LATEST
+        // text (including its own prior edit rows), this should be a steady-
+        // state no-op — but a stale plan (a concurrent run, or a caller that
+        // planned once and applies later) can still carry an edit whose key
+        // is already SENT. Applying it anyway would have the chokepoint dedup
+        // it (returning the prior ts unchanged), which this loop used to
+        // miscount as a fresh send.
+        const already = await findSentByKey(e.key);
+        if (already) { res.skipped += 1; log(`field-links: ${e.key} already sent — skipped`); continue; }
         const meta = { key: e.key, feature: LINKS_FEATURE, channel: channelName, trigger: opts.trigger };
         let ts: string;
         if (e.op === "post") {

@@ -14,7 +14,7 @@
  * No DB / Slack / Next imports; unit-tested.
  */
 import { LINKS_MARKER, splitLinksRegion, withLinksRegion } from "./linksRegion";
-import { bonusThreadKey, contentRev, linksEditKey, linksZvitEditKey, linksZvitKey, type LinksTarget } from "./outboundKeys";
+import { contentRev, linksEditKey, linksZvitEditKey, linksZvitKey, type LinksTarget } from "./outboundKeys";
 import { droneReminderKey } from "./droneReminderPlan";
 import { reportKey } from "./fieldDayVerdict";
 import type { PublishedLog } from "./published";
@@ -27,6 +27,10 @@ export interface OutboundRowLike {
   ts: string | null;
   text: string;
   channel: string;
+  /** When the row was actually sent (null for a pending/failed row). Used to
+   *  pick the CURRENT text among several rows that share a target ts — see
+   *  `latestTextForTs`. */
+  sentAt: string | null;
 }
 
 export interface ReportNodes {
@@ -70,6 +74,25 @@ function sentRow(rows: OutboundRowLike[], pred: (r: OutboundRowLike) => boolean)
   return rows.find((r) => r.status === "sent" && r.ts && pred(r));
 }
 
+/**
+ * The CURRENT text of a target message: among SENT rows sharing `ts` (an
+ * original post plus zero or more later edit rows recorded under their own
+ * key — see the design doc's "Link line" section), the text of the one with
+ * the greatest `sentAt` (a null `sentAt` sorts as oldest). Non-sent rows and
+ * rows for a different ts are ignored. Fixes the bug where the planner read
+ * a target's ORIGINAL post row for its text, re-planned an edit that had
+ * already landed under a different key, and the chokepoint's dedup return
+ * value (a non-empty ts) was miscounted as a fresh send.
+ */
+export function latestTextForTs(rows: OutboundRowLike[], ts: string): string | undefined {
+  let best: OutboundRowLike | undefined;
+  for (const r of rows) {
+    if (r.status !== "sent" || r.ts !== ts) continue;
+    if (!best || (r.sentAt ?? "") > (best.sentAt ?? "")) best = r;
+  }
+  return best?.text;
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -88,6 +111,9 @@ export function summaryChunkFor(date: string, rows: OutboundRowLike[], channel: 
 
 export function collectDayNodes(input: CollectInput): DayNodes {
   const { date, channel, published, notified, outbound } = input;
+  // Text lookups must stay within this cluster's channel — a foreign-channel
+  // row can share a ts by coincidence in tests, and must never leak in.
+  const channelRows = outbound.filter((r) => r.channel === channel);
   const reminder = sentRow(outbound, (r) => r.key === droneReminderKey(date) && r.channel === channel);
   const reports: ReportNodes[] = Object.values(published)
     .filter((e) => e.date === date && e.channel === channel && e.reportTs)
@@ -99,20 +125,20 @@ export function collectDayNodes(input: CollectInput): DayNodes {
       const bonusTs = notified[key]?.threadTs;
       if (bonusTs) {
         node.bonusTs = bonusTs;
-        const bonusRow = sentRow(outbound, (r) => r.key === bonusThreadKey(key) && r.channel === channel);
-        if (bonusRow) node.bonusText = bonusRow.text;
+        const bonusText = latestTextForTs(channelRows, bonusTs);
+        if (bonusText !== undefined) node.bonusText = bonusText;
       }
       const zvit = sentRow(outbound, (r) => r.key === linksZvitKey(reportTs) && r.channel === channel);
       if (zvit) {
         node.zvitReplyTs = zvit.ts as string;
-        node.zvitReplyText = zvit.text;
+        node.zvitReplyText = latestTextForTs(channelRows, zvit.ts as string) ?? zvit.text;
       }
       return node;
     });
   const summaryTs = summaryChunkFor(date, outbound, channel);
   return {
     date,
-    ...(reminder ? { reminderTs: reminder.ts as string, reminderText: reminder.text } : {}),
+    ...(reminder ? { reminderTs: reminder.ts as string, reminderText: latestTextForTs(channelRows, reminder.ts as string) ?? reminder.text } : {}),
     reports,
     ...(summaryTs ? { summaryTs } : {}),
   };

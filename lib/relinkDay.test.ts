@@ -89,6 +89,23 @@ describe("relinkDays", () => {
     await expect(relinkDays(period, ["2026-09-03"], { publish: false, trigger: "cli", zvitReply: false, channel: "nope" })).rejects.toThrow(/не відстежується/);
   });
 
+  it("reads outbound rows for the links feature too, so an edit row's current text is visible to the planner", async () => {
+    await relinkDays(period, ["2026-09-03"], { publish: false, trigger: "cli", zvitReply: true });
+    expect(m.readOutboundByFeature).toHaveBeenCalledWith("links");
+  });
+
+  it("a dedup hit at the chokepoint (findSentByKey already has a sent row for the planned key) counts as skipped, not sent, skips the Slack call and the write-back", async () => {
+    m.findSentByKey.mockImplementation(async (key: string) =>
+      key.startsWith("links-edit:verdict:")
+        ? { key, feature: "links", status: "sent", ts: "200.1", text: "existing", channel: "field-qa", sentAt: "2026-09-03T09:00:00Z" }
+        : null);
+    const r = await relinkDays(period, ["2026-09-03"], { publish: true, trigger: "cron", zvitReply: true });
+    expect(m.updateMessage).not.toHaveBeenCalledWith("C08GY2NKF9D", "200.1", expect.anything(), expect.anything());
+    expect(m.writePublished).not.toHaveBeenCalled();
+    expect(r.skipped).toBe(1);
+    expect(r.sent).toBe(2); // reminder edit + zvit post still go through
+  });
+
   it("a cross-month period reads published/notified per covered month and plans both days", async () => {
     const augustEntry = { date: "2026-08-25", reportTs: "300.1", channel: "field-qa", text: "✅ aug", ts: "300.2", postedAt: "" };
     const septEntry = { date: "2026-09-03", reportTs: "100.1", channel: "field-qa", text: "✅ v1", ts: "200.1", postedAt: "" };
