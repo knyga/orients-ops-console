@@ -21,7 +21,7 @@ import { readOutboundByFeature, findSentByKey } from "./outbound";
 import { collectDayNodes, planRelink, type DayNodes, type OutboundRowLike, type RelinkEdit } from "./dayLinks";
 import { DRONE_REMINDER_FEATURE } from "./droneReminderPlan";
 import { LINKS_FEATURE, linksZvitKey, type SendTrigger } from "./outboundKeys";
-import type { Period } from "./period";
+import { monthsCovering, type Period } from "./period";
 
 const DEFAULT_CHANNEL = "field-qa";
 
@@ -64,13 +64,19 @@ export async function planRelinkForPeriod(
 ): Promise<{ channelId: string; days: { date: string; nodes: DayNodes; edits: RelinkEdit[] }[] }> {
   const channel = TRACKED_CHANNELS.find((c) => c.name === channelName);
   if (!channel) throw new Error(`канал ${channelName} не відстежується — 🔗 редагуємо лише у відстежуваних каналах.`);
-  const [published, notified, reminders, summaries, bonusRows] = await Promise.all([
-    readPublished(period),
-    readNotified(period),
+  // published/notified are stored per calendar month (periodKey collapses a
+  // same-month window, but a cross-month window's range key was never
+  // written under); read every month the period touches and merge.
+  const months = monthsCovering(period);
+  const [publishedLogs, notifiedLogs, reminders, summaries, bonusRows] = await Promise.all([
+    Promise.all(months.map((m) => readPublished(m))),
+    Promise.all(months.map((m) => readNotified(m))),
     readOutboundByFeature(DRONE_REMINDER_FEATURE),
     readOutboundByFeature("field-summary"),
     readOutboundByFeature("bonus"),
   ]);
+  const published: Awaited<ReturnType<typeof readPublished>> = Object.assign({}, ...publishedLogs);
+  const notified: Awaited<ReturnType<typeof readNotified>> = Object.assign({}, ...notifiedLogs);
   const reportTss = Object.values(published).map((e) => e.reportTs).filter((t): t is string => Boolean(t));
   const zvitRows = (await Promise.all(reportTss.map((t) => findSentByKey(linksZvitKey(t))))).filter((r): r is NonNullable<typeof r> => r !== null);
   const outbound: OutboundRowLike[] = [...reminders, ...summaries, ...bonusRows, ...zvitRows].map((r) => ({

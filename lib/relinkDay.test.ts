@@ -24,7 +24,7 @@ vi.mock("./published", async (orig) => ({
 vi.mock("./bonusNotified", async (orig) => ({ ...(await orig<typeof import("./bonusNotified")>()), readNotified: m.readNotified }));
 vi.mock("./outbound", () => ({ readOutboundByFeature: m.readOutboundByFeature, findSentByKey: m.findSentByKey }));
 
-import { relinkDays } from "./relinkDay";
+import { planRelinkForPeriod, relinkDays } from "./relinkDay";
 
 const period = { start: "2026-09-01", end: "2026-09-30" };
 const entry = { date: "2026-09-03", reportTs: "100.1", channel: "field-qa", text: "✅ v1", ts: "200.1", postedAt: "" };
@@ -87,5 +87,22 @@ describe("relinkDays", () => {
 
   it("refuses an untracked channel", async () => {
     await expect(relinkDays(period, ["2026-09-03"], { publish: false, trigger: "cli", zvitReply: false, channel: "nope" })).rejects.toThrow(/не відстежується/);
+  });
+
+  it("a cross-month period reads published/notified per covered month and plans both days", async () => {
+    const augustEntry = { date: "2026-08-25", reportTs: "300.1", channel: "field-qa", text: "✅ aug", ts: "300.2", postedAt: "" };
+    const septEntry = { date: "2026-09-03", reportTs: "100.1", channel: "field-qa", text: "✅ v1", ts: "200.1", postedAt: "" };
+    m.readPublished.mockImplementation(async (p: { start: string; end: string }) =>
+      p.start === "2026-08-01" ? { "2026-08-25#300.1": augustEntry } : { "2026-09-03#100.1": septEntry });
+    m.readOutboundByFeature.mockResolvedValue([]);
+    const crossPeriod = { start: "2026-08-20", end: "2026-09-04" };
+    const r = await planRelinkForPeriod(crossPeriod, null, "field-qa", true);
+    expect(r.days.map((d) => d.date)).toEqual(["2026-08-25", "2026-09-03"]);
+    expect(m.readPublished).toHaveBeenCalledTimes(2);
+    expect(m.readPublished).toHaveBeenCalledWith({ start: "2026-08-01", end: "2026-08-31" });
+    expect(m.readPublished).toHaveBeenCalledWith({ start: "2026-09-01", end: "2026-09-30" });
+    expect(m.readNotified).toHaveBeenCalledTimes(2);
+    expect(m.readNotified).toHaveBeenCalledWith({ start: "2026-08-01", end: "2026-08-31" });
+    expect(m.readNotified).toHaveBeenCalledWith({ start: "2026-09-01", end: "2026-09-30" });
   });
 });
