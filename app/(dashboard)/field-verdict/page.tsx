@@ -38,6 +38,8 @@ export default function FieldVerdictPage() {
   const [report, setReport] = useState<VerdictReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ anchor: string; details: string[] } | null>(null);
+  type LinksDay = { date: string; nodes: { reminderTs?: string; summaryTs?: string; reports: { reportTs: string; verdictTs?: string; bonusTs?: string; zvitReplyTs?: string }[] }; edits: { op: string; key: string }[] };
+  const [links, setLinks] = useState<LinksDay[] | null>(null);
 
   const load = useCallback(async (key: string) => {
     setError(null);
@@ -57,6 +59,16 @@ export default function FieldVerdictPage() {
       if (res.ok) {
         const body = (await res.json()) as { anchor: string; details: string[] };
         setSummary({ anchor: body.anchor, details: body.details });
+      }
+    } catch {
+      /* panel simply stays hidden */
+    }
+    setLinks(null);
+    try {
+      const res = await fetch(`/api/field-links?period=${encodeURIComponent(key)}`);
+      if (res.ok) {
+        const body = (await res.json()) as { days: LinksDay[] };
+        setLinks(body.days);
       }
     } catch {
       /* panel simply stays hidden */
@@ -164,6 +176,39 @@ export default function FieldVerdictPage() {
                 <MrkdwnBlock text={d} />
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* Cross-links twin — what `npm run field-links` would edit (dry-run view) */}
+      {links && links.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-slate-900">Зв&apos;язки між повідомленнями (#field-qa)</h2>
+          <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs font-medium uppercase tracking-wide text-slate-400">
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2 text-center">Дрони</th>
+                  <th className="px-3 py-2">Звіти (вердикт / бонуси / 🔗-відповідь)</th>
+                  <th className="px-3 py-2 text-center">Підсумок</th>
+                  <th className="px-3 py-2 text-right">Pending edits</th>
+                </tr>
+              </thead>
+              <tbody>
+                {links.map((d) => (
+                  <tr key={d.date} className="border-b border-slate-100">
+                    <td className="px-3 py-2 font-mono text-xs">{d.date}</td>
+                    <td className="px-3 py-2 text-center">{d.nodes.reminderTs ? "✓" : "–"}</td>
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {d.nodes.reports.map((r, i) => `${i + 1}: ${r.verdictTs ? "✓" : "–"}/${r.bonusTs ? "✓" : "–"}/${r.zvitReplyTs ? "✓" : "–"}`).join("  ")}
+                    </td>
+                    <td className="px-3 py-2 text-center">{d.nodes.summaryTs ? "✓" : "–"}</td>
+                    <td className="px-3 py-2 text-right">{d.edits.length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}
