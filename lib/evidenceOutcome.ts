@@ -16,7 +16,8 @@ export interface OutcomeArgs {
   day: DayVerdict | null;
   byName: string;
   hints: ReplyHints;
-  linkedVideos: LinkedVideo[];
+  /** null = the Vimeo lookup failed/was skipped (unknown), never "video does not exist". */
+  linkedVideos: LinkedVideo[] | null;
   datasetLinkDates: Map<string, string>;
 }
 
@@ -30,19 +31,24 @@ function numbersLine(d: DayVerdict): string {
 
 function causeHints(a: OutcomeArgs, date: string): string[] {
   const out: string[] = [];
-  for (const l of a.hints.vimeoLinks) {
-    const v = a.linkedVideos.find((x) => x.id === l.id);
-    if (!v) { out.push(`відео ${l.url} не знайдено в акаунті Vimeo`); continue; }
-    const named = videoNameDate(v.name, v.created_time);
-    if (named === null) {
-      const uploadDate = videoUploadDate(v.created_time);
-      out.push(
-        `відео «${v.name}» без дати в назві — зараховано на ${ddmm(uploadDate)} (дата завантаження); перейменуйте, додавши дату у форматі YYYY-MM-DD — ${date} (${ddmm(date)})`,
-      );
-      continue;
-    }
-    if (named !== date) {
-      out.push(`відео «${v.name}» датоване ${ddmm(named)}, не цим днем`);
+  // linkedVideos === null means the Vimeo lookup failed or was skipped — we
+  // genuinely don't know whether the hinted video exists, so never claim it's
+  // missing (that would misreport an outage as "your video does not exist").
+  if (a.linkedVideos !== null) {
+    for (const l of a.hints.vimeoLinks) {
+      const v = a.linkedVideos.find((x) => x.id === l.id);
+      if (!v) { out.push(`відео ${l.url} не знайдено в акаунті Vimeo`); continue; }
+      const named = videoNameDate(v.name, v.created_time);
+      if (named === null) {
+        const uploadDate = videoUploadDate(v.created_time);
+        out.push(
+          `відео «${v.name}» без дати в назві — зараховано на ${ddmm(uploadDate)} (дата завантаження); перейменуйте, додавши дату у форматі YYYY-MM-DD — ${date} (${ddmm(date)})`,
+        );
+        continue;
+      }
+      if (named !== date) {
+        out.push(`відео «${v.name}» датоване ${ddmm(named)}, не цим днем`);
+      }
     }
   }
   for (const p of a.hints.datasetPermalinks) {

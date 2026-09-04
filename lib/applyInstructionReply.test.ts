@@ -169,6 +169,22 @@ describe("applyInstructionReply — per-reply outbound salt (flip-back must re-p
     spy.mockRestore();
   });
 
+  it("a proposal echo that returns \"\" (skipped send) CANCELS the unseen proposal and rejects, like a throw", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    postMessage.mockResolvedValue("");
+    classifyInstruction.mockResolvedValue({ intent: "instruction", axis: "day", decision: "accepted_exception", reason: "x" });
+
+    await expect(
+      applyInstructionReply({
+        entry: entry(null), period, replyText: "прийняти", approverName: "Oleksandr K",
+        replyPermalink: "https://slack/p", replyTs: "1788510237.178909",
+      }),
+    ).rejects.toThrow(/skipped/);
+
+    expect(settleProposal).toHaveBeenCalledWith(expect.objectContaining({ id: "p1" }), "cancel");
+    spy.mockRestore();
+  });
+
   it("a cancel note is keyed by the cancelling reply's ts", async () => {
     readActiveProposals.mockResolvedValue([activeProposal]);
     classifyInstruction.mockResolvedValue({ intent: "cancel" });

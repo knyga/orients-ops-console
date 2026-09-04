@@ -82,8 +82,9 @@ export async function escalateClaim(a: {
   if (!created) return { created: false, proposalId: proposal.id };
   const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
   if (channel) {
+    let ts: string;
     try {
-      await postMessage(
+      ts = await postMessage(
         channel.id,
         renderEscalationEcho({ byName: a.userName, claimText: a.claim.text, summaryUk, verifyLine: a.verifyLine }),
         { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "escalate", a.replyTs), feature: "evidence", channel: channel.name, trigger: a.trigger },
@@ -102,6 +103,19 @@ export async function escalateClaim(a: {
       }
       console.error("escalateClaim: escalation echo post failed — proposal cancelled:", err);
       throw err;
+    }
+    if (!ts) {
+      // postMessage returns "" (no throw) when the outbound chokepoint SKIPPED
+      // the send because a stuck `pending` reservation already held the key —
+      // the echo was never posted. That's just as unseen as a throw: treat it
+      // identically.
+      try {
+        await settleProposal(proposal, "cancel");
+      } catch (cancelErr) {
+        console.error("escalateClaim: cancelling the unseen proposal failed:", cancelErr);
+      }
+      console.error("escalateClaim: escalation echo send was skipped (stuck pending reservation) — proposal cancelled");
+      throw new Error("escalateClaim: echo send was skipped (stuck pending reservation) — proposal cancelled");
     }
   }
   try {

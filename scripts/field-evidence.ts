@@ -62,7 +62,7 @@ async function main(): Promise<void> {
       const report = await computeVerdicts(target.period, { onLog: (m) => process.stderr.write(m + "\n") });
       const fresh = findVerdictRow(report.days, entry.date, entry.reportTs);
       process.stdout.write(`fresh status (dry-run, not persisted): ${fresh?.status ?? "not found"} — video ${fresh?.videoMinutes ?? "?"} min, dataset ${fresh?.datasetStatus ?? "?"}\n`);
-      const preview = evidenceOutcome({ day: fresh, byName: actor.userName, hints, linkedVideos: [], datasetLinkDates: new Map() });
+      const preview = evidenceOutcome({ day: fresh, byName: actor.userName, hints, linkedVideos: null, datasetLinkDates: new Map() });
       process.stdout.write(`would post (links not re-checked in dry-run): ${preview.text}\n`);
     }
     process.stdout.write("(dry-run — pass --write to perform)\n");

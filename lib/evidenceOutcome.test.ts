@@ -86,6 +86,11 @@ describe("evidenceOutcome", () => {
     expect(r.text).not.toContain("бракує");
     expect(r.text).toContain("телеметрією");
   });
+  it("linkedVideos === null (unknown — lookup failed/skipped) never claims a hinted video is missing", () => {
+    const hints: ReplyHints = { ...noHints, vimeoLinks: [{ url: "https://vimeo.com/1", id: "1" }] };
+    const r = evidenceOutcome({ day: day({}), byName: "Тарас", hints, linkedVideos: null, datasetLinkDates: new Map() });
+    expect(r.text).not.toContain("не знайдено");
+  });
   it("a dotted DD.MM.YYYY name isn't recognized by the date parser → treated as no date, not mis-dated", () => {
     const hints: ReplyHints = { ...noHints, vimeoLinks: [{ url: "https://vimeo.com/3", id: "3" }] };
     const r = evidenceOutcome({

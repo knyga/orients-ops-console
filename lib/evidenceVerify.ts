@@ -89,16 +89,21 @@ export async function verifyEvidence(a: VerifyArgs): Promise<VerifyResult> {
   // throw here would let the caller report «не вдалося перевірити» over a
   // verification that in fact happened — so each one soft-fails and we answer
   // with whatever diagnostics we have.
-  const linkedVideos: LinkedVideo[] = [];
+  // null = the lookup failed/was skipped — genuinely unknown, never "not found"
+  // (evidenceOutcome's causeHints treats null as "don't hint about Vimeo at all").
+  let linkedVideos: LinkedVideo[] | null = [];
   if (a.hints.vimeoLinks.length) {
     try {
       const videos = await fetchVideosInPeriod(a.period.start, a.period.end);
+      const found: LinkedVideo[] = [];
       for (const l of a.hints.vimeoLinks) {
         const idBoundary = new RegExp(`/${l.id}(?!\\d)`);
         const v = videos.find((x) => idBoundary.test(x.link));
-        if (v) linkedVideos.push({ id: l.id, name: v.name, created_time: v.created_time, link: v.link });
+        if (v) found.push({ id: l.id, name: v.name, created_time: v.created_time, link: v.link });
       }
+      linkedVideos = found;
     } catch (err) {
+      linkedVideos = null;
       console.error("verifyEvidence: Vimeo link lookup failed (diagnostics only):", err);
       log(`verifyEvidence: Vimeo lookup failed — answering without video diagnostics (${err instanceof Error ? err.message : String(err)})`);
     }

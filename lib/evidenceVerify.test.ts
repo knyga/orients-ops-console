@@ -90,6 +90,19 @@ describe("verifyEvidence", () => {
     expect(r.text).not.toContain("Можлива причина");
     spy.mockRestore();
   });
+  it("a failing Vimeo diagnostics lookup on a still-open day never claims the hinted video is missing (unknown, not not-found)", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    computeVerdicts.mockResolvedValue({ days: [row("NEEDS_REVIEW", 48)] });
+    fetchVideosInPeriod.mockRejectedValue(new Error("vimeo 502"));
+    const r = await verifyEvidence({
+      date: "2026-09-01", reportTs: "1.1", period,
+      hints: { ...noHints, vimeoLinks: [{ url: "https://vimeo.com/123456789", id: "123456789" }] },
+      byName: "Тарас", trigger: "webhook",
+    });
+    expect(r.outcome).toBe("still_open");
+    expect(r.text).not.toContain("не знайдено");
+    spy.mockRestore();
+  });
   it("a failing #datasets permalink lookup is soft-failed the same way", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     readChannelMessages.mockRejectedValue(new Error("mirror down"));

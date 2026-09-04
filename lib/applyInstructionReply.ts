@@ -166,8 +166,9 @@ export async function applyClassifiedInstruction(args: ClassifiedInstructionArgs
       // and a content key made the second echo dedup into silence (2026-09-04).
       // A redelivery of this reply is already stopped above (`created` false).
       const text = `📝 Зрозумів: ${summary}.${also} Підтвердьте «так»/👍 або «ні».`;
+      let ts: string;
       try {
-        await postMessage(
+        ts = await postMessage(
           channel.id,
           text,
           { key: instructionAckKey(reportKey(entry.date, entry.reportTs), "propose", replyTs), feature: "instruction", channel: channel.name, trigger },
@@ -185,6 +186,19 @@ export async function applyClassifiedInstruction(args: ClassifiedInstructionArgs
         }
         console.error("applyClassifiedInstruction: proposal echo post failed — proposal cancelled:", err);
         throw err;
+      }
+      if (!ts) {
+        // postMessage returns "" (no throw) when the outbound chokepoint SKIPPED
+        // the send because a stuck `pending` reservation already held the key —
+        // the echo was never posted. Just as unseen as a throw: treat it
+        // identically.
+        try {
+          await settleProposal(proposal, "cancel");
+        } catch (cancelErr) {
+          console.error("applyClassifiedInstruction: cancelling the unseen proposal failed:", cancelErr);
+        }
+        console.error("applyClassifiedInstruction: proposal echo send was skipped (stuck pending reservation) — proposal cancelled");
+        throw new Error("applyClassifiedInstruction: echo send was skipped (stuck pending reservation) — proposal cancelled");
       }
     }
     return { handled: "proposed", intent: c.intent };

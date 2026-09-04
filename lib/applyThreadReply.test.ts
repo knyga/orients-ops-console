@@ -103,6 +103,15 @@ describe("applyThreadReply", () => {
     expect(m.recordEvidenceEvent).not.toHaveBeenCalled();
     spy.mockRestore();
   });
+  it("an escalation echo that returns \"\" (skipped send) CANCELS the unseen proposal and rejects, like a throw", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    m.postMessage.mockResolvedValue("");
+    m.classifyThreadReply.mockResolvedValue({ intent: "claim", claim: { kind: "explanation", text: "дощ" }, reason: "" });
+    await expect(applyThreadReply({ ...base, target: verdict, replyText: "дощ" })).rejects.toThrow(/skipped/);
+    expect(m.settleProposal).toHaveBeenCalledWith(expect.objectContaining({ id: "p9" }), "cancel");
+    expect(m.recordEvidenceEvent).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
   it("claim in an ask thread maps by gap type and echoes into the ask thread", async () => {
     m.classifyThreadReply.mockResolvedValue({ intent: "claim", claim: { kind: "explanation", text: "не було датасету" }, reason: "" });
     await applyThreadReply({ ...base, target: ask, replyText: "не було датасету" });
