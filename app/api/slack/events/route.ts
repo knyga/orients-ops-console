@@ -1,15 +1,20 @@
 /**
  * Slack Events API webhook — the bot's automatic reaction. Slack POSTs every
  * subscribed event here; we verify the signature and (for a thread reply in a
- * tracked channel) run the SAME S6/S7 effect the `field-remember` /
- * `field-approvals` CLIs run — only event-triggered.
+ * tracked channel) run the SAME effect the field CLIs run — only event-triggered.
  *
- * Routing for a thread reply (thread_ts = the bot's verdict/question ts):
- *   - reply under a published verdict, BY an authorized approver → applyApproverReply (S7)
- *   - reply under a bot question                                  → applyAnswerReply  (S6)
+ * Routing for a thread reply (thread_ts = the bot's verdict/question ts), since
+ * the pilot-evidence-autonomy rewrite (2026-09-04):
+ *   - ANY human reply under a published verdict OR under a bot gap question →
+ *     `applyThreadReply` (lib/applyThreadReply), the one unified handler. It
+ *     role-gates internally: an approver keeps confirm / cancel / instruction,
+ *     while everyone (pilots included) can submit evidence the bot re-checks
+ *     live, make a claim the bot escalates to the approvers, or ask a question.
+ *     The two slow intents (verify / chat) come back as `DeferredWork` and run
+ *     OFF this request via `deferThreadWork` → `/api/field/thread-reply`.
  *
- * The S6/S7 effect runs INLINE (awaited before the response). It's a Neon lookup +
- * one Claude classify + Slack edit/ack (~2-3s); Next's `after()` proved
+ * The fast half of that effect runs INLINE (awaited before the response). It's a
+ * Neon lookup + one Claude classify + Slack edit/ack (~2-3s); Next's `after()` proved
  * unreliable on Vercel, so we do the work synchronously. Each Slack event is
  * claimed by its `event_id` (lib/slackEventClaim) BEFORE any effect and
  * processed at most once, so Slack's at-least-once redelivery can never
@@ -41,8 +46,9 @@ import { TRACKED_CHANNELS } from "@/lib/slackChannels";
 import { findPublishedByTs } from "@/lib/published";
 import { findAskByTs } from "@/lib/asks";
 import { approverFor, isApprover } from "@/lib/approvers";
-import { applyInstructionReply } from "@/lib/applyInstructionReply";
-import { applyAnswerReply } from "@/lib/applyAnswer";
+import { applyThreadReply, type DeferredWork, type ReplyTarget } from "@/lib/applyThreadReply";
+import { PLACEHOLDER_UK, workPlaceholderKey } from "@/lib/threadReplyWork";
+import { personForSlackId } from "@/lib/people";
 import { permalinkFor, postMessage } from "@/lib/slack";
 import { formatWebhookFailureNotice } from "@/lib/webhookNotice";
 import { formatDmHelp } from "@/lib/dmHelp";
@@ -169,6 +175,37 @@ async function deferAgentTurn(
     console.error("slack events: AGENT_RUN_SECRET not set — cannot dispatch agent turn");
   }
   return ack({ handled: "agent", surface, deferred: true });
+}
+
+/** Post the placeholder for slow thread work and fire /api/field/thread-reply (same waitUntil pattern as deferAgentTurn). */
+async function deferThreadWork(req: Request, channelId: string, channelName: string, threadTs: string, work: DeferredWork): Promise<Response> {
+  let placeholderTs: string;
+  try {
+    placeholderTs = await postMessage(channelId, PLACEHOLDER_UK[work.kind], { key: workPlaceholderKey(work), feature: "evidence", channel: channelName, trigger: "webhook" }, threadTs);
+  } catch (err) {
+    console.error("slack events: thread-work placeholder post failed:", err);
+    return ack({ handled: work.kind, error: "placeholder-failed" });
+  }
+  // An empty ts means the chokepoint SKIPPED the send (a stuck `pending` row for
+  // this key) — there is no placeholder to edit, so don't dispatch the work. A
+  // genuine Slack redelivery never reaches here: the event_id claim above stops
+  // it, and a dedup hit returns the ORIGINAL ts (which we'd rightly re-use).
+  if (!placeholderTs) return ack({ handled: work.kind, skipped: "placeholder-send-skipped" });
+  const secret = process.env.AGENT_RUN_SECRET;
+  if (secret) {
+    waitUntil(
+      fetch(`${selfOrigin(req)}/api/field/thread-reply`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-agent-secret": secret },
+        body: JSON.stringify({ work, placeholderTs }),
+      })
+        .then((res) => console[res.ok && !res.redirected ? "log" : "error"](`slack events: thread-work self-invoke → ${res.status}`))
+        .catch((err) => console.error("slack events: thread-work self-invoke failed:", err)),
+    );
+  } else {
+    console.error("slack events: AGENT_RUN_SECRET not set — cannot dispatch thread work");
+  }
+  return ack({ handled: work.kind, deferred: true });
 }
 
 interface AgentTurnInput {
@@ -394,9 +431,10 @@ export async function POST(req: Request): Promise<Response> {
   // before the tracked-channel lookup because a mention can land in any channel.
   //
   // Slack delivers a channel @mention as TWO events (app_mention + message) with
-  // distinct event_ids, so they do NOT dedup against each other. If the mention is
-  // a reply under a published verdict / bot question thread, the sibling `message`
-  // event already drives the S6/S7 handler below — so defer those here (skip the
+  // distinct event_ids, so they do NOT dedup against each other. Behaviour here is
+  // UNCHANGED by the 2026-09-04 rewrite: if the mention is a reply under a
+  // published verdict / bot question thread, the sibling `message` event already
+  // drives the unified thread-reply handler below — so defer those here (skip the
   // agent) to avoid a spurious answer + wasted Claude call on an approver's confirm.
   if (parsed.kind === "mention") {
     if (parsed.threadTs !== parsed.ts) {
@@ -542,41 +580,27 @@ export async function POST(req: Request): Promise<Response> {
   const replyTs = parsed.replyTs;
 
   try {
-    // S7 (confirm-first): an authorized approver instructing a data change on a
-    // published verdict. The bot echoes the change and applies it ONLY once the
-    // approver confirms in-thread (a question/comment is a silent no-op).
+    // Any human reply under a published verdict or a bot gap question → the
+    // unified thread-reply handler (pilot evidence autonomy, 2026-09-04):
+    // approvers keep confirm/cancel/instruction; everyone can submit evidence
+    // (re-checked live), a claim (escalated to approvers) or ask a question.
     const pub = await findPublishedByTs(threadTs);
-    console.log(`slack events: findPublishedByTs → ${pub ? pub.entry.date : "null"}; isApprover(${userId})=${isApprover(userId)}`);
-    if (pub && isApprover(userId)) {
-      const approver = approverFor(userId)!;
+    const ask = pub ? null : await findAskByTs(threadTs);
+    if (pub || ask) {
+      const target: ReplyTarget = pub
+        ? { kind: "verdict", entry: pub.entry, period: pub.period }
+        : { kind: "ask", record: ask!.record, period: ask!.period };
+      const role = isApprover(userId) ? "approver" : "pilot";
+      const userName = approverFor(userId)?.name ?? personForSlackId(userId)?.name ?? `<@${userId}>`;
+      const date = pub ? pub.entry.date : ask!.record.date;
+      console.log(`slack events: thread reply on ${date} by ${userId} (${role})`);
       try {
-        const result = await applyInstructionReply({
-          entry: pub.entry,
-          period: pub.period,
-          replyText,
-          approverName: approver.name,
-          replyPermalink,
-          replyTs,
-          trigger: "webhook",
-        });
-        console.log(`slack events: applyInstructionReply → handled=${result.handled} applied=${result.applied ?? "-"} intent=${result.intent ?? "-"}`);
-        return ack({ date: pub.entry.date, ...result });
+        const result = await applyThreadReply({ target, replyText, userId, userName, role, replyTs, replyPermalink, trigger: "webhook" });
+        if (result.handled === "deferred") return await deferThreadWork(req, channel.id, channel.name, threadTs, result.work);
+        console.log(`slack events: applyThreadReply → handled=${result.handled} intent=${result.intent}`);
+        return ack({ date, ...result });
       } catch (err) {
-        // Recognised an approver instruction but couldn't classify/apply it —
-        // make it visible (this fires loudly if ANTHROPIC_API_KEY is missing).
-        return await failVisibly(channel, threadTs, "instruction", pub.entry.date, err);
-      }
-    }
-
-    // S6: a reply to one of the bot's S5 questions.
-    const ask = await findAskByTs(threadTs);
-    if (ask) {
-      try {
-        await applyAnswerReply({ record: ask.record, period: ask.period, replyText, replyPermalink });
-        console.log(`slack events: applyAnswerReply done for ${ask.record.date}`);
-        return ack({ handled: "answer", date: ask.record.date });
-      } catch (err) {
-        return await failVisibly(channel, threadTs, "answer", ask.record.date, err);
+        return await failVisibly(channel, threadTs, "thread-reply", date, err);
       }
     }
 
