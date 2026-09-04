@@ -24,3 +24,6 @@ docs/Personal Field Metrics */
 .claude/settings.local.json
 .vercel
 .env*
+
+# SDD scratch workspaces
+.superpowers/
