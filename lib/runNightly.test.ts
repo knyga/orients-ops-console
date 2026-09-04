@@ -12,6 +12,7 @@ const {
   syncLossLedger,
   readLossAlertState,
   writeLossAlertState,
+  relinkDays,
 } = vi.hoisted(() => ({
   syncAllChannels: vi.fn(),
   extractFieldQa: vi.fn(),
@@ -24,6 +25,7 @@ const {
   syncLossLedger: vi.fn(),
   readLossAlertState: vi.fn(),
   writeLossAlertState: vi.fn(),
+  relinkDays: vi.fn(),
 }));
 
 vi.mock("./syncChannels", () => ({ syncAllChannels, todayInFieldTz: () => "2026-07-15" }));
@@ -34,6 +36,7 @@ vi.mock("./refreshPublished", () => ({ refreshPublishedDays }));
 vi.mock("./slack", () => ({ openDm, postMessage }));
 vi.mock("./lossSync", () => ({ syncLossLedger }));
 vi.mock("./lossStore", () => ({ readLossAlertState, writeLossAlertState }));
+vi.mock("./relinkDay", () => ({ relinkDays }));
 vi.mock("./reports", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
   return { ...actual, readReportJson }; // keep the real periodKey
@@ -54,6 +57,7 @@ beforeEach(() => {
     syncLossLedger,
     readLossAlertState,
     writeLossAlertState,
+    relinkDays,
   ])
     m.mockReset();
   readReportJson.mockResolvedValue(null); // default: no committed report → extract
@@ -67,6 +71,7 @@ beforeEach(() => {
   syncLossLedger.mockResolvedValue({ rows: [], classified: 0, failed: 0 }); // no loss rows/failures → no alerts, keeps existing DM assertions intact
   readLossAlertState.mockResolvedValue(null);
   writeLossAlertState.mockResolvedValue(undefined);
+  relinkDays.mockResolvedValue({ sent: 0, skipped: 0, failed: 0, days: [], channel: "field-qa" });
 });
 
 describe("runNightly", () => {
@@ -191,5 +196,15 @@ describe("runNightly", () => {
       const dmCall = postMessage.mock.calls.find((c) => typeof c[2]?.key === "string" && c[2].key.startsWith("loss-alert:"));
       expect(dmCall?.[2].key).toBe("loss-alert:2026-07:1:2026-07-15");
     });
+  });
+
+  it("runs the cross-link stage per window month after refresh, and a relink failure never fails the night", async () => {
+    relinkDays.mockRejectedValueOnce(new Error("slack down"));
+    const summary = await runNightly({ publish: true, today: "2026-07-15" });
+    expect(relinkDays).toHaveBeenCalledWith(
+      expect.objectContaining({ start: "2026-07-01" }), null,
+      expect.objectContaining({ publish: true, trigger: "cron", zvitReply: true }),
+    );
+    expect(summary.months.length).toBeGreaterThan(0);
   });
 });

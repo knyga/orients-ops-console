@@ -29,6 +29,7 @@ import { syncLossLedger } from "./lossSync";
 import { unrecoveredLossDates, type LossRow } from "./lossLedger";
 import { readLossAlertState, writeLossAlertState } from "./lossStore";
 import { planLossAlerts, lossAlertDmKey } from "./lossNotice";
+import { relinkDays } from "./relinkDay";
 
 const FIELD_QA = "field-qa";
 const DATASETS = "datasets";
@@ -40,6 +41,8 @@ export interface NightlyMonthResult {
   skipped: string[];
   /** Published entries (verdictKeys) whose message was re-rendered and edited (dry-run: would be). */
   refreshed: string[];
+  /** Cross-link (🔗) relink stage outcome — soft stage, absent when it threw. */
+  relinked?: { sent: number; skipped: number; failed: number };
 }
 
 export interface NightlySummary {
@@ -202,6 +205,17 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
         log(`field-nightly (dry-run): would publish settled days for ${c.period.start}..${c.period.end}`);
         ({ refreshed } = await refreshPublishedDays(c.report.days, c.period, { runDate: today, dryRun: true, onLog: log }));
       }
+
+      // 3b. Cross-links (🔗) between the month's per-day messages — soft stage:
+      // cosmetic, so a Slack hiccup here never fails the night or DMs anyone.
+      let relinked: NightlyMonthResult["relinked"];
+      try {
+        const r = await relinkDays(c.period, null, { publish: opts.publish, trigger: "cron", zvitReply: true, onLog: log });
+        relinked = { sent: r.sent, skipped: r.skipped, failed: r.failed };
+      } catch (e) {
+        log(`field-links: stage skipped — ${e instanceof Error ? e.message : String(e)}`);
+      }
+
       // Anomaly worth alerting on: extraction found flight days for this month but
       // the verdict pass produced NO days at all — a silent integration break
       // (e.g. the field-qa report the verdict reads never landed). This is NOT the
@@ -220,6 +234,7 @@ export async function runNightly(opts: RunNightlyOptions): Promise<NightlySummar
         posted,
         skipped,
         refreshed,
+        relinked,
       });
     }
 

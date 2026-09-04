@@ -27,6 +27,9 @@ vi.mock("./outbound", async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)();
   return { ...actual, readOutboundByFeature: mocks.readOutboundByFeature };
 });
+vi.mock("./relinkDay", () => ({
+  relinkDays: vi.fn().mockResolvedValue({ sent: 0, skipped: 0, failed: 0, days: [], channel: "field-qa" }),
+}));
 
 import { assembleSummaryDays, postFieldSummary } from "./fieldSummaryPost";
 

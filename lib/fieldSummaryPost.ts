@@ -25,6 +25,7 @@ import { readNotified } from "./bonusNotified";
 import { readOutboundByFeature } from "./outbound";
 import { DRONE_REMINDER_FEATURE } from "./droneReminderPlan";
 import { buildMonthSummary, type SummaryDay, type SummaryStatus } from "./fieldMonthSummary";
+import { relinkDays } from "./relinkDay";
 export { parseSummaryPeriod, summaryCounts, countsUk, type SummaryCounts } from "./fieldMonthSummary";
 import type { Period } from "./period";
 
@@ -146,5 +147,15 @@ export async function postFieldSummary(args: PostFieldSummaryArgs): Promise<{ an
   for (const [i, d] of details.entries()) {
     await postMessage(channel.id, d, meta(`t${i + 1}`), threadRoot);
   }
+
+  // Reverse links: the just-posted summary chunks are never edited, but the
+  // reminder / verdict / bonus / Звіт-reply messages now gain «Підсумок».
+  try {
+    const r = await relinkDays(args.period, null, { publish: true, trigger: args.trigger, zvitReply: false, channel: channel.name });
+    console.error(`field-links: ${r.sent} sent, ${r.skipped} skipped, ${r.failed} failed`);
+  } catch (e) {
+    console.error(`field-links: stage skipped — ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   return { anchorTs, replies: details.length, days: days.length };
 }
