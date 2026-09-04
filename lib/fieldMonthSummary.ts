@@ -42,6 +42,10 @@ export interface SummaryDay {
   hasZvit: boolean;
   verdictUrl: string | null;
   zvitUrl: string | null;
+  /** The day's drone-count reminder (🛸 anchor) permalink, if the bot posted one. */
+  reminderUrl: string | null;
+  /** The bonus breakdown reply's permalink (posted by `field-bonus --notify`), if any. */
+  bonusUrl: string | null;
 }
 
 const WEEKDAYS_UK = ["нд", "пн", "вт", "ср", "чт", "пт", "сб"];
@@ -165,6 +169,8 @@ export function formatDayLine(day: SummaryDay): string {
   const links: string[] = [];
   if (day.verdictUrl) links.push(`<${day.verdictUrl}|вердикт>`);
   if (day.zvitUrl) links.push(`<${day.zvitUrl}|звіт>`);
+  if (day.reminderUrl) links.push(`<${day.reminderUrl}|дрони>`);
+  if (day.bonusUrl) links.push(`<${day.bonusUrl}|бонуси>`);
   if (links.length) parts.push(links.join(" · "));
 
   return parts.join(" · ");

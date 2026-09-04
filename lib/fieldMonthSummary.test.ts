@@ -21,6 +21,8 @@ const base: SummaryDay = {
   hasZvit: true,
   verdictUrl: "https://slack/v19",
   zvitUrl: "https://slack/z19",
+  reminderUrl: null,
+  bonusUrl: null,
 };
 
 describe("formatDayLine", () => {
@@ -188,5 +190,13 @@ describe("buildMonthSummary — header label and day count", () => {
       { ...base, date: "2026-08-20" },
     ]);
     expect(anchor).toContain("2 дні (3 звіти)");
+  });
+});
+
+describe("formatDayLine links", () => {
+  it("appends дрони and бонуси links after вердикт · звіт, omitting absent ones", () => {
+    const d = { ...base, verdictUrl: "https://x/v", zvitUrl: "https://x/z", reminderUrl: "https://x/r", bonusUrl: "https://x/b" };
+    expect(formatDayLine(d)).toMatch(/<https:\/\/x\/v\|вердикт> · <https:\/\/x\/z\|звіт> · <https:\/\/x\/r\|дрони> · <https:\/\/x\/b\|бонуси>$/);
+    expect(formatDayLine({ ...base, verdictUrl: "https://x/v", zvitUrl: null, reminderUrl: null, bonusUrl: "https://x/b" })).toMatch(/<https:\/\/x\/v\|вердикт> · <https:\/\/x\/b\|бонуси>$/);
   });
 });
