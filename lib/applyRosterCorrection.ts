@@ -1,10 +1,15 @@
 /**
  * Shared effect: apply an approver's roster correction to a published verdict.
  * SERVER-ONLY (writes to Slack + DB). Upserts the correction, edits ONLY the
- * crew suffix of the verdict message (leaving any override amendment in the body
- * intact), and posts a Ukrainian threaded ack. Idempotent via content-rev keys.
- * Mirrors lib/applyApproval.ts. Callable by the field-roster CLI (and later the
- * events webhook).
+ * crew suffix of the verdict's LIVE Slack text (`lib/liveText.ts`
+ * `liveVerdictText` — the newest sent outbound row sharing the message's ts,
+ * so an override strike or a 🔗 links line already on the message survives),
+ * and posts a Ukrainian threaded ack. Idempotent via content-rev keys. For an
+ * overridden entry, `published.text` is deliberately left untouched — it stays
+ * the pristine (pre-strike) render `lib/applyApproval.ts`'s double-strike
+ * guard needs; the struck+re-rostered text lives only in this edit's outbound
+ * row. Mirrors lib/applyApproval.ts. Callable by the field-roster CLI (and
+ * later the events webhook).
  */
 import "server-only";
 import { postMessage, updateMessage } from "./slack";
@@ -17,6 +22,7 @@ import { reportKey } from "./fieldDayVerdict";
 import type { RosterOutcome } from "../scripts/fieldRosterReport";
 import type { Period } from "./period";
 import { mentionize } from "./mention";
+import { liveVerdictText } from "./liveText";
 
 export async function applyRosterDecision(args: {
   entry: PublishedEntry;
@@ -44,12 +50,15 @@ export async function applyRosterDecision(args: {
   const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
   if (!channel) return { applied: false };
 
-  // Edit ONLY the crew suffix; keep the body (incl. any override strike), the
-  // trailing drone line AND the 🔗 links line intact — each is a disjoint region.
-  const { body, droneLine, linksLine } = splitRosterSuffix(entry.text);
+  // Edit ONLY the crew suffix; keep the body (incl. any override strike, from
+  // the message's LIVE text — never the possibly-stale `entry.text`, see
+  // lib/liveText.ts), the trailing drone line AND the 🔗 links line intact —
+  // each is a disjoint region.
+  const liveText = await liveVerdictText(entry);
+  const { body, droneLine, linksLine } = splitRosterSuffix(liveText);
   const withRoster = withRosterSuffix(body, outcome.roster);
   const updatedText = [withRoster, droneLine, linksLine].filter(Boolean).join("\n");
-  if (updatedText === entry.text) return { applied: false }; // suffix already current
+  if (updatedText === liveText) return { applied: false }; // suffix already current
 
   const key = reportKey(entry.date, entry.reportTs);
   const rev = (text: string) => (salt ? `${contentRev(text)}:${salt}` : contentRev(text));
@@ -72,6 +81,12 @@ export async function applyRosterDecision(args: {
     entry.ts,
   );
 
-  await writePublished(period, recordPublished({}, { ...entry, text: updatedText }));
+  // `published.text` is rewritten only for a NON-overridden verdict — for an
+  // overridden one it must stay the pristine (pre-strike) render the
+  // double-strike guard (formatOverride) needs; the live struck+re-rostered
+  // text now lives only in this edit's own outbound row.
+  if (entry.override == null) {
+    await writePublished(period, recordPublished({}, { ...entry, text: updatedText }));
+  }
   return { applied: true };
 }

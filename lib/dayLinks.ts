@@ -36,13 +36,15 @@ export interface OutboundRowLike {
 export interface ReportNodes {
   reportTs: string;
   verdictTs?: string;
-  verdictText?: string;
   /**
-   * true when an approver override is stamped on the published row — its DB
-   * text is the pre-strike render, so the verdict message is never edited
-   * (mirrors lib/backfillPublished's `overridden` skip).
+   * The verdict message's CURRENT Slack text — the newest sent outbound row
+   * sharing its ts (an approval/roster/links/backfill edit, or the original
+   * post when none exists), never the possibly-stale `published.text`. See
+   * `lib/liveText.ts liveVerdictText` (same rule, entry-shaped) — an
+   * approver-overridden verdict's live text already carries the strike, so
+   * the edit here never clobbers it.
    */
-  verdictOverridden?: boolean;
+  verdictText?: string;
   bonusTs?: string;
   bonusText?: string;
   zvitReplyTs?: string;
@@ -121,7 +123,7 @@ export function collectDayNodes(input: CollectInput): DayNodes {
     .map((e) => {
       const reportTs = e.reportTs as string;
       const key = reportKey(date, reportTs);
-      const node: ReportNodes = { reportTs, verdictTs: e.ts, verdictText: e.text, ...(e.override != null ? { verdictOverridden: true } : {}) };
+      const node: ReportNodes = { reportTs, verdictTs: e.ts, verdictText: latestTextForTs(channelRows, e.ts) ?? e.text };
       const bonusTs = notified[key]?.threadTs;
       if (bonusTs) {
         node.bonusTs = bonusTs;
@@ -185,13 +187,13 @@ export interface RelinkEdit {
 /**
  * The edits/posts that bring every target's 🔗 line up to date. A target whose
  * current text is unknown or empty is skipped — never edit blind. A verdict
- * whose report carries `verdictOverridden` is never edited at all: its stored
- * text is the approver-override's pre-strike render (`published.text` is
- * deliberately not rewritten by `applyApproval.ts` so a re-amend never
- * double-strikes), so an edit here would clobber the live strike with the
- * pristine body — links TO it (from the reminder, summary, etc.) still work.
- * The Звіт-thread reply is POSTED only when `zvitReply` is on and the report
- * already has a verdict; an existing reply is always kept current.
+ * IS edited even when its report carries an approver override: `verdictText`
+ * (from `collectDayNodes`) is already the message's CURRENT live text — the
+ * newest sent outbound row sharing its ts, which for an overridden verdict is
+ * the approval edit (struck body + amendment), never the stale pristine
+ * `published.text` — so appending/replacing the 🔗 line here can't clobber the
+ * live strike. The Звіт-thread reply is POSTED only when `zvitReply` is on and
+ * the report already has a verdict; an existing reply is always kept current.
  */
 export function planRelink(nodes: DayNodes, opts: { permalink: (ts: string) => string; zvitReply: boolean }): RelinkEdit[] {
   const out: RelinkEdit[] = [];
@@ -203,7 +205,7 @@ export function planRelink(nodes: DayNodes, opts: { permalink: (ts: string) => s
   };
   if (nodes.reminderTs && nodes.reminderText) edit({ kind: "reminder", date: nodes.date }, nodes.reminderTs, nodes.reminderText);
   for (const r of nodes.reports) {
-    if (r.verdictTs && r.verdictText && !r.verdictOverridden) edit({ kind: "verdict", date: nodes.date, reportTs: r.reportTs }, r.verdictTs, r.verdictText);
+    if (r.verdictTs && r.verdictText) edit({ kind: "verdict", date: nodes.date, reportTs: r.reportTs }, r.verdictTs, r.verdictText);
     if (r.bonusTs && r.bonusText) edit({ kind: "bonus", date: nodes.date, reportTs: r.reportTs }, r.bonusTs, r.bonusText);
     const target: LinksTarget = { kind: "zvit", reportTs: r.reportTs };
     const line = renderLinks(target, nodes, opts.permalink);

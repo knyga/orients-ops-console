@@ -17,8 +17,9 @@ import { permalinkFor, postMessage, updateMessage } from "./slack";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { readPublished, findPublishedByTs, writePublished, recordPublished } from "./published";
 import { readNotified } from "./bonusNotified";
-import { readOutboundByFeature, findSentByKey } from "./outbound";
+import { readOutboundByFeature, findSentByKey, findSentByTs } from "./outbound";
 import { collectDayNodes, planRelink, type DayNodes, type OutboundRowLike, type RelinkEdit } from "./dayLinks";
+import { liveVerdictText } from "./liveText";
 import { DRONE_REMINDER_FEATURE } from "./droneReminderPlan";
 import { LINKS_FEATURE, linksZvitKey, type SendTrigger } from "./outboundKeys";
 import { monthsCovering, type Period } from "./period";
@@ -80,12 +81,21 @@ export async function planRelinkForPeriod(
   const notified: Awaited<ReturnType<typeof readNotified>> = Object.assign({}, ...notifiedLogs);
   const reportTss = Object.values(published).map((e) => e.reportTs).filter((t): t is string => Boolean(t));
   const zvitRows = (await Promise.all(reportTss.map((t) => findSentByKey(linksZvitKey(t))))).filter((r): r is NonNullable<typeof r> => r !== null);
+  // Every published entry's verdict ts, resolved via findSentByTs — the same
+  // "current text = newest sent row sharing this ts" rule as lib/liveText.ts
+  // `liveVerdictText`. This is what makes an approval/roster/backfill/links
+  // EDIT of the verdict message visible to collectDayNodes/latestTextForTs:
+  // without it, a verdict whose message was edited outside the links feature
+  // (an approver override, a crew correction) would look unedited to the
+  // planner, which would then plan against the stale `published.text`.
+  const verdictTss = Object.values(published).map((e) => e.ts);
+  const verdictRows = (await Promise.all(verdictTss.map((t) => findSentByTs(t)))).flat();
   // `linksRows` (every "links"-feature row: reminder/verdict/bonus/zvit-reply
   // edits + the zvit-reply post) is what makes an edit's CURRENT text visible
   // to collectDayNodes/latestTextForTs — without it the planner only ever saw
   // a target's ORIGINAL post row and would re-plan an edit that had already
   // landed under its own key.
-  const outbound: OutboundRowLike[] = [...reminders, ...summaries, ...bonusRows, ...zvitRows, ...linksRows].map((r) => ({
+  const outbound: OutboundRowLike[] = [...reminders, ...summaries, ...bonusRows, ...zvitRows, ...linksRows, ...verdictRows].map((r) => ({
     key: r.key, feature: r.feature, status: r.status, ts: r.ts, text: r.text, channel: r.channel, sentAt: r.sentAt,
   }));
 
@@ -132,17 +142,26 @@ export async function relinkDays(period: Period, dates: string[] | null, opts: R
           if (e.target.kind === "verdict") {
             // TOCTOU guard (same as lib/refreshPublished): an approver strike or a
             // crew edit landing between planning and now must not be clobbered.
+            // Compared against the message's LIVE text (liveVerdictText), not
+            // `fresh.entry.text` — an overridden verdict's stored text is
+            // deliberately stale (see lib/liveText.ts), so comparing against it
+            // here would always "detect a change" and skip a legitimate edit.
             const fresh = await findPublishedByTs(e.ts as string);
             const reportTs = (e.target as { reportTs: string }).reportTs;
             const planned = day.nodes.reports.find((r) => r.reportTs === reportTs);
-            if (!fresh || fresh.entry.text !== planned?.verdictText) { res.skipped += 1; log(`field-links: ${e.key} changed-since-plan — skipped`); continue; }
+            const freshText = fresh ? await liveVerdictText(fresh.entry) : null;
+            if (!fresh || freshText !== planned?.verdictText) { res.skipped += 1; log(`field-links: ${e.key} changed-since-plan — skipped`); continue; }
           }
           ts = await updateMessage(channelId, e.ts as string, e.newText, meta);
         }
         if (!ts) { res.skipped += 1; log(`field-links: ${e.key} skipped by the chokepoint (stuck reservation)`); continue; }
         if (e.op === "edit" && e.target.kind === "verdict") {
+          // `published.text` is rewritten only for a NON-overridden verdict —
+          // for an overridden one it must stay the pristine (pre-strike)
+          // render the double-strike guard (formatOverride) needs; the live
+          // struck text now lives only in this edit's own outbound row.
           const fresh = await findPublishedByTs(e.ts as string);
-          if (fresh) await writePublished(fresh.period, recordPublished({}, { ...fresh.entry, text: e.newText }));
+          if (fresh && fresh.entry.override == null) await writePublished(fresh.period, recordPublished({}, { ...fresh.entry, text: e.newText }));
         }
         res.sent += 1;
         log(`field-links: ${e.op} ${e.key} → ts ${ts}`);

@@ -18,6 +18,11 @@ vi.mock("./resolutions", async (orig) => {
   return { ...actual, upsertResolution, readResolutions };
 });
 vi.mock("./lossStore", () => ({ upsertLossRecord }));
+// The live-text lookup (lib/liveText.ts) falls back to `entry.text` when no
+// outbound row is found; these tests don't exercise that DB path, so mock it
+// straight to the pristine text (matching what every existing expectation here
+// already assumes the roster/drone/links tail is built from).
+vi.mock("./liveText", () => ({ liveVerdictText: vi.fn(async (e: { text: string }) => e.text) }));
 
 import { applyInstruction } from "./applyInstruction";
 import type { PublishedEntry } from "./published";

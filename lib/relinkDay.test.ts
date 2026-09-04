@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   readNotified: vi.fn(),
   readOutboundByFeature: vi.fn(),
   findSentByKey: vi.fn(),
+  findSentByTs: vi.fn(),
 }));
 vi.mock("./slack", () => ({
   postMessage: m.postMessage,
@@ -22,7 +23,7 @@ vi.mock("./published", async (orig) => ({
   writePublished: m.writePublished,
 }));
 vi.mock("./bonusNotified", async (orig) => ({ ...(await orig<typeof import("./bonusNotified")>()), readNotified: m.readNotified }));
-vi.mock("./outbound", () => ({ readOutboundByFeature: m.readOutboundByFeature, findSentByKey: m.findSentByKey }));
+vi.mock("./outbound", () => ({ readOutboundByFeature: m.readOutboundByFeature, findSentByKey: m.findSentByKey, findSentByTs: m.findSentByTs }));
 
 import { planRelinkForPeriod, relinkDays } from "./relinkDay";
 
@@ -38,6 +39,7 @@ beforeEach(() => {
       ? [{ key: "drone-reminder:2026-09-03", feature, status: "sent", ts: "50.0", text: "🛸 …", channel: "field-qa" }]
       : []);
   m.findSentByKey.mockResolvedValue(null);
+  m.findSentByTs.mockResolvedValue([]);
   m.findPublishedByTs.mockResolvedValue({ period, entry });
   m.updateMessage.mockImplementation(async (_c: string, ts: string) => ts);
   m.postMessage.mockResolvedValue("400.1");
@@ -83,6 +85,29 @@ describe("relinkDays", () => {
     const r = await relinkDays(period, ["2026-09-03"], { publish: true, trigger: "cron", zvitReply: false });
     expect(m.updateMessage).not.toHaveBeenCalledWith("C08GY2NKF9D", "200.1", expect.anything(), expect.anything());
     expect(r.skipped).toBe(1);
+  });
+
+  it("an overridden verdict IS edited (from its live text — the newest sent row sharing the verdict ts), but published.text is NOT written back", async () => {
+    const overriddenEntry = { ...entry, override: { decision: "rejected" as const, by: "X", ackedAt: "2026-09-03T10:00:00Z" } };
+    const struck = "~✅ v1~\n⛔ Оновлено → відхилено, X: причина";
+    m.readPublished.mockResolvedValue({ "2026-09-03#100.1": overriddenEntry });
+    m.findSentByTs.mockImplementation(async (ts: string) =>
+      ts === "200.1"
+        ? [{ key: "approval-edit:2026-09-03#100.1:rejected", feature: "approval", status: "sent", ts: "200.1", text: struck, channel: "field-qa", sentAt: "2026-09-03T09:00:00Z" }]
+        : []);
+    m.findPublishedByTs.mockResolvedValue({ period, entry: overriddenEntry });
+    const r = await relinkDays(period, ["2026-09-03"], { publish: true, trigger: "cron", zvitReply: false });
+    expect(m.updateMessage).toHaveBeenCalledWith(
+      "C08GY2NKF9D", "200.1", expect.stringContaining(struck),
+      expect.objectContaining({ key: expect.stringMatching(/^links-edit:verdict:2026-09-03#100\.1:/) }),
+    );
+    expect(m.writePublished).not.toHaveBeenCalled();
+    expect(r.days[0].planned.some((e) => e.target.kind === "verdict")).toBe(true);
+  });
+
+  it("planRelinkForPeriod reads every published entry's live rows (findSentByTs on its verdict ts), so an approval/roster/links edit is visible to the planner", async () => {
+    await planRelinkForPeriod(period, ["2026-09-03"], "field-qa", true);
+    expect(m.findSentByTs).toHaveBeenCalledWith("200.1");
   });
 
   it("refuses an untracked channel", async () => {

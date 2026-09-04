@@ -16,6 +16,7 @@ import { formatOverride, splitRosterSuffix } from "./verdictPublish";
 import { reportKey } from "./fieldDayVerdict";
 import type { Period } from "./period";
 import { decideApproval } from "../scripts/fieldApprovalsReport";
+import { liveVerdictText } from "./liveText";
 
 export interface ApproverDecisionArgs {
   entry: PublishedEntry;
@@ -49,13 +50,18 @@ export interface AmendVerdictArgs {
 }
 
 /**
- * Amend a published verdict in Slack: strike the BODY; keep the body, the
- * trailing drone line AND the 🔗 links line intact — each is a disjoint
- * region. Optionally posts the generic threaded ack, and stamps the entry's
- * `override`. Skips entirely when this same decision was already acked
- * (Slack's at-least-once delivery / a CLI re-run never double-posts); a
- * CHANGED decision re-amends (formatOverride always strikes the ORIGINAL
- * text). Shared by the day axis and the dataset-decline path.
+ * Amend a published verdict in Slack: strike the BODY (from the pristine
+ * `entry.text`); keep the roster suffix, the trailing drone line AND the 🔗
+ * links line intact — each is a disjoint region, read from the message's
+ * CURRENT live text (`lib/liveText.ts liveVerdictText`) so a crew correction
+ * or a cross-link edit already on the message survives the strike. Optionally
+ * posts the generic threaded ack, and stamps the entry's `override`; `text`
+ * itself is left untouched by the write-back (always the FIRST-posted
+ * render). Skips entirely when this same decision was already acked (Slack's
+ * at-least-once delivery / a CLI re-run never double-posts); a CHANGED
+ * decision re-amends (formatOverride always strikes the ORIGINAL text, never
+ * double-striking even though the live text is already struck once). Shared
+ * by the day axis and the dataset-decline path.
  */
 export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<ApproverDecisionResult> {
   const { entry, period, decision, by, reason, trigger, postAck, salt } = args;
@@ -69,7 +75,16 @@ export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<App
     return { applied: false, alreadyAcked: false };
   }
 
-  const { body, rosterLine, droneLine, linksLine } = splitRosterSuffix(entry.text);
+  // The BODY to strike must come from entry.text (pristine — the FIRST-posted
+  // render), so a decision flip / re-amend strikes the ORIGINAL text exactly
+  // once (formatOverride's double-strike guard). The roster/drone/links TAIL,
+  // though, comes from the message's LIVE text (lib/liveText.ts) — a crew
+  // correction or a cross-link edit landing AFTER a prior override never
+  // wrote back to `published.text` (see lib/applyRosterCorrection.ts /
+  // lib/relinkDay.ts), so entry.text's tail can be stale; reading it live
+  // means this strike never erases a tail region added since.
+  const { body } = splitRosterSuffix(entry.text);
+  const { rosterLine, droneLine, linksLine } = splitRosterSuffix(await liveVerdictText(entry));
   const { updatedText: struck, replyText } = formatOverride(body, decision, by, reason);
   const tail = [rosterLine, droneLine, linksLine].filter(Boolean).join("\n");
   const updatedText = tail ? `${struck}\n${tail}` : struck;
