@@ -230,6 +230,20 @@ describe(">2-crew split rule (2-person pot divided among everyone)", () => {
     for (const p of r.people) expect(p).toMatchObject({ trips: 2, gross: 933, net: 933 });
   });
 
+  // Rule restated 2026-09-05: the fund is for two; alone you get HALF of it
+  // (one per-person rate), not the whole pot — same factor 1, stated explicitly.
+  it("a lone pilot gets half the 2-person fund: 1200 of a 2400 Sunday pot, never 2400", () => {
+    // 2026-07-05 is a Sunday; 12:30 start → early. Pot = 2 × (700+200+300) = 2400.
+    const r = computeBonuses({ period, losses: [], days: [qd3({ date: "2026-07-05", roster: ["Влад"], start: "12:30" })] });
+    expect(r.people).toEqual([{ name: "Влад", trips: 1, early: 1, weekend: 1, gross: 1200, penaltyPct: 0, net: 1200 }]);
+    expect(r.total).toBe(1200);
+    expect(r.days[0].splitFactor).toBe(1);
+    // the same day with two pilots pays the whole fund, one rate each
+    const two = computeBonuses({ period, losses: [], days: [qd3({ date: "2026-07-05", roster: ["Влад", "Андріан"], start: "12:30" })] });
+    expect(two.total).toBe(2400);
+    expect(two.people.map((p) => p.gross)).toEqual([1200, 1200]);
+  });
+
   it("keeps 2-person days at full pay with splitFactor 1", () => {
     const r = computeBonuses({ period, losses: [], days: [qd3({ roster: ["Андріан", "Сергій"] })] });
     expect(r.people.map((p) => p.gross)).toEqual([TRIP, TRIP]);

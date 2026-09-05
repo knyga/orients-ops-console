@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isThreadNotified, isDmSent, recordThread, recordDm, isThreadNotifiedFor, isDmSentFor, type NotifiedLog } from "./bonusNotified";
+import { clearThread, isThreadNotified, isDmSent, recordThread, recordDm, isThreadNotifiedFor, isDmSentFor, type NotifiedLog } from "./bonusNotified";
 
 describe("bonusNotified pure helpers", () => {
   it("records + detects a thread note", () => {
@@ -36,5 +36,17 @@ describe("bonusNotified pure helpers", () => {
     const conflicted: NotifiedLog = { "2026-07-01": { date: "2026-07-01", reportTs: null, threadTs: "9.9", dms: [] } };
     expect(isThreadNotifiedFor(conflicted, { date: "2026-07-01", reportTs: "1.0", reportCount: 2 })).toBe(false);
     expect(isDmSentFor(conflicted, { date: "2026-07-01", reportTs: "1.0", reportCount: 2 }, "U1")).toBe(false);
+  });
+
+  it("clearThread forgets a retracted thread post but keeps the DMs", () => {
+    let log = recordThread({}, "2026-08-30#1.0", "9.9");
+    log = recordDm(log, "2026-08-30#1.0", "U1", "2.2", 1200);
+    const cleared = clearThread(log, "2026-08-30#1.0");
+    expect(cleared["2026-08-30#1.0"].threadTs).toBeUndefined();
+    expect(cleared["2026-08-30#1.0"].dms).toEqual([{ slackId: "U1", ts: "2.2", amount: 1200 }]);
+    expect(isThreadNotified(cleared, "2026-08-30#1.0")).toBe(false);
+    // no-op on an unknown key / a key without a thread
+    expect(clearThread(cleared, "2026-08-30#1.0")).toBe(cleared);
+    expect(clearThread(cleared, "nope")).toBe(cleared);
   });
 });

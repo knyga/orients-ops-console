@@ -12,7 +12,7 @@ import { approvalOutboundKeys, type SendTrigger } from "./outboundKeys";
 import { TRACKED_CHANNELS } from "./slackChannels";
 import { writePublished, recordPublished, type PublishedEntry } from "./published";
 import { upsertResolution, type ResolutionDecision } from "./resolutions";
-import { formatOverride, splitRosterSuffix } from "./verdictPublish";
+import { formatOverride, splitRosterSuffix, liveCarriesDecision } from "./verdictPublish";
 import { reportKey } from "./fieldDayVerdict";
 import type { Period } from "./period";
 import { decideApproval } from "../scripts/fieldApprovalsReport";
@@ -66,13 +66,19 @@ export interface AmendVerdictArgs {
 export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<ApproverDecisionResult> {
   const { entry, period, decision, by, reason, trigger, postAck, salt } = args;
 
-  if (entry.override?.decision === decision) {
-    return { applied: false, alreadyAcked: true };
-  }
-
   const channel = TRACKED_CHANNELS.find((c) => c.name === entry.channel);
   if (!channel) {
     return { applied: false, alreadyAcked: false };
+  }
+
+  // "Already acked" must hold in SLACK, not just in the DB: on 2026-08-30 a
+  // flip back to accept stamped `override` while the (then unsalted) edit + ack
+  // were deduped away, so the message kept showing «відхилено» and every later
+  // re-apply short-circuited on the stamp alone. Trust the stamp only when the
+  // live message really carries this decision's amendment.
+  const live = await liveVerdictText(entry);
+  if (entry.override?.decision === decision && liveCarriesDecision(live, decision)) {
+    return { applied: false, alreadyAcked: true };
   }
 
   // The BODY to strike must come from entry.text (pristine — the FIRST-posted
@@ -84,7 +90,7 @@ export async function amendPublishedVerdict(args: AmendVerdictArgs): Promise<App
   // lib/relinkDay.ts), so entry.text's tail can be stale; reading it live
   // means this strike never erases a tail region added since.
   const { body } = splitRosterSuffix(entry.text);
-  const { rosterLine, droneLine, linksLine } = splitRosterSuffix(await liveVerdictText(entry));
+  const { rosterLine, droneLine, linksLine } = splitRosterSuffix(live);
   const { updatedText: struck, replyText } = formatOverride(body, decision, by, reason);
   const tail = [rosterLine, droneLine, linksLine].filter(Boolean).join("\n");
   const updatedText = tail ? `${struck}\n${tail}` : struck;
@@ -131,7 +137,9 @@ export async function applyApproverDecision(
 ): Promise<ApproverDecisionResult> {
   const { entry, period, decision, by, reason, evidence, trigger = "unknown", salt } = args;
 
-  if (entry.override?.decision === decision) {
+  // Same stamped decision: skip only when Slack really shows it (see
+  // amendPublishedVerdict) — otherwise fall through and repair the message.
+  if (entry.override?.decision === decision && liveCarriesDecision(await liveVerdictText(entry), decision)) {
     return { applied: false, alreadyAcked: true };
   }
 

@@ -23,6 +23,7 @@ vi.mock("./lossStore", () => ({ upsertLossRecord }));
 // straight to the pristine text (matching what every existing expectation here
 // already assumes the roster/drone/links tail is built from).
 vi.mock("./liveText", () => ({ liveVerdictText: vi.fn(async (e: { text: string }) => e.text) }));
+import { liveVerdictText } from "./liveText";
 
 import { applyInstruction } from "./applyInstruction";
 import type { PublishedEntry } from "./published";
@@ -156,6 +157,8 @@ describe("applyInstruction dataset axis", () => {
   });
 
   it("is idempotent: an already-rejected override skips the edit on redelivery", async () => {
+    // the live message really shows the rejection (the stamp alone is not trusted — see applyApproval)
+    vi.mocked(liveVerdictText).mockResolvedValueOnce("~✅ 02.07 — прийнято.~\n⛔ Оновлено → відхилено, <@U1>: причина");
     await applyInstruction({
       entry: entry({ decision: "rejected", by: "Oleksandr K", ackedAt: "2026-07-03T19:23:00.000Z" }),
       period,

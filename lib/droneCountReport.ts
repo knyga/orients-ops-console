@@ -6,6 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   DRONE_COUNT_TOOL,
   buildDroneCountPrompt,
+  type DroneClassifyContext,
   type DroneCountResult,
   type DroneDayReport,
 } from "./droneCountReportPrompt";
@@ -42,7 +43,11 @@ function sanitizeReports(raw: unknown): DroneDayReport[] {
   return out;
 }
 
-export async function classifyDroneCount(dayText: string, postedOn?: string): Promise<DroneCountResult> {
+export async function classifyDroneCount(
+  dayText: string,
+  postedOn?: string,
+  ctx?: DroneClassifyContext,
+): Promise<DroneCountResult> {
   if (!dayText.trim()) return { present: false, reports: [], note: "" };
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set (needed for field-bonus drone-count gate).");
   const client = new Anthropic();
@@ -51,7 +56,7 @@ export async function classifyDroneCount(dayText: string, postedOn?: string): Pr
     max_tokens: 1024,
     tools: [DRONE_COUNT_TOOL],
     tool_choice: { type: "tool", name: DRONE_COUNT_TOOL.name },
-    messages: [{ role: "user", content: [{ type: "text", text: buildDroneCountPrompt(dayText, postedOn) }] }],
+    messages: [{ role: "user", content: [{ type: "text", text: buildDroneCountPrompt(dayText, postedOn, ctx) }] }],
   });
   const block = message.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
   const input = (block?.input ?? {}) as Record<string, unknown>;

@@ -75,13 +75,30 @@ describe("amendPublishedVerdict", () => {
     );
   });
 
-  it("is a no-op when the same decision is already acked", async () => {
+  it("is a no-op when the same decision is already acked AND the live message shows it", async () => {
     const e = entry({ override: { decision: "rejected", by: "X", ackedAt: "2026-07-03T00:00:00.000Z" } });
+    liveVerdictText.mockResolvedValue("~✅ 02.07 — прийнято.~\n⛔ Оновлено → відхилено, <@U1>: причина");
     const res = await amendPublishedVerdict({
       entry: e, period, decision: "rejected", by: "Oleksandr K", reason: "причина", trigger: "webhook", postAck: false,
     });
     expect(res).toEqual({ applied: false, alreadyAcked: true });
     expect(updateMessage).not.toHaveBeenCalled();
-    expect(liveVerdictText).not.toHaveBeenCalled();
+  });
+
+  // Regression 2026-08-30: the DB stamp said accepted_exception (the flip-back's
+  // resolution landed) while the deduped edit never reached Slack — the message
+  // kept «відхилено» and every re-apply short-circuited on the stamp.
+  it("re-amends when the stamp says this decision but the live message still shows the previous one", async () => {
+    const e = entry({ override: { decision: "accepted_exception", by: "X", ackedAt: "2026-07-03T00:00:00.000Z" } });
+    liveVerdictText.mockResolvedValue("~✅ 02.07 — прийнято.~\n⛔ Оновлено → відхилено, <@U1>: стара причина\n🔗 <u|Звіт>");
+    const res = await amendPublishedVerdict({
+      entry: e, period, decision: "accepted_exception", by: "Oleksandr K", reason: "нова причина", trigger: "cli", postAck: true, salt: "manual:2026-09-05",
+    });
+    expect(res).toEqual({ applied: true, alreadyAcked: false });
+    const text = updateMessage.mock.calls[0][2] as string;
+    expect(text).toContain("Оновлено → прийнято (виняток)");
+    expect(text).not.toContain("відхилено");
+    expect(text.endsWith("🔗 <u|Звіт>")).toBe(true);
+    expect(postMessage).toHaveBeenCalledTimes(1);
   });
 });

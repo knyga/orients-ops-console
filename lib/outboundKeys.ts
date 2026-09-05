@@ -60,7 +60,6 @@ export const webhookFailureKey = (date: string, kind: string, rev: string): stri
  */
 export const dmHelpKey = (userId: string, ts: string): string => `help:${userId}:${ts}`;
 export const agentReplyKey = (userId: string, ts: string): string => `agent:${userId}:${ts}`;
-export const bonusThreadKey = (date: string): string => `bonus-thread:${date}`;
 export const bonusDmKey = (date: string, slackId: string): string =>
   `bonus-dm:${date}:${slackId}`;
 /**

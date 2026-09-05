@@ -529,6 +529,44 @@ async function rawUpdate(channelId: string, ts: string, text: string): Promise<v
   }
 }
 
+/** chat.delete — remove one of the bot's own messages. */
+async function rawDelete(channelId: string, ts: string): Promise<void> {
+  const res = await fetch(`${API}/chat.delete`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token()}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    cache: "no-store",
+    body: JSON.stringify({ channel: channelId, ts }),
+  });
+  if (!res.ok) {
+    throw new SlackError(`Slack chat.delete returned ${res.status} ${res.statusText}`, res.status);
+  }
+  const body = (await res.json()) as SlackOk;
+  // A message already gone is the state we wanted — idempotent retract.
+  if (!body.ok && body.error !== "message_not_found") {
+    throw new SlackError(`Slack chat.delete error: ${body.error ?? "unknown"}`, 502);
+  }
+}
+
+/**
+ * Delete one of the bot's own messages. SERVER-ONLY; `chat:write` covers
+ * deleting the bot's own posts. Recorded + deduped via sendTracked (kind
+ * "delete", empty text — the cross-links planner skips empty texts, so a
+ * deleted message can never be re-linked from its retract row); the row's ts
+ * is the deleted message's ts. A message Slack no longer has counts as deleted.
+ */
+export async function deleteMessage(channelId: string, ts: string, meta: SendMeta): Promise<string> {
+  return sendTracked(
+    { channelId, text: "", kind: "delete", threadTs: null, ts, meta },
+    async () => {
+      await rawDelete(channelId, ts);
+      return ts;
+    },
+  );
+}
+
 /**
  * Edit one of the bot's own messages. SERVER-ONLY; needs `chat:write`. Recorded +
  * deduped via sendTracked (kind "edit"); the row's ts is the edited message's ts.

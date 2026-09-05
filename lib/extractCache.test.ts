@@ -90,10 +90,24 @@ describe("makeCachedDroneClassifier", () => {
     const out = await classifier("Андріан - 1шт", "2026-07-02");
 
     expect(out).toEqual(reports);
-    expect(classify).toHaveBeenCalledWith("Андріан - 1шт", "2026-07-02");
+    expect(classify).toHaveBeenCalledWith("Андріан - 1шт", "2026-07-02", undefined);
     expect(misses()).toBe(1);
     expect(store.writes.get(droneKey("Андріан - 1шт", "2026-07-02"))).toBe(JSON.stringify(reports));
     // same text on a different date is a distinct key → would miss again.
     expect(droneKey("Андріан - 1шт", "2026-07-02")).not.toBe(droneKey("Андріан - 1шт", "2026-07-03"));
+  });
+
+  it("keys a reminder-thread reply apart from the same text outside a thread (the prompt differs)", async () => {
+    // A context-free "no tally" verdict cached for «1 вартовий + 4 вартових ремонт»
+    // must not be replayed once the classifier is told it is a pilot's reply.
+    expect(droneKey("1 вартовий + 4 вартових ремонт", "2026-08-30", { inReminderThread: true }))
+      .not.toBe(droneKey("1 вартовий + 4 вартових ремонт", "2026-08-30"));
+    expect(droneKey("x", "2026-08-30", { inReminderThread: false })).toBe(droneKey("x", "2026-08-30"));
+    const store = fakeStore();
+    const classify = vi.fn(async () => reports);
+    const { classifier } = makeCachedDroneClassifier(store, new Map(), classify);
+    await classifier("1 вартовий + 4 вартових ремонт", "2026-08-30", { inReminderThread: true });
+    expect(classify).toHaveBeenCalledWith("1 вартовий + 4 вартових ремонт", "2026-08-30", { inReminderThread: true });
+    expect(store.writes.has(droneKey("1 вартовий + 4 вартових ремонт", "2026-08-30", { inReminderThread: true }))).toBe(true);
   });
 });

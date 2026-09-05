@@ -25,8 +25,13 @@ export function contentHash(parts: string): string {
 
 /** Cache keys — also used by callers to preload the exact hashes in one query. */
 export const airborneKey = (imageId: string): string => contentHash(`airborne|${imageId}`);
-export const droneKey = (text: string, postedOn?: string): string =>
-  contentHash(`drone|${postedOn ?? ""}|${text}`);
+/** The classifier context changes the prompt — so it changes the key too (a
+ *  reminder-thread reply re-classifies once instead of replaying the old,
+ *  context-free answer). */
+export type { DroneClassifyContext } from "./droneCountReportPrompt";
+import type { DroneClassifyContext } from "./droneCountReportPrompt";
+export const droneKey = (text: string, postedOn?: string, ctx?: DroneClassifyContext): string =>
+  contentHash(`drone|${postedOn ?? ""}|${ctx?.inReminderThread ? "reminder-thread|" : ""}${text}`);
 
 /** Hash → stored result JSON. Injected so the wrappers test without a DB. */
 export interface ExtractCacheStore {
@@ -90,12 +95,12 @@ export function makeCachedDroneClassifier(
   classify: DroneClassifier,
 ): { classifier: DroneClassifier; misses: () => number } {
   let misses = 0;
-  const classifier: DroneClassifier = async (text, postedOn) => {
-    const key = droneKey(text, postedOn);
+  const classifier: DroneClassifier = async (text, postedOn, ctx) => {
+    const key = droneKey(text, postedOn, ctx);
     const hit = preloaded.get(key);
     if (hit) return JSON.parse(hit) as { reports: DroneDayReport[] };
     misses += 1;
-    const res = await classify(text, postedOn);
+    const res = await classify(text, postedOn, ctx);
     await store.write(key, JSON.stringify(res));
     return res;
   };

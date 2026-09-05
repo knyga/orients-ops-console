@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseArgs, parseArgs as parseBonusArgs, resolvePeriod, toCsv, formatTable, buildNotifyPlan, formatNotifyDryRun } from "./fieldBonusReport";
+import { parseArgs, parseArgs as parseBonusArgs, resolvePeriod, toCsv, formatTable, buildNotifyPlan, formatNotifyDryRun, buildRetractPlan, formatRetractDryRun } from "./fieldBonusReport";
 import type { BonusReport } from "../lib/fieldBonus";
 import type { DayBonus } from "../lib/fieldBonus";
 import type { PublishedEntry } from "../lib/published";
@@ -20,7 +20,7 @@ describe("fieldBonusReport", () => {
       .toMatchObject({ start: "2026-05-01", end: "2026-05-31", write: true, format: "table" });
   });
   it("defaults the period to the current Kyiv month", () => {
-    expect(resolvePeriod({ write: false, ask: false, publish: false, notify: false }, "2026-05-17")).toEqual({ start: "2026-05-01", end: "2026-05-31" });
+    expect(resolvePeriod({ write: false, ask: false, publish: false, notify: false, retractThreads: false }, "2026-05-17")).toEqual({ start: "2026-05-01", end: "2026-05-31" });
   });
   it("emits a per-person CSV header + rows", () => {
     expect(toCsv(report).split("\n")[0]).toBe("person,trips,early,weekend,gross,penaltyPct,net");
@@ -64,7 +64,7 @@ describe("notify flags + plan", () => {
     expect(a.channel).toBe("field-qa");
     expect(a.publish).toBe(true);
   });
-  it("queues a thread + only matched, unsent DMs for a settled earned day", () => {
+  it("queues only matched, unsent DMs for a settled earned day (nothing for the thread)", () => {
     const plan = buildNotifyPlan({
       days: [day()],
       verdictByReport: new Map([["2026-06-19", "ACCEPTED"]]),
@@ -72,7 +72,7 @@ describe("notify flags + plan", () => {
       slackIdByName: new Map([["Андріан", "U1"], ["Тарас", null]]),
       log: {},
     });
-    expect(plan[0].threadPending).toBe(true);
+    expect(plan[0]).not.toHaveProperty("threadPending");
     expect(plan[0].pendingDms.map((t) => t.name)).toEqual(["Андріан"]);
     expect(plan[0].unmatched).toEqual(["Тарас"]);
   });
@@ -83,16 +83,16 @@ describe("notify flags + plan", () => {
     });
     expect(plan).toHaveLength(0);
   });
-  it("settled REJECTED day earns nothing (no-bonus note, no DMs) even when counted", () => {
+  // 2026-09-05: money is DM-only — a rejected day gets no in-thread «не
+  // нараховано» note (the verdict message already says why), so it is not in
+  // the plan at all.
+  it("settled REJECTED day owes nothing — no thread note, no DMs — even when counted", () => {
     const plan = buildNotifyPlan({
       days: [day({ counted: true, reason: "counted" })],
       verdictByReport: new Map([["2026-06-19", "REJECTED"]]),
-      published: { "2026-06-19": pub("2026-06-19") }, slackIdByName: new Map(), log: {},
+      published: { "2026-06-19": pub("2026-06-19") }, slackIdByName: new Map([["Андріан", "U1"], ["Тарас", "U2"]]), log: {},
     });
-    expect(plan[0].earned).toBe(false);
-    expect(plan[0].threadPending).toBe(true);
-    expect(plan[0].pendingDms).toHaveLength(0);
-    expect(plan[0].reason).toBe("виїзд відхилено");
+    expect(plan).toHaveLength(0);
   });
   it("skips a NEEDS_REVIEW day (not final)", () => {
     const plan = buildNotifyPlan({
@@ -102,14 +102,17 @@ describe("notify flags + plan", () => {
     });
     expect(plan).toHaveLength(0);
   });
-  it("skips an already thread-notified + DMed day", () => {
-    const plan = buildNotifyPlan({
-      days: [day()], verdictByReport: new Map([["2026-06-19", "ACCEPTED"]]),
-      published: { "2026-06-19": pub("2026-06-19") },
-      slackIdByName: new Map([["Андріан", "U1"], ["Тарас", "U2"]]),
-      log: { "2026-06-19": { date: "2026-06-19", reportTs: null, threadTs: "1.1", dms: [{ slackId: "U1", ts: "2.2", amount: 700 }, { slackId: "U2", ts: "3.3", amount: 700 }] } },
-    });
-    expect(plan).toHaveLength(0);
+  it("skips an already DMed day (a legacy thread_ts neither adds nor blocks anything)", () => {
+    const dms = [{ slackId: "U1", ts: "2.2", amount: 700 }, { slackId: "U2", ts: "3.3", amount: 700 }];
+    for (const threadTs of ["1.1", undefined]) {
+      const plan = buildNotifyPlan({
+        days: [day()], verdictByReport: new Map([["2026-06-19", "ACCEPTED"]]),
+        published: { "2026-06-19": pub("2026-06-19") },
+        slackIdByName: new Map([["Андріан", "U1"], ["Тарас", "U2"]]),
+        log: { "2026-06-19": { date: "2026-06-19", reportTs: null, threadTs, dms } },
+      });
+      expect(plan).toHaveLength(0);
+    }
   });
   it("flags an unpublished day (cannot reply in a missing thread)", () => {
     const plan = buildNotifyPlan({
@@ -123,9 +126,11 @@ describe("notify flags + plan", () => {
       days: [day()], verdictByReport: new Map([["2026-06-19", "ACCEPTED"]]),
       published: { "2026-06-19": pub("2026-06-19") }, slackIdByName: new Map([["Андріан", "U1"], ["Тарас", null]]), log: {},
     });
-    const out = formatNotifyDryRun(plan, "field-qa");
+    const out = formatNotifyDryRun(plan);
     expect(out).toContain("2026-06-19");
     expect(out).toContain("DRY RUN");
+    expect(out).toContain("DM-only");
+    expect(out).not.toContain("thread message");
   });
   it("resolves a two-report day independently — each report's own verdict/notified state", () => {
     const days = [
@@ -139,8 +144,22 @@ describe("notify flags + plan", () => {
       slackIdByName: new Map([["Андріан", "U1"], ["Тарас", "U2"]]),
       log: {},
     });
-    expect(plan).toHaveLength(2);
-    expect(plan.find((p) => p.reportTs === "1.0")?.earned).toBe(true);
-    expect(plan.find((p) => p.reportTs === "2.0")?.earned).toBe(false);
+    // only the accepted report owes a DM; the rejected one owes nothing
+    expect(plan.map((p) => p.reportTs)).toEqual(["1.0"]);
+    expect(plan[0].earned).toBe(true);
+  });
+
+  it("retract plan lists only entries that still carry a thread post", () => {
+    expect(parseBonusArgs(["--retract-threads", "--publish", "--channel", "field-qa"]).retractThreads).toBe(true);
+    expect(parseBonusArgs(["--notify"]).retractThreads).toBe(false);
+    const plan = buildRetractPlan({
+      "2026-08-30#1.0": { date: "2026-08-30", reportTs: "1.0", threadTs: "9.9", dms: [] },
+      "2026-08-29#2.0": { date: "2026-08-29", reportTs: "2.0", dms: [{ slackId: "U1", ts: "3.3", amount: 700 }] },
+    });
+    expect(plan).toEqual([{ key: "2026-08-30#1.0", date: "2026-08-30", threadTs: "9.9" }]);
+    const out = formatRetractDryRun(plan, "field-qa");
+    expect(out).toContain("DRY RUN");
+    expect(out).toContain("1 in-thread bonus message(s) in #field-qa");
+    expect(out).toContain("2026-08-30#1.0");
   });
 });

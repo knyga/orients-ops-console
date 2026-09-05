@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import { collectDayNodes, latestTextForTs, planRelink, renderLinks, summaryChunkFor, type DayNodes, type OutboundRowLike } from "./dayLinks";
 import { LINKS_MARKER, withLinksRegion } from "./linksRegion";
 import { contentRev } from "./outboundKeys";
+
+/** Edit keys rev on the transition current-🔗-line → new line (see planRelink). */
+const trans = (from: string | null, to: string) => contentRev(`${from ?? ""}→${to}`);
 import type { PublishedLog } from "./published";
 import type { NotifiedLog } from "./bonusNotified";
 
@@ -187,16 +190,16 @@ describe("planRelink", () => {
     date: "2026-09-03", reminderTs: "50.0", reminderText: "🛸 Звіт по дронах за 03.09\n<@U1> — …",
     reports: [{ reportTs: "100.1", verdictTs: "200.1", verdictText: "✅ v1\n👥 У полі: <@U1>." }],
   };
-  it("emits an edit per target whose 🔗 line differs, keyed by content-rev, plus the Звіт reply post", () => {
+  it("emits an edit per target whose 🔗 line differs, keyed by the line transition, plus the Звіт reply post", () => {
     const edits = planRelink(base, { permalink: url, zvitReply: true });
     const reminderLine = renderLinks({ kind: "reminder", date: "2026-09-03" }, base, url)!;
     const verdictLine = renderLinks({ kind: "verdict", date: "2026-09-03", reportTs: "100.1" }, base, url)!;
     const zvitLine = renderLinks({ kind: "zvit", reportTs: "100.1" }, base, url)!;
     expect(edits).toEqual([
       { target: { kind: "reminder", date: "2026-09-03" }, op: "edit", ts: "50.0", threadTs: null,
-        newText: withLinksRegion(base.reminderText!, reminderLine), key: `links-edit:reminder:2026-09-03:${contentRev(reminderLine)}` },
+        newText: withLinksRegion(base.reminderText!, reminderLine), key: `links-edit:reminder:2026-09-03:${trans(null, reminderLine)}` },
       { target: { kind: "verdict", date: "2026-09-03", reportTs: "100.1" }, op: "edit", ts: "200.1", threadTs: null,
-        newText: withLinksRegion(base.reports[0].verdictText!, verdictLine), key: `links-edit:verdict:2026-09-03#100.1:${contentRev(verdictLine)}` },
+        newText: withLinksRegion(base.reports[0].verdictText!, verdictLine), key: `links-edit:verdict:2026-09-03#100.1:${trans(null, verdictLine)}` },
       { target: { kind: "zvit", reportTs: "100.1" }, op: "post", ts: null, threadTs: "100.1", newText: zvitLine, key: "links-zvit:100.1" },
     ]);
   });
@@ -227,7 +230,7 @@ describe("planRelink", () => {
     const stale: DayNodes = { ...base, reports: [{ ...base.reports[0], zvitReplyTs: "400.1", zvitReplyText: `${LINKS_MARKER}<old|Вердикт>` }] };
     const zvitLine = renderLinks({ kind: "zvit", reportTs: "100.1" }, stale, url)!;
     const e = planRelink(stale, { permalink: url, zvitReply: true }).find((x) => x.target.kind === "zvit")!;
-    expect(e).toEqual({ target: { kind: "zvit", reportTs: "100.1" }, op: "edit", ts: "400.1", threadTs: null, newText: zvitLine, key: `links-zvit-edit:100.1:${contentRev(zvitLine)}` });
+    expect(e).toEqual({ target: { kind: "zvit", reportTs: "100.1" }, op: "edit", ts: "400.1", threadTs: null, newText: zvitLine, key: `links-zvit-edit:100.1:${trans(`${LINKS_MARKER}<old|Вердикт>`, zvitLine)}` });
   });
   it("zvitReply:false suppresses the POST but still edits an existing reply", () => {
     expect(planRelink(base, { permalink: url, zvitReply: false }).some((e) => e.op === "post")).toBe(false);
@@ -240,12 +243,30 @@ describe("planRelink", () => {
     const unknownText: DayNodes = { date: "2026-09-03", reminderTs: "50.0", reports: [{ reportTs: "100.1", verdictTs: "200.1", verdictText: "v" }] };
     expect(planRelink(unknownText, { permalink: url, zvitReply: false }).map((e) => e.target.kind)).toEqual(["verdict"]);
   });
+  // Regression 2026-09-05: after the 22 in-thread bonus posts were deleted, the
+  // relink back to a «Звіт · Дрони»-only line matched the key that same line was
+  // first sent under, and the chokepoint skipped every edit — dead «Бонуси» links.
+  it("keys a return to an earlier 🔗 line differently from its first send (flip-back is a new edit)", () => {
+    const plain = renderLinks({ kind: "verdict", date: "2026-09-03", reportTs: "100.1" }, base, url)!;
+    const withBonus: DayNodes = { ...base, reports: [{ ...base.reports[0], bonusTs: "300.1", bonusText: "💰 …" }] };
+    const bonusLine = renderLinks({ kind: "verdict", date: "2026-09-03", reportTs: "100.1" }, withBonus, url)!;
+    expect(bonusLine).not.toBe(plain);
+    const firstSend = planRelink(base, { permalink: url, zvitReply: false }).find((e) => e.target.kind === "verdict")!;
+    // the verdict currently carries the bonus-era line; the bonus node is gone
+    const afterDelete: DayNodes = { ...base, reports: [{ ...base.reports[0], verdictText: withLinksRegion(base.reports[0].verdictText!, bonusLine) }] };
+    const flipBack = planRelink(afterDelete, { permalink: url, zvitReply: false }).find((e) => e.target.kind === "verdict")!;
+    expect(flipBack.newText).toBe(withLinksRegion(base.reports[0].verdictText!, plain));
+    expect(flipBack.key).not.toBe(firstSend.key);
+    // and a re-run after the edit landed plans nothing (idempotent)
+    const landed: DayNodes = { ...base, reports: [{ ...base.reports[0], verdictText: flipBack.newText }] };
+    expect(planRelink(landed, { permalink: url, zvitReply: false }).some((e) => e.target.kind === "verdict")).toBe(false);
+  });
   it("emits a bonus edit that preserves the original 💰 body, never wiping it down to the bare link line", () => {
     const withBonus: DayNodes = { ...base, reports: [{ ...base.reports[0], bonusTs: "300.1", bonusText: "💰 Бонуси за 2026-09-03 (попередньо): разом 700 грн" }] };
     const bonusLine = renderLinks({ kind: "bonus", date: "2026-09-03", reportTs: "100.1" }, withBonus, url)!;
     const e = planRelink(withBonus, { permalink: url, zvitReply: false }).find((x) => x.target.kind === "bonus")!;
     expect(e).toBeDefined();
-    expect(e.key).toBe(`links-edit:bonus:2026-09-03#100.1:${contentRev(bonusLine)}`);
+    expect(e.key).toBe(`links-edit:bonus:2026-09-03#100.1:${trans(null, bonusLine)}`);
     expect(e.newText.startsWith("💰 Бонуси за 2026-09-03 (попередньо): разом 700 грн")).toBe(true);
     expect(e.newText).not.toBe(bonusLine); // must never collapse to the bare 🔗 line
   });

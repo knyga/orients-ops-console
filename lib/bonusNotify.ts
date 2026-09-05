@@ -1,13 +1,19 @@
 /**
  * Pure per-day rolling-bonus derivation + Ukrainian messages. Derives each
  * roster member's provisional day amount from a counted DayBonus using the
- * existing rate constants (no new calculator), and formats the thread breakdown,
- * the per-person DM, and the no-bonus thread note. Amounts are PROVISIONAL — they
- * exclude the monthly drone-loss multiplier, which only settles at month-end.
- * No fs/network. See docs/superpowers/specs/2026-06-28-rolling-field-bonus-design.md.
+ * existing rate constants (no new calculator), and formats the per-person DM.
+ * Amounts are PROVISIONAL — they exclude the monthly drone-loss multiplier,
+ * which only settles at month-end. No fs/network.
+ *
+ * Money is DM-only (2026-09-05): the bot never states amounts in the public
+ * #field-qa verdict thread — the thread is where approvers' signals get
+ * processed, and a «💰 Бонуси за …: разом 1200 грн» reply there was called out
+ * as wrong. The old thread breakdown / no-bonus note formatters are gone; the
+ * `bonus_notified.thread_ts` column stays for the messages already posted (the
+ * cross-links planner still links them).
+ * See docs/superpowers/specs/2026-06-28-rolling-field-bonus-design.md.
  */
 import { TRIP, EARLY, WEEKEND, type DayBonus } from "./fieldBonus";
-import { mentionize } from "./mention";
 
 export interface PersonAmount {
   name: string;
@@ -33,9 +39,6 @@ export function dayPersonBonuses(day: DayBonus): PersonAmount[] {
   return (day.paidRoster ?? day.roster).map((name) => ({ name, base, early, weekend, total }));
 }
 
-export function dayTotal(people: PersonAmount[]): number {
-  return people.reduce((s, p) => s + p.total, 0);
-}
 
 function parts(p: PersonAmount): string {
   const bits = [`база ${p.base}`];
@@ -44,12 +47,6 @@ function parts(p: PersonAmount): string {
   return bits.join(", ");
 }
 
-export function formatThreadBreakdown(date: string, people: PersonAmount[]): string {
-  const lines = [`💰 Бонуси за ${date} (попередньо): разом ${dayTotal(people)} грн`];
-  for (const p of people) lines.push(`• ${mentionize(p.name)} — ${p.total} грн (${parts(p)})`);
-  lines.push(PROVISIONAL);
-  return lines.join("\n");
-}
 
 export function formatDm(date: string, person: PersonAmount): string {
   return [
@@ -59,6 +56,3 @@ export function formatDm(date: string, person: PersonAmount): string {
   ].join("\n");
 }
 
-export function formatNoBonusNote(date: string, reason: string): string {
-  return `ℹ️ Бонус за ${date} не нараховано: ${reason}.`;
-}

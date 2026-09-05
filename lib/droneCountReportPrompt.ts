@@ -3,6 +3,12 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { DroneEntry } from "./droneReport";
 
+/** Classifier context that changes the prompt (and therefore the cache key):
+ *  a reply inside the bot's drone-count reminder thread is a pilot's own tally
+ *  (2026-09-05: «1 вартовий + 4 вартових ремонт» was read as "no tally" and
+ *  silently cost the author his bonus). */
+export interface DroneClassifyContext { inReminderThread?: boolean }
+
 /** One dated (or undated) section of a drone-count message. */
 export interface DroneDayReport {
   entries: DroneEntry[];
@@ -70,9 +76,15 @@ export const DRONE_COUNT_TOOL: Anthropic.Tool = {
   },
 };
 
-export function buildDroneCountPrompt(dayText: string, postedOn?: string): string {
+export function buildDroneCountPrompt(dayText: string, postedOn?: string, ctx?: DroneClassifyContext): string {
   return [
     `This is one #field-qa Slack message (Ukrainian)${postedOn ? `, posted on ${postedOn} (Kyiv)` : ""}.`,
+    ...(ctx?.inReminderThread
+      ? [
+          `It is a REPLY inside the bot's daily drone-count reminder thread («вкажіть кількість своїх дронів»), where each pilot posts their own tally. Treat it as that pilot's drone-count report unless it is plainly chatter (a question, «ок», thanks). Bare counts WITHOUT «шт» are tallies too: "1 вартовий + 4 вартових ремонт" → one entry {name:"вартовий", isPerson:false, count:5}; "2 вартовий\n1 азимут\nРемонт:\n1 азимут 15\"" → three entries: вартовий 2, азимут 1, "азимут 15\"" 1 (total 4 — the repair unit is its OWN entry, not also added to азимут).`,
+        ]
+      : []),
+    `A standalone repair segment or line — "4 вартових ремонт", "Ремонт:\n1 азимут 15\"" — lists units currently in repair: they are still that person's units, so COUNT them, each unit exactly ONCE — as that line's own entry, never ALSO added into another entry's count. Only a parenthetical after an already-counted line is a qualifier (see below).`,
     `Extract the drone-count / production tally: how many drone units each person or category had that day, e.g.`,
     `"Андріан R&D - 1шт вартовий+ 1 шт азимут" → {name:"Андріан", isPerson:true, count:2};`,
     `"Демонстраційні - 8 шт (Перевірені - 8шт ( 2 шт азимут)" → {name:"Демонстраційні", isPerson:false, count:8} — the parenthetical says the same 8 units are checked, NOT a separate entry; "15ка - 1шт" → {name:"15ка", isPerson:false, count:1}.`,

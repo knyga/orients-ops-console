@@ -57,4 +57,16 @@ describe("droneCountReportPrompt", () => {
     expect(entriesSchema.description).toContain("(Перевірені");
     expect(entriesSchema.items.properties.isPerson.description).not.toContain("Перевірені");
   });
+
+  // Regression 2026-08-30: a reminder-thread reply «1 вартовий + 4 вартових
+  // ремонт» (no «шт», no name) was classified as "no tally".
+  it("frames a reminder-thread reply as the pilot's own tally and counts bare / repair units", () => {
+    const p = buildDroneCountPrompt("1 вартовий + 4 вартових ремонт", "2026-08-30", { inReminderThread: true });
+    expect(p).toContain("reminder thread");
+    expect(p).toContain("1 вартовий + 4 вартових ремонт");
+    expect(p).toContain("count:5");
+    expect(p).toContain("COUNT them");
+    expect(buildDroneCountPrompt("x", "2026-08-30")).not.toContain("reminder thread");
+    expect(buildDroneCountPrompt("x", "2026-08-30")).toContain("COUNT them");
+  });
 });

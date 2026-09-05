@@ -197,11 +197,19 @@ export interface RelinkEdit {
  */
 export function planRelink(nodes: DayNodes, opts: { permalink: (ts: string) => string; zvitReply: boolean }): RelinkEdit[] {
   const out: RelinkEdit[] = [];
+  // Edit keys are revved on the TRANSITION (current 🔗 line → new line), not on
+  // the new line alone: keyed by the new line only, restoring an earlier state
+  // (e.g. dropping a «Бонуси» link after the bonus post was deleted, 2026-09-05)
+  // matched the key already sent for that same line and the chokepoint silently
+  // skipped the edit, leaving a dead link. A re-run after the edit landed sees
+  // current === next and plans nothing, so the transition key is still idempotent.
+  const transitionRev = (current: string, line: string) =>
+    contentRev(`${splitLinksRegion(current).linksLine ?? ""}→${line}`);
   const edit = (target: LinksTarget, ts: string, current: string) => {
     const line = renderLinks(target, nodes, opts.permalink);
     const next = withLinksRegion(current, line);
     if (next === current || line === null) return;
-    out.push({ target, op: "edit", ts, threadTs: null, newText: next, key: linksEditKey(target, contentRev(line)) });
+    out.push({ target, op: "edit", ts, threadTs: null, newText: next, key: linksEditKey(target, transitionRev(current, line)) });
   };
   if (nodes.reminderTs && nodes.reminderText) edit({ kind: "reminder", date: nodes.date }, nodes.reminderTs, nodes.reminderText);
   for (const r of nodes.reports) {
@@ -211,7 +219,7 @@ export function planRelink(nodes: DayNodes, opts: { permalink: (ts: string) => s
     const line = renderLinks(target, nodes, opts.permalink);
     if (r.zvitReplyTs && r.zvitReplyText !== undefined) {
       if (line !== null && splitLinksRegion(r.zvitReplyText).linksLine !== line) {
-        out.push({ target, op: "edit", ts: r.zvitReplyTs, threadTs: null, newText: line, key: linksZvitEditKey(r.reportTs, contentRev(line)) });
+        out.push({ target, op: "edit", ts: r.zvitReplyTs, threadTs: null, newText: line, key: linksZvitEditKey(r.reportTs, transitionRev(r.zvitReplyText, line)) });
       }
     } else if (opts.zvitReply && r.verdictTs && line !== null) {
       out.push({ target, op: "post", ts: null, threadTs: r.reportTs, newText: line, key: linksZvitKey(r.reportTs) });

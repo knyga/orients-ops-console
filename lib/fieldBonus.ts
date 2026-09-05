@@ -51,10 +51,12 @@ export interface DayBonus {
   date: string; reportTs: string | null; reportCount: number; roster: string[]; deployMin: number | null; videoMin: number;
   counted: boolean; early: boolean; weekend: boolean; reason: string; status: VerdictStatus;
   /**
-   * The rules pot is for a 2-person crew: with >2 bonus-counted people the pot
-   * is split among everyone — each person's day amount is scaled by
-   * min(2, paidN) / paidN. Optional: committed reports predating the split
-   * rule lack it; consumers must default to 1.
+   * The day's fund (pot) is TWO per-person rates and is shared by everyone
+   * bonus-counted on the Звіт: each person's day amount = per-person rate ×
+   * splitFactor, splitFactor = 2 / max(2, paidN). A lone pilot therefore gets
+   * half the fund (one rate, factor 1), two pilots the whole fund (one rate
+   * each), 3+ divide it. Optional: committed reports predating the split rule
+   * lack it; consumers must default to 1.
    */
   splitFactor?: number;
   /** Bonus-counted crew (roster minus eligibility exclusions). Optional on old committed reports; default to `roster`. */
@@ -128,7 +130,11 @@ export function computeBonuses(input: {
     const gated = applyDroneGate(eff.perPerson, q.droneSubmitters, correction, q.date, flags);
     gatedByReport.set(reportKey(q.date, q.reportTs), gated);
     const paidRoster = gated.filter((p) => p.counted).map((p) => p.name);
-    const splitFactor = paidRoster.length > 2 ? 2 / paidRoster.length : 1;
+    // The day's fund is TWO per-person rates (pot = 2 × (700 + early + weekend))
+    // and is shared by everyone bonus-counted on the Звіт: share = pot / max(2, N).
+    // A lone pilot gets HALF the fund (= one per-person rate), never the whole
+    // pot; two pilots split it evenly; 3+ divide it (rule restated 2026-09-05).
+    const splitFactor = 2 / Math.max(2, paidRoster.length);
     const reason = counted ? "counted" : q.reasons.join("; ") || q.status;
     days.push({ date: q.date, reportTs: q.reportTs, reportCount: q.reportCount, roster: eff.roster, deployMin: q.deployMin, videoMin: q.videoMin, counted, early, weekend, reason, status: q.status, splitFactor, paidRoster });
     if ((q.status === "PENDING" || q.status === "NEEDS_REVIEW") && q.flew) {

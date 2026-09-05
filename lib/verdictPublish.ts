@@ -130,6 +130,20 @@ export interface OverrideMessages {
  * FIRST-posted verdict text, so re-applying after a decision change strikes the
  * original once (never double-strikes). Pure.
  */
+/** The amendment marker an overridden verdict carries for `decision` —
+ *  «Оновлено → прийнято (виняток)» / «Оновлено → відхилено». The single source
+ *  for both rendering the strike and checking whether the LIVE message already
+ *  shows that decision. Pure. */
+export function overrideMarker(decision: "accepted_exception" | "rejected"): string {
+  const label = decision === "accepted_exception" ? "прийнято (виняток)" : "відхилено";
+  return `Оновлено → ${label}`;
+}
+
+/** Does this live verdict text already show `decision`'s amendment? Pure. */
+export function liveCarriesDecision(liveText: string, decision: "accepted_exception" | "rejected"): boolean {
+  return liveText.includes(overrideMarker(decision));
+}
+
 export function formatOverride(
   originalText: string,
   decision: "accepted_exception" | "rejected",
@@ -140,7 +154,7 @@ export function formatOverride(
   const label = decision === "accepted_exception" ? "прийнято (виняток)" : "відхилено";
   const who = mentionize(by);
   return {
-    updatedText: `~${originalText}~\n${icon} Оновлено → ${label}, ${who}: ${reason}`,
+    updatedText: `~${originalText}~\n${icon} ${overrideMarker(decision)}, ${who}: ${reason}`,
     replyText: `${icon} Зафіксовано: ${label}, ${who}. Причина: ${reason}`,
   };
 }

@@ -41,6 +41,14 @@ export function recordThread(log: NotifiedLog, key: string, threadTs: string): N
   const prev = log[key] ?? { date, reportTs, dms: [] };
   return { ...log, [key]: { ...prev, date, reportTs, threadTs } };
 }
+/** Forget a retracted (deleted) thread post: the key's DMs stay recorded. Pure. */
+export function clearThread(log: NotifiedLog, key: string): NotifiedLog {
+  const prev = log[key];
+  if (!prev || prev.threadTs == null) return log;
+  const { threadTs: _gone, ...rest } = prev;
+  void _gone;
+  return { ...log, [key]: rest };
+}
 export function recordDm(log: NotifiedLog, key: string, slackId: string, ts: string, amount: number): NotifiedLog {
   const { date, reportTs } = splitKey(key);
   const prev = log[key] ?? { date, reportTs, dms: [] };

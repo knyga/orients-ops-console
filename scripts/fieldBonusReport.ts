@@ -2,14 +2,14 @@
 import { parsePeriodKey, type Period } from "../lib/period";
 import type { BonusReport, DayBonus } from "../lib/fieldBonus";
 import { dayPersonBonuses, type PersonAmount } from "../lib/bonusNotify";
-import { isThreadNotifiedFor, isDmSentFor, type NotifiedLog } from "../lib/bonusNotified";
+import { isDmSentFor, type NotifiedLog } from "../lib/bonusNotified";
 import { isPublished, type PublishedLog } from "../lib/published";
 import { reportKey, type VerdictStatus } from "../lib/fieldDayVerdict";
 
-export interface BonusArgs { start?: string; end?: string; format?: string; write: boolean; ask: boolean; publish: boolean; notify: boolean; channel?: string; sheet?: string }
+export interface BonusArgs { start?: string; end?: string; format?: string; write: boolean; ask: boolean; publish: boolean; notify: boolean; retractThreads: boolean; channel?: string; sheet?: string }
 
 export function parseArgs(argv: string[]): BonusArgs {
-  const args: BonusArgs = { write: false, ask: false, publish: false, notify: false };
+  const args: BonusArgs = { write: false, ask: false, publish: false, notify: false, retractThreads: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--start") args.start = argv[++i];
@@ -20,6 +20,7 @@ export function parseArgs(argv: string[]): BonusArgs {
     else if (a === "--ask") args.ask = true;
     else if (a === "--publish") args.publish = true;
     else if (a === "--notify") args.notify = true;
+    else if (a === "--retract-threads") args.retractThreads = true;
     else if (a === "--channel") args.channel = argv[++i];
   }
   return args;
@@ -67,20 +68,21 @@ export interface NotifyPlanItem {
   earned: boolean;
   reason: string;
   people: PersonAmount[];
-  threadPending: boolean;
   pendingDms: NotifyTarget[];
   unmatched: string[];
   published: boolean;
 }
 
 /**
- * Which settled reports still need a thread post and/or DMs. A report is in
- * the plan iff its verdict is FINAL: ACCEPTED, ACCEPTED_EXCEPTION, or
- * REJECTED. PENDING and NEEDS_REVIEW are skipped (NEEDS_REVIEW may still flip
- * to an exception). Earned = verdict is accepted AND the bonus DayBonus is
- * counted. Fully-notified reports are dropped. Verdict/notified/published
- * lookups are all report-scoped (reportKey(date, reportTs)) with the same
- * legacy bare-date fallback for single-report days.
+ * Which settled, EARNED reports still owe someone a DM. A report qualifies iff
+ * its verdict is FINAL and accepted (ACCEPTED / ACCEPTED_EXCEPTION) and the
+ * bonus DayBonus is counted; PENDING and NEEDS_REVIEW are skipped (NEEDS_REVIEW
+ * may still flip to an exception), and a REJECTED report owes nothing — since
+ * 2026-09-05 money is DM-only, so there is no thread breakdown and no in-thread
+ * «бонус не нараховано» note either (the verdict message already says why).
+ * Fully-DMed reports are dropped. Verdict/notified/published lookups are all
+ * report-scoped (reportKey(date, reportTs)) with the same legacy bare-date
+ * fallback for single-report days.
  */
 export function buildNotifyPlan(input: {
   days: DayBonus[];
@@ -99,39 +101,53 @@ export function buildNotifyPlan(input: {
     const accepted = status === "ACCEPTED" || status === "ACCEPTED_EXCEPTION";
     const earned = accepted && people.length > 0;
     const reason = accepted ? day.reason : "виїзд відхилено";
-    const threadPending = !isThreadNotifiedFor(log, target);
+    if (!earned) continue;
 
     const pendingDms: NotifyTarget[] = [];
     const unmatched: string[] = [];
-    if (earned) {
-      for (const amount of people) {
-        const slackId = slackIdByName.get(amount.name) ?? null;
-        if (slackId === null) { unmatched.push(amount.name); continue; }
-        if (isDmSentFor(log, target, slackId)) continue;
-        pendingDms.push({ name: amount.name, amount, slackId });
-      }
+    for (const amount of people) {
+      const slackId = slackIdByName.get(amount.name) ?? null;
+      if (slackId === null) { unmatched.push(amount.name); continue; }
+      if (isDmSentFor(log, target, slackId)) continue;
+      pendingDms.push({ name: amount.name, amount, slackId });
     }
-    if (!threadPending && pendingDms.length === 0 && unmatched.length === 0) continue;
+    if (pendingDms.length === 0 && unmatched.length === 0) continue;
     plan.push({
       date: day.date, reportTs: day.reportTs, reportCount: day.reportCount,
-      earned, reason, people, threadPending, pendingDms, unmatched,
+      earned, reason, people, pendingDms, unmatched,
       published: isPublished(published, target),
     });
   }
   return plan;
 }
 
-export function formatNotifyDryRun(plan: NotifyPlanItem[], channel?: string): string {
-  const threads = plan.filter((p) => p.threadPending).length;
-  const dms = plan.reduce((n, p) => n + p.pendingDms.length, 0);
+/** The in-thread bonus posts (💰 breakdown / ℹ️ no-bonus note) a period still
+ *  carries — the retract targets. Money is DM-only since 2026-09-05, so every
+ *  one of these is a message the bot should not have in the verdict thread. */
+export function buildRetractPlan(log: NotifiedLog): { key: string; date: string; threadTs: string }[] {
+  return Object.entries(log)
+    .filter(([, e]) => e.threadTs != null)
+    .map(([key, e]) => ({ key, date: e.date, threadTs: e.threadTs as string }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+export function formatRetractDryRun(plan: { key: string; date: string; threadTs: string }[], channel?: string): string {
   const target = channel ? `#${channel}` : "(no channel — pass --channel <name>)";
-  const lines = [`DRY RUN — would post ${threads} thread message(s) + ${dms} DM(s) to ${target}`, ""];
+  const lines = [`DRY RUN — would delete ${plan.length} in-thread bonus message(s) in ${target}`, ""];
+  for (const p of plan) lines.push(`${p.date}  ${p.key}  ts=${p.threadTs}`);
+  lines.push("", "Nothing was deleted. Re-run with `--retract-threads --publish --channel <name>` to delete for real.");
+  return lines.join("\n");
+}
+
+export function formatNotifyDryRun(plan: NotifyPlanItem[]): string {
+  const dms = plan.reduce((n, p) => n + p.pendingDms.length, 0);
+  const lines = [`DRY RUN — would send ${dms} DM(s) (money is DM-only; nothing is posted in the verdict thread)`, ""];
   for (const item of plan) {
-    const head = item.earned ? `${item.people.reduce((s, p) => s + p.total, 0)} грн` : `no bonus (${item.reason})`;
-    lines.push(`${item.date} — ${head}${item.published ? "" : "  [NOT PUBLISHED — thread skipped]"}`);
+    const head = `${item.people.reduce((s, p) => s + p.total, 0)} грн`;
+    lines.push(`${item.date} — ${head}${item.published ? "" : "  [NOT PUBLISHED — DMs wait for the verdict post]"}`);
     for (const t of item.pendingDms) lines.push(`    DM → ${t.name} (${t.slackId}): ${t.amount.total} грн`);
     for (const n of item.unmatched) lines.push(`    ⚠ no Slack id for ${n} — DM skipped, add to SLACK_ID_OVERRIDES`);
   }
-  lines.push("", "No messages were sent. Re-run with `--notify --publish --channel <name>` to send for real.");
+  lines.push("", "No messages were sent. Re-run with `--notify --publish` to send for real.");
   return lines.join("\n");
 }

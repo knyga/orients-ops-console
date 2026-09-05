@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayPersonBonuses, dayTotal, formatThreadBreakdown, formatDm, formatNoBonusNote, type PersonAmount } from "./bonusNotify";
+import { dayPersonBonuses, formatDm, type PersonAmount } from "./bonusNotify";
 import type { DayBonus } from "./fieldBonus";
 import { mentionize } from "./mention";
 
@@ -48,25 +48,10 @@ describe("messages", () => {
     { name: "Андріан", base: 700, early: 200, weekend: 0, total: 900 },
     { name: "Тарас", base: 700, early: 0, weekend: 0, total: 700 },
   ];
-  it("thread breakdown lists people, the total, and the provisional caveat", () => {
-    const t = formatThreadBreakdown("2026-06-19", people);
-    expect(t).toContain(`• ${mentionize("Андріан")}`);
-    expect(t).toContain("900");
-    expect(t).toContain(String(dayTotal(people))); // 1600
-    expect(t).toContain("попередн"); // provisional
-  });
-  it("mentions people in the thread breakdown", () => {
-    const p: PersonAmount[] = [{ name: "Андріан", base: 700, early: 0, weekend: 0, total: 700 }];
-    const msg = formatThreadBreakdown("2026-06-19", p);
-    expect(msg).toContain(`• ${mentionize("Андріан")} — 700 грн`);
-  });
   it("DM shows only the recipient + finance pointer, not other names", () => {
     const dm = formatDm("2026-06-19", people[0]);
     expect(dm).toContain("900");
     expect(dm).not.toContain("Тарас");
     expect(dm).toContain("Марин");
-  });
-  it("no-bonus note carries the reason", () => {
-    expect(formatNoBonusNote("2026-06-19", "deploy<3h")).toContain("deploy<3h");
   });
 });

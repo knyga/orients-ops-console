@@ -18,9 +18,9 @@ export interface SendMeta {
 export interface TrackedSendArgs {
   channelId: string;
   text: string;
-  kind: "post" | "reply" | "edit";
+  kind: "post" | "reply" | "edit" | "delete";
   threadTs: string | null;
-  ts: string | null; // known up-front for edits; null for new posts
+  ts: string | null; // known up-front for edits/deletes; null for new posts
   meta: SendMeta;
 }
 

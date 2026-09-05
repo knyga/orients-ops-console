@@ -30,7 +30,7 @@ describe("extractDroneReports", () => {
     const classify = vi.fn(async () => ({ reports: [{ entries: [E("Андріан", true, 1)], forDate: null }] }));
     const out = await extractDroneReports(messages, classify);
     expect(classify).toHaveBeenCalledTimes(1);
-    expect(classify).toHaveBeenCalledWith("Андріан R&D - 1шт", "2026-06-25");
+    expect(classify).toHaveBeenCalledWith("Андріан R&D - 1шт", "2026-06-25", { inReminderThread: false });
     expect(out.byDate.get("2026-06-25")).toEqual([E("Андріан", true, 1)]);
   });
 
@@ -174,7 +174,7 @@ describe("extractDroneReports", () => {
     ];
     const classify = vi.fn(async () => ({ reports: [{ entries: [E("Андріан", true, 3)], forDate: null }] }));
     const out = await extractDroneReports(messages, classify, { anchorDateByThreadTs: anchors });
-    expect(classify).toHaveBeenCalledWith("3 дрони справні", "2026-08-03");
+    expect(classify).toHaveBeenCalledWith("3 дрони справні", "2026-08-03", { inReminderThread: true });
     expect(out.byDate.get("2026-08-03")).toEqual([E("Андріан", true, 3)]);
     expect(out.byDate.has("2026-08-04")).toBe(false);
     expect(out.submittersByDate.get("2026-08-03")).toEqual(new Set(["U09AAVAEE6L"]));
@@ -229,5 +229,26 @@ describe("extractDroneReports", () => {
     expect(out.byDate.has("2026-06-26")).toBe(false);
     expect(out.failedDates.has("2026-06-26")).toBe(true);
     expect(out.failedDates.has("2026-06-25")).toBe(false);
+  });
+
+  // Regression 2026-08-30: Андріан answered the reminder with «1 вартовий + 4
+  // вартових ремонт» (no «шт», no name) and the context-free classifier said
+  // "no tally" — cached forever, so his own-count gate failed and he was not
+  // paid. The classifier must know it is reading a reminder-thread reply.
+  it("tells the classifier when a message is a reminder-thread reply (and not otherwise)", async () => {
+    const anchors = new Map([["1000.10", "2026-08-30"]]);
+    const messages: DroneMessage[] = [
+      { ts: tsFor("2026-08-30T07:26:00Z"), text: "1 вартовий + 4 вартових ремонт", authorId: "U09AAVAEE6L", threadTs: "1000.10" },
+      { ts: tsFor("2026-08-30T09:00:00Z"), text: "Влад - 4шт", authorId: "U091JDN2U5B" },
+    ];
+    const classify = vi.fn(async (t: string) => ({
+      reports: [{ entries: [E(t.startsWith("Влад") ? "Влад" : "вартовий", t.startsWith("Влад"), t.startsWith("Влад") ? 4 : 5)], forDate: null }],
+    }));
+    const out = await extractDroneReports(messages, classify, { anchorDateByThreadTs: anchors });
+    expect(classify).toHaveBeenCalledWith("1 вартовий + 4 вартових ремонт", "2026-08-30", { inReminderThread: true });
+    expect(classify).toHaveBeenCalledWith("Влад - 4шт", "2026-08-30", { inReminderThread: false });
+    // the owner's nameless tally is attributed to him → both pilots submitted
+    expect(out.byDate.get("2026-08-30")).toEqual([E("Андріан", true, 5), E("Влад", true, 4)]);
+    expect(out.submittersByDate.get("2026-08-30")).toEqual(new Set(["U09AAVAEE6L", "U091JDN2U5B"]));
   });
 });

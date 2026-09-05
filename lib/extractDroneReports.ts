@@ -27,7 +27,7 @@ import { videoUploadDate } from "./reconcile";
 import { classifyDroneCount } from "./droneCountReport";
 import { mergeDroneEntries, type DroneEntry } from "./droneReport";
 import { droneOwnerForUserId } from "./droneOwners";
-import { dbExtractCacheStore, droneKey, makeCachedDroneClassifier } from "./extractCache";
+import { dbExtractCacheStore, droneKey, makeCachedDroneClassifier, type DroneClassifyContext } from "./extractCache";
 import type { DroneDayReport } from "./droneCountReportPrompt";
 
 export interface DroneMessage {
@@ -39,7 +39,21 @@ export interface DroneMessage {
   threadTs?: string;
 }
 
-export type DroneClassifier = (text: string, postedOn?: string) => Promise<{ reports: DroneDayReport[] }>;
+export type DroneClassifier = (
+  text: string,
+  postedOn?: string,
+  ctx?: DroneClassifyContext,
+) => Promise<{ reports: DroneDayReport[] }>;
+
+/** A reply inside a reminder thread is a pilot answering «вкажіть кількість
+ *  своїх дронів» — the classifier gets that as context (and the cache key
+ *  carries it). Pure. */
+export function classifyContextFor(
+  m: { threadTs?: string },
+  anchors: Map<string, string>,
+): DroneClassifyContext {
+  return { inReminderThread: m.threadTs !== undefined && anchors.has(m.threadTs) };
+}
 
 export const kyivPostDate = (ts: string) => videoUploadDate(new Date(Number(ts) * 1000).toISOString());
 
@@ -115,7 +129,7 @@ export async function extractDroneReports(
     const defaultDate = defaultDateFor(m, anchors);
     let reports: DroneDayReport[];
     try {
-      ({ reports } = await classify(m.text, defaultDate));
+      ({ reports } = await classify(m.text, defaultDate, classifyContextFor(m, anchors)));
     } catch (err) {
       console.error(`extractDroneReports: classifier failed for message ${m.ts}:`, err);
       failedDates.add(defaultDate);
@@ -160,7 +174,9 @@ export async function extractDroneReportsCached(
 ): Promise<ExtractDroneReportsResult & { misses: number }> {
   const store = dbExtractCacheStore("drone");
   const preloaded = await store.readMany(
-    messages.map((m) => droneKey(m.text, defaultDateFor(m, anchorDateByThreadTs))),
+    messages.map((m) =>
+      droneKey(m.text, defaultDateFor(m, anchorDateByThreadTs), classifyContextFor(m, anchorDateByThreadTs)),
+    ),
   );
   const { classifier, misses } = makeCachedDroneClassifier(store, preloaded, classifyDroneCount);
   const result = await extractDroneReports(messages, classifier, { anchorDateByThreadTs });
